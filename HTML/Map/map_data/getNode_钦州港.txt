@@ -1,0 +1,15 @@
+{
+    "id": "C1760C260501",
+    "node": 1760,
+    "zm": "钦州港",
+    "lh": "QVZ",
+    "fq": 1371,
+    "fqmc": "柳州",
+    "ljjc": "宁",
+    "province": 45,
+    "provincejc": "桂",
+    "railway": 16515,
+    "railwaymc": "钦港线",
+    "attribute": 109,
+    "attributemc": "广西沿海铁路有限责任公司"
+}

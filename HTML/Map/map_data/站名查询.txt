@@ -1,0 +1,35 @@
+fetch("http://10.208.2.72:8080/getStationBySzm?map_version=C260702&szm=bj", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "zh-CN,zh;q=0.9",
+    "authorization": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIxMC4yMDguMi43MiIsImV4cCI6MTc4NjI3OTM1MCwiaWF0IjoxNzg2MjUwNTUwfQ.dVHpZAKLb0M9lHOhAhnXgM6Cprsen8Sl5zyoGpNfblw",
+    "x-requested-with": "XMLHttpRequest",
+    "Referer": "http://10.208.2.72:8080/cljl",
+    "Referrer-Policy": "strict-origin-when-cross-origin"
+  },
+  "body": null,
+  "method": "GET"
+});
+
+
+
+
+["BHB 半截河        哈","BJB 滨江         哈","BSB 笔架山        哈","BTD 八角台        沈","BZL 八家子        沈","BJT 宝镜         沈","BRT 北井子        沈","BAP 白涧         京","BBP 卑家店        京","BJP 北京         京","BOP 北京东        京","BXP 北京西        京","BJP 北京         京","FTP 北京丰台       京","VNP 北京南        京","BJC 本井         呼","BPC 保健         呼","JDC 半截店        呼","BDY 宝鸡东        西","BJY 宝鸡         西","BJY 宝鸡         西","BWY 卜家沟        西","BJK 白家店        济","BOK 堡集         济","BPK 北集坡        济","BCH 北郊         上","BJH 毕家岗        上","BJU 北界         上","BAG 八景         南","BJG 彬江         南","BEQ 八甲         广","BGQ 八家旺        广","BJZ 贝江         宁","BJE 毕节东        成","BOE 毕节         成","BJW 保家楼        成","BQW 半边街        成","BBM 白鸡坡        昆","BJJ 白芨沟        兰","BJR 白碱滩        乌"]
+
+
+
+fetch("http://10.208.2.72:8080/getStationBySzm?map_version=C260702&szm=bjd", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "zh-CN,zh;q=0.9",
+    "authorization": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIxMC4yMDguMi43MiIsImV4cCI6MTc4NjI3OTM1MCwiaWF0IjoxNzg2MjUwNTUwfQ.dVHpZAKLb0M9lHOhAhnXgM6Cprsen8Sl5zyoGpNfblw",
+    "x-requested-with": "XMLHttpRequest",
+    "Referer": "http://10.208.2.72:8080/cljl",
+    "Referrer-Policy": "strict-origin-when-cross-origin"
+  },
+  "body": null,
+  "method": "GET"
+});
+
+
+["BJD 宝日温都尔      沈","BBP 卑家店        京","BOP 北京东        京","JDC 半截店        呼","BDY 宝鸡东        西","BJK 白家店        济","BJE 毕节东        成"]

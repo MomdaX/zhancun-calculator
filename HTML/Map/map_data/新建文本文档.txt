@@ -1,0 +1,68 @@
+
+async function cx(){
+	
+	
+	let res1=await fetch("http://10.208.2.72:8080/getToken?ip=10.208.2.72", {
+	  "headers": {
+	    "accept": "*/*",
+	    "accept-language": "zh-CN,zh;q=0.9",
+	    "x-requested-with": "XMLHttpRequest",
+	    "Referer": "http://10.208.2.72:8080/cljl",
+	    "Referrer-Policy": "strict-origin-when-cross-origin"
+	  },
+	  "body": null,
+	  "method": "GET"
+	});
+	
+	let token=await res1.text();
+	Sheets("Sheet1").Range('H2').Value2=token;
+}
+
+
+async function jl(){
+	
+	let token=Sheets("Sheet1").Range('H2').Value2;
+	
+	let res=await fetch("http://10.208.2.72:8080/getJl?map_version=C260702&td_id=1&zmdm=QVZ.BJE&pmdm=0&jsb=0&train_number=0&ysfs=1&cz_xx=0&cx_xl=0", {
+	  "headers": {
+	    "accept": "*/*",
+	    "accept-language": "zh-CN,zh;q=0.9",
+	    "authorization": token,
+//	    "x-requested-with": "XMLHttpRequest",
+//	    "Referer": "http://10.208.2.72:8080/cljl",
+//	    "Referrer-Policy": "strict-origin-when-cross-origin"
+	  },
+	  "body": null,
+	  "method": "GET"
+	});
+	
+	
+	let t=await res.json()
+	
+	
+	console.log(JSON.stringify(t))
+	
+	
+}
+
+
+async function zm(){
+
+	let token=Sheets("Sheet1").Range('H2').Value2;
+	
+	let res=await fetch("http://10.208.2.72:8080/getMapIdByLh?map_version=C260702&lh=QVZ", {
+		"headers": {
+		"accept": "*/*",
+		"accept-language": "zh-CN,zh;q=0.9",
+		"authorization": token,
+		"x-requested-with": "XMLHttpRequest",
+		"Referer": "http://10.208.2.72:8080/cljl",
+		"Referrer-Policy": "strict-origin-when-cross-origin"
+		},
+		"body": null,
+		"method": "GET"
+	});
+	
+	let t=await res.text()
+	console.log(JSON.stringify(t))
+}

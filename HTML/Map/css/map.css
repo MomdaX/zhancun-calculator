@@ -1,0 +1,220 @@
+
+.right_svg_version {
+    color: white;
+    font-size: 12px;
+    padding-top: 2px;
+    padding-right: 4px;
+    text-align: right;
+    width: inherit;
+    height: 25px;
+}
+
+
+.right_svg_statusbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.right_svg_prompt {
+    /*margin-top: -24px;*/
+    color: #aaaaaa;
+    font-size: 12px;
+    /*position: absolute;*/
+    padding-bottom: 2px;
+    padding-left: 4px;
+    text-align: left;
+    display: inline-block;
+    vertical-align: middle;
+    height: 25px;
+    /*pointer-events: stroke;*/
+}
+
+/* 接口状态指示灯 */
+.right_svg_status {
+    display: inline-flex;
+    vertical-align: middle;
+    align-items: center;
+    padding-left: 4px;
+    padding-bottom: 2px;
+    height: 25px;
+    margin-left: auto;
+}
+.right_svg_status .status_item {
+    display: inline-flex;
+    flex-direction: row-reverse;
+    align-items: center;
+    margin-right: 14px;
+    color: #aaaaaa;
+    font-size: 12px;
+}
+.right_svg_status .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-left: 4px;
+    background: #555555;        /* 初始/未知：灰 */
+    box-shadow: 0 0 3px rgba(0,0,0,0.4);
+}
+.right_svg_status .dot.ok {
+    background: #5bc648;        /* API 正常：绿 */
+    box-shadow: 0 0 4px #5bc648;
+}
+.right_svg_status .dot.local {
+    background: #f0ad4e;        /* 本地兜底：黄 */
+    box-shadow: 0 0 4px #f0ad4e;
+}
+
+.map_circle {
+    cursor: pointer;
+}
+
+.map_text {
+    cursor: pointer;
+    /* fill: #5bc648; */
+    fill:#E6E6E6;
+    font-family:幼圆;
+}
+
+.mid_station_text {
+    cursor: pointer;
+    /* fill: #5bc648; */
+    fill:#E6E6E6;
+    font-family:幼圆;
+}
+
+.mid_station_node {
+    cursor: pointer;
+}
+
+/*.map_text:hover {
+    font-size:1.4px;
+}*/
+
+.map_line {
+    cursor: pointer;
+    /* stroke: white; */
+    stroke-linecap: round;
+}
+/*.map_line:hover {
+    stroke-width:0.7;
+}*/
+.map_line_station {
+    cursor: pointer;
+    r:0.6;
+}
+/*.map_line_station:hover {
+    r:0.8;
+}*/
+
+.right_svg_jl {
+    display: none;
+    /*margin-top: -157px;*/
+    position: absolute;
+    width: 400px;
+    /*height: 160px;*/
+}
+.Left_toolbar{
+    float: left;
+    margin-left: 10px;
+    display: flex;
+    align-items: center;
+}
+.SLeft_toolbar{
+    float: left;
+
+}
+.toolbar_icon{
+    cursor: pointer;
+    font-size: 16px;
+    padding-left:5px;
+    padding-right:5px
+}
+.svg_jlprint{
+    margin-right:10px;
+    margin-left:10px;
+    background:white;
+}
+.map_line_strokeRender{
+    stroke: rgb(0,0,0);
+}
+.map_circle_strokeRender{
+    fill: rgb(0,0,0);
+}
+.right_svg_version .SLeft_toolbar .btn-group .iconfont{
+
+    width: 52px;
+    height: 52px;
+    border-radius:26px;
+    cursor: pointer;
+}
+.right_svg_version .Left_toolbar .btn-group  span{
+
+    width: 52px;
+    height: 52px;
+    border-radius:26px;
+    cursor: pointer;
+}
+
+.jl_input_span{
+    width: 60px;
+    display: inline-block;
+    text-align: right;
+}
+
+/* 车站搜索下拉候选 */
+.station_dropdown{
+    position: absolute;
+    z-index: 9999;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    width: fit-content;
+    max-height: 260px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    box-shadow: 0 2px 6px rgba(0,0,0,.2);
+}
+/* 始终显示滚动条轨道，保证长列表可见滚动 */
+.station_dropdown::-webkit-scrollbar{
+    width: 8px;
+}
+.station_dropdown::-webkit-scrollbar-thumb{
+    background: #bbb;
+    border-radius: 4px;
+}
+.station_dropdown::-webkit-scrollbar-track{
+    background: #f5f5f5;
+}
+.station_dropdown li{
+    padding: 5px 8px;
+    font-size: 12px;
+    color: #333;
+    cursor: pointer;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+}
+.station_dropdown li .sd_zm{
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-right: 8px;
+}
+.station_dropdown li .sd_lh{
+    flex: 0 0 auto;
+    width: 30px;
+    text-align: right;
+    color: #888;
+    font-family: Consolas, Menlo, monospace;
+    letter-spacing: 1px;
+}
+.station_dropdown li:hover{
+    background: #f0f0f0;
+}
+

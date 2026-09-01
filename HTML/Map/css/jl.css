@@ -1,0 +1,82 @@
+.map_path{
+    cursor: pointer;
+    fill: none;
+    stroke: #FFD400;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    pointer-events: stroke;
+    stroke-dasharray: 12 8;
+    animation: ant-march 1s linear infinite;
+    /* stroke-opacity:.7; */
+}
+/* 蚂蚁线：dashoffset 由正到负，虚线沿路径方向（起点向终点）流动，即向终点到站方向 */
+@keyframes ant-march {
+    from {
+        stroke-dashoffset: 20;
+    }
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+.map_path1{
+    cursor: pointer;
+    fill: none;
+    stroke: yellow;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    pointer-events: stroke;
+    /* stroke-opacity:.7; */
+}
+#jloutputTable{
+    font-size: 13px;
+    border:0px;
+    cellspacing:0px;
+    cellpadding:0px;
+    border-right:1px solid #dddddf;
+    border-bottom:1px solid #dddddf;
+}
+#jloutputTable td{
+    min-width:60px;
+    height: 30px;
+    border-left:1px solid #dddddf;
+    border-top:1px solid #dddddf;
+    padding-left: 3px;
+}
+
+.ripple1 {
+    width: 8px;
+    height: 8px;
+    background-color: #f37b1d;
+    position: fixed;
+    border-radius: 50%;
+    border: 1px solid #ffffff59;
+}
+.ripple2 {
+    width: 8px;
+    height: 8px;
+    background-color: #fbbd08;
+    position: fixed;
+    border-radius: 50%;
+    border: 1px solid #ffffff59;
+}
+.ripple3 {
+    width: 8px;
+    height: 8px;
+    background-color: #ffff00;
+    position: fixed;
+    border-radius: 50%;
+    border: 1px solid #ffffff59;
+}
+@keyframes ripple-effect1 {
+    to {
+        transform: scale(12);
+        opacity: 0.1;
+    }
+}
+@keyframes ripple-effect2 {
+    to {
+        r: 8;
+        opacity: 0.2;
+    }
+}
+

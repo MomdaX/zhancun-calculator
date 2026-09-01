@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>股道存车</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ================= 工具栏 ================= -->
+<div class="toolbar">
+  <span class="title">股道存车</span>
+
+  <button class="btn primary" id="btnPickFolder" title="选择存放 xls 的文件夹，之后会自动记住">选择数据文件夹</button>
+  <button class="btn" id="btnPickFile" title="直接选择单个 xls 文件">选择文件</button>
+  <button class="btn" id="btnReload" title="重新读取">重新读取</button>
+
+  <span class="spacer"></span>
+
+  <button class="btn toggle" id="btnToggleVirtual" aria-pressed="true"
+          title="显示 / 隐藏不常用股道（X线、YX1、YQX、ZXX、DY、TSY、YH、临时）">隐藏非常用股道</button>
+
+  <div class="menu-wrap">
+    <button class="btn" id="btnMenu">功能 ▾</button>
+    <div class="menu-list" id="menuList" style="display:none">
+      <div class="menu-item" id="menu31814" data-action="31814">站存计算</div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 表格 ================= -->
+<div class="table-wrap">
+  <table class="grid" id="grid">
+    <thead>
+      <tr id="headRow"></tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+    <tfoot id="tfoot"></tfoot>
+  </table>
+</div>
+
+<!-- ================= 状态栏 ================= -->
+<div class="statusbar">
+  <span class="stat">股道 <b id="stTrack">0</b></span>
+  <span class="stat">车数 <b id="stCount">0</b></span>
+  <span class="stat">换长 <b id="stLen">0</b></span>
+  <span class="stat">载重 <b id="stLoad">0</b></span>
+  <span class="stat">老牌车 <b id="stOld">0</b></span>
+  <span class="msg" id="stMsg"></span>
+</div>
+
+<!-- ================= 31814 统计浮窗（左右布局） ================= -->
+<div class="modal" id="modal31814">
+  <div class="modal-content rpt31814">
+    <div class="modal-head">
+      <h3 id="rptTitle">站存计算</h3>
+      <span class="spacer">
+        <span class="rpt-zoom">
+          <button class="btn icon-btn" id="rptZoomOut" title="缩小表格字体">
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+              <circle cx="6.6" cy="6.6" r="4.7" fill="none" stroke="currentColor" stroke-width="1.6"/>
+              <line x1="3.8" y1="6.6" x2="9.4" y2="6.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              <line x1="10.3" y1="10.3" x2="14.2" y2="14.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <span class="rpt-fs-val" id="rptFsVal">15px</span>
+          <button class="btn icon-btn" id="rptZoomIn" title="放大表格字体">
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+              <circle cx="6.6" cy="6.6" r="4.7" fill="none" stroke="currentColor" stroke-width="1.6"/>
+              <line x1="3.8" y1="6.6" x2="9.4" y2="6.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              <line x1="6.6" y1="3.8" x2="6.6" y2="9.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              <line x1="10.3" y1="10.3" x2="14.2" y2="14.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </span>
+      </span>
+      <button class="btn" id="rptCopyImg" title="将结果表格截图复制到剪切板">截图</button>
+      <button class="btn" id="rptClose">关闭</button>
+    </div>
+    <div class="rpt31814-body">
+      <!-- 左侧：结果 -->
+      <div class="rpt-left" id="rptBody"></div>
+      <!-- 右侧：条件面板 -->
+      <div class="rpt-right" id="cfgPanel"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 明细抽屉 ================= -->
+<div class="drawer-mask" id="drawerMask"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-head">
+    <h3 id="drawerTitle">股道明细</h3>
+    <span class="spacer"></span>
+    <button class="btn" id="btnPrevTrack">上一股道</button>
+    <button class="btn" id="btnNextTrack">下一股道</button>
+    <button class="btn" id="btnCloseDrawer">关闭</button>
+  </div>
+  <div class="drawer-body">
+    <table class="detail" id="detailTable">
+      <thead><tr id="detailHead"></tr></thead>
+      <tbody id="detailBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ================= 地图（iframe 嵌入 Map/chinamap.html） ================= -->
+<div class="map-mask" id="mapMask">
+  <div class="map-panel">
+    <div class="map-head">
+      <h3 id="mapTitle">径路</h3>
+      <span class="map-status" id="mapStatus"></span>
+      <span class="spacer"></span>
+      <button class="btn" id="mapClear">清除径路</button>
+      <button class="btn" id="mapClose">关闭</button>
+    </div>
+    <div class="map-body">
+      <iframe id="mapFrame" src="about:blank" frameborder="0"></iframe>
+      <div class="map-loading" id="mapLoading">
+        <div class="spinner"></div>
+        <div id="mapLoadingText">地图初始化中，请稍候…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 覆盖层 ================= -->
+<div class="toast" id="toast"></div>
+<div class="loading" id="loading">
+  <div class="spinner"></div>
+  <div id="loadingText">正在解析…</div>
+</div>
+
+<!-- 兜底：普通文件选择（任何浏览器都可用） -->
+<input type="file" id="fileInput" accept=".xls,.xlsx" style="display:none">
+<input type="file" id="fileInputMulti" accept=".xls,.xlsx" multiple style="display:none">
+
+<!-- ================= 依赖 ================= -->
+<script src="track.config.js" charset="utf-8"></script>
+<script src="direction.data.js" charset="utf-8"></script>
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="js/aggregate.js" charset="utf-8"></script>
+<script src="js/map-bridge.js" charset="utf-8"></script>
+<script src="js/report31814.js" charset="utf-8"></script>
+<script src="js/app.js" charset="utf-8"></script>
+
+</body>
+</html>

@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<!-- saved from url=(0028)http://10.208.2.72:8080/cljl -->
+<html lang="en" xmlns="http://www.w3.org/1999/html">
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+    <title>中图铁路地图</title>
+    <!-- <link rel="icon" href="./images/cr_logo2.ico" type=" image/x-icon"> -->
+    <!--bootstrap-->
+    <link href="./css/bootstrap.min.css" rel="stylesheet" type="text/css">
+
+    <!--<link th:href="@{/webjars/bootstrap/4.3.1/css/bootstrap.min.css}" rel="stylesheet" type="text/css">-->
+    <!--JQuery-->
+
+    <script src="./js/jquery.min.js"></script>
+    <script src="./js/bootstrap.min.js"></script>
+    <!--编辑-->
+
+    <!--    <script th:src="@{/webjars/bootstrap/4.3.1/js/bootstrap.min.js}"></script>-->
+
+    <!--bootstrap-tab-->
+    <!--<link th:href="@{/webjars/bootstrap/4.3.1/css/bootstrap-tab.css}" rel="stylesheet" type="text/css">-->
+    <!--    <script th:src="@{/webjars/bootstrap/4.3.1/js/bootstrap-tab.js}"></script>-->
+
+    <!--D3-->
+    <script src="./js/d3.min.js"></script>
+    <!--铁路径路本地兜底生成（原生优先队列，无第三方依赖）-->
+    <script src="./js/pathLocal.js"></script>
+    <!-- <link th:href="@{/icon/iconfont.css}" rel="stylesheet" type="text/css">-->
+
+    <!--bootstrap-table-->
+    <script src="./js/bootstrap-table.min.js"></script>
+    <link href="./css/bootstrap-table.min.css" rel="stylesheet" type="text/css">
+    <script src="./js/bootstrap-table-zh-CN.min.js"></script>
+
+    <link>
+    <!--map lj color-->
+    <link href="./css/colors.min.css" rel="stylesheet">
+
+
+    <!--菜单TreeView-->
+    <link href="./css/iconfont.css" rel="stylesheet">
+
+    <!--Layer-->
+    <script src="./js/layer.js"></script>
+    <link rel="stylesheet" href="./css/layer.css" id="layuicss-skinlayercss">
+
+    <link href="./css/cljl.css" rel="stylesheet">
+
+    <script>
+        // 统一将相对路径的后端接口请求指向 http://localhost:3000
+        $.ajaxPrefilter(function (options, originalOptions, jqXHR) {
+            if (options.url && options.url.charAt(0) === '/') {
+                options.url = 'http://localhost:3000' + options.url;
+            }
+        });
+    </script>
+    <script src="./js/getToken.js"></script>
+    <!--    <script th:src="@{/js/nostalgic.js(v=1.4)}"></script>-->
+    <!--    <script th:src="@{/DataTables-1.10.21/jquery.dataTables.js(v=1.1)}"></script>-->
+    <!--    <script th:src="@{/DataTables-1.10.21/jquery.dataTables.css(v=1.1)}"></script>-->
+    <!--视频-->
+    <script>
+
+        //web服务返回值
+        var map_version = null;
+        //Token 可用性：undefined=未判定 true=后端正常(可发API) false=后端不可达(直接用本地数据/计算)
+        var apiAvailable = undefined;
+        var map_width = null;
+        var map_height = null;
+        var lj_color_list = null;
+        var depart_name = "\u5357\u5B81\u5C40";
+        var role_name = "\u5F84\u8DEF\u67E5\u8BE2\u7528\u6237";
+
+        //地图初始化（创建 Map/Search/Jl 等对象）；由 getVersion 成功/失败两处择一触发
+        function initMap() {
+            if (map_version == null) return;                          //版本号未就绪，等请求回调再来触发
+            if (typeof map !== "undefined" && map) return;            //避免重复初始化
+
+            //打开地图
+            map = new Map($("svg").height(), $("svg").width());
+            map.createMap();
+
+            //数据检索
+            search = new Search();
+
+            //点到点径路
+            jl = new Jl();
+        }
+
+        //获得token
+        var getToken;
+
+        $(document).ready(function () {
+            getToken = new GetToken();
+
+            //设置DIV_SVG宽度（无左侧菜单，占满窗口）
+            var right_svg_width = $(window).width();
+            $(".right_svg").width(right_svg_width);
+
+            //设置DIV_SVG高度
+            var right_svg_height = $(window).height() - $(".top").height();
+            $(".right_svg").height(right_svg_height);
+
+            //右上角登陆信息
+            $(".pclass").html(depart_name + "[" + role_name + "]");
+
+        });
+    </script>
+    <style type="text/css" id="-style">
+        .treeview .list-group-item {
+            cursor: pointer
+        }
+
+        .treeview span.indent {
+            margin-left: 10px;
+            margin-right: 10px
+        }
+
+        .treeview span.icon {
+            width: 12px;
+            margin-right: 5px
+        }
+
+        .treeview .node-disabled {
+            color: silver;
+            cursor: not-allowed
+        }
+
+        .node- {
+            color: #FFFFFF;
+            background-color: #313335;
+            border: 1px solid #3C3F41;
+        }
+
+        .node-:not(.node-disabled):hover {
+            background-color: #3C3F41;
+        }
+    </style>
+</head>
+
+<body class="" style="">
+    <div class="cljl_container">
+        <div class="main" id="cljl_main_svg">
+            <div class="right_svg" id="cljl_right_svg" style="width: 100%; height: 100%;">
+
+                <link href="./css/map.css" rel="stylesheet">
+                <!-- 本地中间站兜底数据：定义全局 window.中间站数据 = {路局编号:[中间站...], ...}，后端不可用时使用 -->
+                <script src="./map_data/中间站数据.js"></script>
+                <!-- 本地地图兜底数据（后端不可用时使用）：分别提供站名/线段/节点，等价于原 map_data_C260702.json 的三个字段 -->
+                <script src="./map_data/getMapDftPoint.js"></script>
+                <script src="./map_data/getMapDlnPoint.js"></script>
+                <script src="./map_data/getMapDndPoint.js"></script>
+                <!-- 拼音库（无调字典 + 互转工具），用于车站搜索支持拼音/首字母 -->
+                <script src="./map_data/pinyin_dict_notone.js"></script>
+                <script src="./map_data/pinyinUtil.js"></script>
+                <script src="./js/map.js"></script>
+
+                <script src="./js/search.js"></script>
+
+                <link href="./css/jl.css" rel="stylesheet">
+                <script src="./js/jl.js"></script>
+
+                <link href="./css/iconfont(2).css" rel="stylesheet">
+
+                <script>
+
+                    // map_version 不再硬编码，由页面顶部 requestVersion() 请求获取并赋值给全局变量
+                    var map_width = 1521;
+                    var map_height = 932;
+                    var lj_color_list = ["#000000", "#ef4136", "#00FF00", "#ef4136", "#22CEFF", "#f47920", "#00FF00", "#22CEFF", "#ef4136", "#22CEFF", "#ef4136", "#00FF00", "#ef4136", "#22CEFF", "#00FF00", "#ef4136", "#22CEFF", "#00FF00", "#ef4136"];
+
+                    //设置MapVersion（版本号由顶部 requestVersion() 请求成功后写入 .right_version）
+
+                    var map;                //地图对象
+                    var search;             //检索对象
+                    var jl;                 //点到点径路
+
+                    //工具栏车站搜索框：输入时实时匹配（带防抖 + 输入法组字期间不触发）
+                    var _stationInputTimer = null;
+                    var _stationComposing = false;
+                    function onStationInput() {
+                        if (_stationComposing) return;            //输入法组字过程中不触发，避免卡顿/闪烁
+                        if (_stationInputTimer) clearTimeout(_stationInputTimer);
+                        _stationInputTimer = setTimeout(function () {
+                            if (search) search.stationInputSearch();
+                        }, 200);
+                    }
+                    function onStationFocus() {
+                        if (_stationComposing) return;
+                        //聚焦时若输入框为空，立即展示最近搜索记录
+                        if (!$("#stationSearchInput").val().trim() && search) search.stationInputSearch();
+                    }
+                    function onStationEnter() {
+                        //回车：若当前已收敛为唯一候选，直接确认生成径路；否则走正常匹配
+                        if (search && search.submitIfUnique && search.submitIfUnique()) return;
+                        onStationInput();
+                    }
+                    function onStationInputCompositionStart() { _stationComposing = true; }
+                    function onStationInputCompositionEnd()   { _stationComposing = false; onStationInput(); }
+
+                    $(document).ready(function () {
+
+                        //屏蔽右键菜单
+                        $(document).bind("contextmenu", function (e) {
+                            return false;
+                        });
+
+                        // 调整页面大小
+                        $(window).resize(function () {
+                            //设置DIV_SVG宽度（无左侧菜单，占满窗口）
+                            var right_svg_width = $(window).width();
+                            $(".right_svg").width(right_svg_width);
+
+                            //设置DIV_SVG高度
+                            var right_svg_height = $(window).height() - $(".top").height();
+                            $(".right_svg").height(right_svg_height);
+
+                            //设置SVG高度
+                            $("svg").width(right_svg_width);
+
+                            //设置SVG高度
+                            $("svg").height(right_svg_height - $(".right_svg_version").height() - $(".right_svg_prompt").height());
+
+                            //设置Jl_INPUT
+                            /*var jl_width = parseInt( $(".right_svg_jl").width());
+                            $(".right_svg_jl").css("margin-left", right_svg_width - jl_width);*/
+                        });
+
+                        //设置DIV_SVG宽度
+                        var right_svg_width = $(".right_svg").width();
+
+                        //设置DIV_SVG高度
+                        var right_svg_height = $(".right_svg").height();
+
+                        //设置SVG高度
+                        $("svg").width(right_svg_width);
+
+                        //设置SVG高度
+                        $("svg").height(right_svg_height - $(".right_svg_version").height() - $(".right_svg_prompt").height());
+
+                        //打开地图（依赖 map_version，initMap 内部已做版本号非空保护；版本号请求在页面顶部已提前发出）
+                        initMap();
+
+
+                        $(".btn-group span").mouseover(function () {
+                            $(this).css({ "background-color": "#505050" }, 500);
+                        }).mouseout(function () {
+                            $(this).css({ "background-color": "#3c3f41" }, 500);
+                        });
+                        $(".btn-group span").mousedown(function () {
+                            $(this).css("color", "#4A4A4A");
+                        }).mouseup(function () {
+                            $(this).css({ "color": "white" }, 500);
+                        })
+
+                    });
+
+                    //监测键盘Ctrl+Z
+                    $(document).on("keypress", function (e) {
+                        if (e.ctrlKey && e.which == 26)         //ctrl + z
+                        {
+                            //点点回退
+                            if (jl.getJlState() == 1) {
+                                //执行回退
+                                jl.undoJl();
+                                return;
+                            }
+                        }
+                    });
+
+
+                </script>
+
+
+                <div class="right_svg_version">
+                    <div id="left_toolbar" role="toolbar" aria-label="Toolbar with button groups" class="Left_toolbar">
+                        <div class="search_wrap" style="position:relative; display:inline-block; vertical-align:middle; margin-right:5px;">
+                            <input type="text" id="stationSearchInput" placeholder="输入终点站名/电报码/拼音首字母(起点:钦州港)" style="padding: 2px 26px 2px 5px; border-radius: 3px; border: 1px solid #ccc; vertical-align: middle; color:#333; background:#fff;" oninput="onStationInput()" onfocus="onStationFocus()" onkeydown="if(event.keyCode===13){onStationEnter();}" oncompositionstart="onStationInputCompositionStart()" oncompositionend="onStationInputCompositionEnd()">
+                            <span id="stationMatchCount" style="position:absolute; top:50%; right:6px; transform:translateY(-50%); font-size:11px; color:#999; pointer-events:none; line-height:1;">0</span>
+                        </div>
+                        <div class="btn-group" role="group" aria-label="First group"><span
+                                style="height: 26px;width: 26px" class="iconfont icon-jiedian3 toolbar_icon"
+                                onclick="map.hideMidStation()" title="关闭中间站显示"></span><span
+                                style="height: 26px;width: 26px" class="iconfont icon-xian toolbar_icon"
+                                onclick="jl.clearJl()" title="清除径路"></span></div>
+                    </div>
+                    <div id="cx1" class="right_version" style="width: 60px;text-align: center;float: right">C260702
+                    </div>
+                </div>
+                <div id="yc1"
+                    style="position: absolute; width: 570px; height: 135px; display: none; margin-top: 5px; right: 30px; border: 1px solid rgb(221, 221, 223); background: rgb(251, 251, 251);">
+                    <table id="map_table">
+                        <thead>
+                            <tr>
+                                <th class="map_th" width="120px">新版本数据</th>
+                                <th class="map_th" width="120px">上传日期</th>
+                                <th class="map_th" width="320px">说明</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rows1">
+                        </tbody>
+                    </table>
+                </div>
+                <svg class="svg_map" style="width: 100%; height: calc(100% - 50px);"></svg>
+                <div class="right_svg_statusbar">
+                    <div class="right_svg_prompt">路局显示-&gt;</div>
+                    <div class="right_svg_status">
+                        <span class="status_item"><span class="dot" id="status_token"></span>Token</span>
+                        <span class="status_item"><span class="dot" id="status_font"></span>站名F</span>
+                        <span class="status_item"><span class="dot" id="status_line"></span>线路L</span>
+                        <span class="status_item"><span class="dot" id="status_node"></span>节点N</span>
+                    </div>
+                </div>
+                <div class="right_svg_jl"></div>
+
+                <script>
+                    var cx1 = document.querySelector("#cx1");
+                    var yc1 = document.querySelector("#yc1")
+                    cx1.onmousemove = function () {
+                        yc1.style.display = "inline-block"
+                    }
+                    cx1.onmouseout = function () {
+                        yc1.style.display = "none"
+                    }
+                    //版本号及版本说明表格由页面顶部 requestVersion() 统一请求并填充，此处不再重复请求
+                </script>
+                <style>
+                    #map_table {
+                        width: 100%;
+                        height: 100%;
+                        border-collapse: collapse;
+                        table-layout: fixed;
+                        background-color: white;
+                        border: 1px solid lightgrey;
+                        text-align: center;
+                    }
+
+                    #rows1 tr {
+                        width: calc(100%);
+                    }
+
+                    .map_th {
+                        border: 1px solid #708090;
+                        text-align: center;
+                        font-size: 12px;
+                        height: 30px;
+                    }
+
+                    #rows1 td {
+                        border: 1px solid #708090;
+                        font-size: 15px;
+                        text-align: center;
+                    }
+                </style>
+            </div>
+        </div>
+    </div>
+    <div class="addparent-modal-panel">
+
+        <!-- 径路输出模态框（纯前端静态渲染，不再依赖后端 getJloutputPage 片段） -->
+        <div class="modal fade" id="jloutputModal" tabindex="-1" role="dialog" aria-hidden="true">
+            <div class="modal-dialog" style="width: 520px;">
+                <div class="modal-content" style="background-color: #FFFFFF">
+                    <div class="modal-header" style="height: 40px;">
+                        <h5 class="modal-title" style="font-weight: 600;">径路输出</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <table id="jloutputTable" class="table table-bordered" style="margin-bottom: 0;"></table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="layui-layer-move"></div>
+
+    <!-- 对外集成接口：供外部页面通过 postMessage 调用径路功能（唯一新增行） -->
+    <script src="./js/integration.js"></script>
+</body>
+
+</html>
