@@ -98,7 +98,7 @@ html, body {
   top: 100%;
   right: 0;
   margin-top: 4px;
-  min-width: 140px;
+  min-width: 152px;
   background: #fff;
   border: 1px solid var(--border-strong);
   border-radius: 4px;
@@ -429,7 +429,7 @@ table.grid {
   /* table-layout:fixed + width:max-content：每列都是独立精确 px 宽，互不影响（像 Excel）。
    * 表格按「各列 px 之和」撑开，超出容器才出现横向滚动；
    * 拖某一列只改该列自身，不会牵连其它列（弹性列不再吸收剩余空间而被连带拉伸）。 */
-  font-size: 12px;
+  font-size: 15px;
   table-layout: fixed;
   width: max-content;
 }
@@ -738,6 +738,7 @@ table.detail.measuring th, table.detail.measuring td {
 .toast.show {
   opacity: 1;
   transform: translateY(0) scale(1);
+  pointer-events: auto;
   animation: toast-pop .32s cubic-bezier(.22, 1.2, .36, 1);
 }
 /* 冒泡：由下方浮起并轻微回弹 */
@@ -866,4 +867,145 @@ td.dest span.station-link:hover {
   padding: 1px 5px;
   border-radius: 3px;
   font-family: Consolas, monospace;
+}
+
+/* ================= 设置浮窗 ================= */
+.settings-modal { width: 460px; }
+.settings-modal .modal-body { min-width: 0; }
+
+.setting-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setting-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.setting-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 滑块容器：包裹 range + datalist 刻度 */
+.range-wrap {
+  flex: 1;
+  position: relative;
+}
+
+.range-wrap input[type="range"] {
+  width: 100%;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: #d5dbdf;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  margin: 0;
+}
+
+.range-wrap input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,.25);
+  cursor: pointer;
+}
+
+.range-wrap input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,.25);
+  cursor: pointer;
+}
+
+/* 刻度标签 */
+.range-ticks {
+  position: relative;
+  height: 18px;
+  margin-top: 2px;
+  padding: 0 9px;
+  font-size: 11px;
+  color: var(--text-dim);
+  user-select: none;
+}
+
+/* 上方副刻度：更小、更淡 */
+.range-ticks.upper {
+  margin-top: 0;
+  margin-bottom: 2px;
+  height: 14px;
+  font-size: 10px;
+  color: #b2bec3;
+}
+
+.range-ticks .tick {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  transition: color .15s, font-weight .15s;
+}
+
+.range-ticks .tick.active {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.range-ticks.upper .tick.active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.setting-val {
+  min-width: 42px;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--accent);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 分隔线 */
+.setting-divider {
+  border-top: 1px solid var(--border);
+  margin: 6px 0;
+}
+
+/* 文件夹设置 */
+.setting-folder {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.folder-path {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: #f4f6f8;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+/* 菜单项中的图标 */
+.menu-icon {
+  margin-right: 6px;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
 }

@@ -79,6 +79,18 @@
     t._timer = setTimeout(function () { t.className = 'toast'; }, 2600);
   }
 
+  (function () {
+    var t = $('toast');
+    if (t) {
+      t.addEventListener('mouseenter', function () {
+        clearTimeout(t._timer);
+      });
+      t.addEventListener('mouseleave', function () {
+        t._timer = setTimeout(function () { t.className = 'toast'; }, 800);
+      });
+    }
+  })();
+
   function loading(show, text) {
     $('loadingText').textContent = text || '正在解析…';
     $('loading').className = show ? 'loading show' : 'loading';
@@ -169,6 +181,7 @@
     }
     window.showDirectoryPicker({ id: 'yardXls', mode: 'read' })
       .then(function (h) {
+        localStorage.setItem('zhancun.folderName', h.name);
         return idbSet('xlsDir', h).then(function () {
           state.dirHandle = h;
           return loadFromDir(h, true);
@@ -295,8 +308,8 @@
     var sel = $('fileSwitcher');
     if (!sel) {
       var wrap = document.createElement('span');
-      wrap.innerHTML = '<select id="fileSwitcher" class="btn" style="max-width:200px"></select> ';
-      $('btnReload').parentNode.insertBefore(wrap, $('btnReload').nextSibling);
+      wrap.innerHTML = '<select id="fileSwitcher" class="btn" style="max-width:236px"></select> ';
+      $('btnReload').parentNode.insertBefore(wrap, $('btnReload'));
       sel = $('fileSwitcher');
       sel.addEventListener('change', function () {
         var f = state.fileList[sel.selectedIndex];
@@ -317,8 +330,14 @@
     if (idx < 0) idx = sel.selectedIndex;   // 兜底：保持重建前的选择
 
     sel.innerHTML = files.map(function (f, i) {
-      return '<option value="' + i + '">' + escapeHtml(f.name) +
-             '（' + fmt(new Date(f.lastModified)) + '）</option>';
+      var match = f.name.match(/共\s*(\d+)\s*辆/);
+      var count = match ? match[1] : '?';
+      var label = count + '辆-' + fmt(new Date(f.lastModified));
+      var isNew = (i === 0);
+      if (isNew) label += ' ● NEW';
+      return '<option value="' + i + '"' +
+             (isNew ? ' style="font-weight:800;color:var(--accent)"' : '') +
+             '>' + label + '</option>';
     }).join('');
 
     if (idx >= 0 && idx < files.length) sel.selectedIndex = idx;
@@ -905,24 +924,6 @@
 
   /* =================== 事件绑定 =================== */
   function bind() {
-    on('btnPickFolder', 'click', pickFolder);
-
-    on('btnPickFile', 'click', function () {
-      if (window.showOpenFilePicker) {
-        window.showOpenFilePicker({
-          multiple: false,
-          types: [{ description: 'Excel 文件', accept: { 'application/vnd.ms-excel': ['.xls', '.xlsx'] } }]
-        }).then(function (hs) {
-          return readAndRender(hs[0].getFile(), hs[0].name, null);
-        }).catch(function (e) {
-          if (e && e.name === 'AbortError') return;
-          $('fileInput').click();
-        });
-      } else {
-        $('fileInput').click();
-      }
-    });
-
     on('fileInput', 'change', function (e) {
       var f = e.target.files[0];
       if (f) readAndRender(f, f.name, null);
@@ -1085,6 +1086,12 @@
         var action = item.getAttribute('data-action');
         if (action === '31814' && typeof window.Report31814 !== 'undefined') {
           window.Report31814.open(state.rawRows, state.currentFile);
+        } else if (action === 'settings') {
+          var m = $('modalSettings');
+          if (m) {
+            refreshFolderPath();
+            m.classList.add('show');
+          }
         }
       });
       document.addEventListener('click', function () { menuList.style.display = 'none'; });
@@ -1100,10 +1107,64 @@
       });
     }
 
+    // 设置浮窗关闭
+    var btnSettingsClose = $('btnSettingsClose');
+    var modalSettings = $('modalSettings');
+    if (btnSettingsClose && modalSettings) {
+      btnSettingsClose.addEventListener('click', function () { modalSettings.classList.remove('show'); });
+      modalSettings.addEventListener('click', function (e) {
+        if (e.target === modalSettings) modalSettings.classList.remove('show');
+      });
+    }
+
+    // 设置：表格字号滑块
+    var gridFontSize = $('gridFontSize');
+    var gridFontSizeVal = $('gridFontSizeVal');
+    if (gridFontSize && gridFontSizeVal) {
+      var savedFs = localStorage.getItem('zhancun.gridFontSize');
+      if (savedFs) {
+        gridFontSize.value = savedFs;
+        gridFontSizeVal.textContent = savedFs + 'px';
+        $('grid').style.fontSize = savedFs + 'px';
+      }
+      function highlightTick(v) {
+        var ticks = document.querySelectorAll('.range-ticks .tick');
+        for (var i = 0; i < ticks.length; i++) {
+          ticks[i].classList.toggle('active', ticks[i].textContent === v);
+        }
+      }
+      gridFontSize.addEventListener('input', function () {
+        var v = gridFontSize.value;
+        gridFontSizeVal.textContent = v + 'px';
+        $('grid').style.fontSize = v + 'px';
+        localStorage.setItem('zhancun.gridFontSize', v);
+        highlightTick(v);
+      });
+      highlightTick(gridFontSize.value);
+    }
+
+    // 设置：默认文件夹
+    var folderPath = $('folderPath');
+    var btnSettingFolder = $('btnSettingFolder');
+    function refreshFolderPath() {
+      if (folderPath) {
+        var name = localStorage.getItem('zhancun.folderName');
+        folderPath.textContent = name || '未设置';
+        folderPath.title = name || '';
+      }
+    }
+    refreshFolderPath();
+    if (btnSettingFolder) {
+      btnSettingFolder.addEventListener('click', function () {
+        pickFolder();
+      });
+    }
+
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') {
         closeDetail();
         if (modal31814) modal31814.classList.remove('show');
+        if (modalSettings) modalSettings.classList.remove('show');
       }
     });
 
@@ -1148,8 +1209,7 @@
 
     // 恢复上次选择的文件夹，自动读取最新 xls
     if (!window.showDirectoryPicker) {
-      $('btnPickFolder').style.display = 'none';
-      $('stMsg').textContent = '当前浏览器不支持自动读取，请点「选择文件」';
+      $('stMsg').textContent = '当前浏览器不支持自动读取，请在设置中手动选择文件夹';
       return;
     }
 
@@ -1159,6 +1219,7 @@
         return;
       }
       state.dirHandle = h;
+      localStorage.setItem('zhancun.folderName', h.name);
       // 静默恢复：权限未授予时不弹窗，等用户点击
       if (h.queryPermission) {
         return h.queryPermission({ mode: 'read' }).then(function (p) {
