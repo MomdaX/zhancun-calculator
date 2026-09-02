@@ -280,9 +280,9 @@ html, body {
   border-top: 1px dashed #d0d8df;
   box-sizing: border-box;
 }
-.rpt31814 .fraction { display: inline-block; text-align: center; vertical-align: middle; margin: 0 4px; }
-.rpt31814 .fraction .num { display: block; border-bottom: 1px solid #333; padding: 0 2px; line-height: 13px; }
-.rpt31814 .fraction .den { display: block; padding: 0 2px; line-height: 13px; }
+.rpt31814 .fraction { display: inline-block; text-align: center; vertical-align: middle; }
+.rpt31814 .fraction .num { display: block; border-bottom: 2px solid #333; padding: 0 0 3px; line-height: 13px; }
+.rpt31814 .fraction .den { display: block; padding: 3px 0 0; line-height: 13px; }
 
 /* 右侧条件面板 */
 /* 分区标题：左侧标题 + 右侧操作，强制一行 */
