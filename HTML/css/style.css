@@ -610,7 +610,7 @@ td.train-loop { background: #ffe0b2 !important; font-weight: 600; }
   gap: 10px;
   background: #f8fafb;
 }
-.drawer-head h3 { margin: 0; font-size: 14px; display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
+.drawer-head h3 { margin: 0; font-size: 15px; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .drawer-head h3 .dt-name { font-weight: 700; }
 .drawer-head h3 .dt-total { font-weight: 600; color: #1f6feb; white-space: nowrap; padding: 2px 8px; border-radius: 4px; }
 /* 总重加边框，便于区分 */
