@@ -665,6 +665,15 @@ table.detail tbody tr.selected td:first-child {
 }
 table.detail td.mid { text-align: center; font-variant-numeric: tabular-nums; }
 
+/* 车种/车号颜色规则（对齐 VBA 显示信息.bas） */
+table.detail .car-red { color: #e74c3c; font-weight: 700; }        /* DK/YW/YZ → 红加粗 */
+table.detail .car-purple { color: #8e44ad; font-weight: 700; }      /* B → 紫加粗 */
+table.detail .car-blue { color: #2980b9; font-weight: 700; }        /* K → 蓝加粗 */
+table.detail .car-pink { color: #e84393; font-weight: 700; }        /* T → 粉红加粗 */
+table.detail .car-yellow-bg { background: #fff9c4 !important; }          /* P → 黄底 */
+table.detail .car-grey-bg { background: #dfe6e9 !important; }           /* X/自备罐 → 灰底 */
+table.detail .car-self-bold { font-weight: 700; }                   /* 中粮罐 → 加粗 */
+
 /* ================= 表头列宽拖拽 =================
  * 关键重构：拖拽手柄用真实 <div class="col-handle">（由 JS 注入 th 内），
  * 而不是伪元素 ::after。原因：

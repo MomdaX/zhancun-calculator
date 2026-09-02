@@ -610,6 +610,37 @@
       '<span class="dt-total">载重：' + t.loadW.toFixed(1) + '</span>' +
       '<span class="dt-total dt-weight' + (t.weight > 5000 ? ' warn' : '') + '">总重：' + t.weight.toFixed(1) + '</span>';
   }
+  /** 车种/车号颜色规则（对齐 VBA 显示信息.bas） */
+  function carStyle(row) {
+    var t = String(row[2] || '');
+    var n = String(row[3] || '');
+    var cls = '';  // 车种字体类
+    var bg = '';   // 车种背景类
+    var clsN = ''; // 车号字体类
+    var bgN = '';  // 车号背景类
+
+    // 车种字体颜色
+    if (t.indexOf('DK') === 0) { cls = 'car-red'; }
+    else if (t.indexOf('YW') === 0 || t.indexOf('YZ') === 0) { cls = 'car-red'; }
+    else if (t.indexOf('B') === 0) { cls = 'car-purple'; }
+    else if (t.indexOf('K') === 0) { cls = 'car-blue'; }
+    else if (t.indexOf('T') === 0) { cls = 'car-pink'; }
+
+    // 车种背景
+    if (t.indexOf('P') === 0) { bg = 'car-yellow-bg'; }
+    else if (/X/.test(t) && cls === '') { bg = 'car-grey-bg'; }  // 平板车，仅当无其他字体规则时
+
+    // 车号：自备罐
+    if (n.charAt(0) === '0') {
+      if (n.charAt(1) === '7') { bgN = 'car-self-bold'; clsN = 'car-self-bold'; }
+      else { bgN = 'car-grey-bg'; clsN = 'car-grey-bg'; }
+    } else {
+      clsN = cls;  // 车号继承车种字体颜色
+    }
+
+    return { cls: cls, bg: bg, clsN: clsN, bgN: bgN };
+  }
+
   function openDetail(idx) {
     var r = state.rows[idx];
     if (!r) return;
@@ -630,6 +661,7 @@
     var list = r.raw || [];
     var base = state.printDate || new Date();
     $('detailBody').innerHTML = list.map(function (row, i) {
+      var cs = carStyle(row);
       var tds = DETAIL_COLS.map(function (c) {
         var raw = row[c.i];
         if (c.fmt === 'track') {
@@ -638,8 +670,6 @@
                  escapeHtml(t ? t.name : (raw == null ? '' : raw)) + '</td>';
         }
         if (c.fmt === 'dest') {
-          // 到站列：优先显示原始车站名；原始为空时补显聚合分类（如 路罐/自备罐），
-          // 以便空罐车也能看出属性。补显部分加 class 便于区分。
           var txt = raw == null ? '' : String(raw).trim();
           if (txt) return '<td class="dest">' + renderDest(txt, true) + '</td>';
           var agg = row.__dest == null ? '' : String(row.__dest).trim();
@@ -648,6 +678,27 @@
                    escapeHtml(agg) + '</span></td>';
           }
           return '<td class="dest"></td>';
+        }
+        // 车种列 (i=2)
+        if (c.i === 2) {
+          var clsA = [c.cls, cs.cls, cs.bg].filter(Boolean).join(' ');
+          return '<td' + (clsA ? ' class="' + clsA + '"' : '') + '>' +
+                 escapeHtml(raw == null ? '' : raw) + '</td>';
+        }
+        // 车号列 (i=3)
+        if (c.i === 3) {
+          var clsB = [c.cls, cs.clsN, cs.bgN].filter(Boolean).join(' ');
+          return '<td' + (clsB ? ' class="' + clsB + '"' : '') + '>' +
+                 escapeHtml(raw == null ? '' : raw) + '</td>';
+        }
+        // 品名列 (i=9)：汽油/航煤标黄底（对齐 VBA 显示信息.bas）
+        if (c.i === 9) {
+          var pm = raw == null ? '' : String(raw);
+          var jishi = row[13] == null ? '' : String(row[13]);
+          if ((pm.indexOf('汽油') !== -1 || pm.indexOf('航煤') !== -1 || jishi.indexOf('汽油') !== -1) && jishi !== '原装汽油') {
+            var clsP = c.cls ? c.cls + ' car-yellow-bg' : 'car-yellow-bg';
+            return '<td class="' + clsP + '">' + escapeHtml(pm) + '</td>';
+          }
         }
         return '<td' + (c.cls ? ' class="' + c.cls + '"' : '') + '>' +
                escapeHtml(raw == null ? '' : raw) + '</td>';
