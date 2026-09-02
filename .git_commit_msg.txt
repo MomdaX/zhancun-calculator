@@ -1,0 +1,6 @@
+更新 README 目录结构并补充测试章节；app.js 顶部加功能区块索引
+
+- README: 修正目录树（补 utils/store/ui/col-resize/tests，标注 Map 勿改动）；
+  新增「测试与质量」章节（node HTML/tests/run.js，零依赖、已反向验证）；
+  开发同步命令补充 origin master；.gitignore 说明补 xlsdata/ 与 xlsm
+- app.js: 顶部注释补 8 段功能区块索引 + 行号，便于定位；注明未拆分原因及拆分优先级

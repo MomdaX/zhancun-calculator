@@ -17,24 +17,30 @@
 ├── 站存计算器-(2026.6.6版).xlsm   # VBA 版主程序（Excel 启用宏的工作簿）
 ├── 站存计算器-(2026.6.6版)/       # VBA 工程源码导出（.bas / .cls / .frm / .frx）
 ├── HTML/                          # 纯前端网页版
-│   ├── index.html                 # 股道存车主页面
-│   ├── track.config.js            # 股道分组与配置（含虚拟/不常用股道名单）
-│   ├── direction.data.js          # 方向库数据
+│   ├── index.html                 # 股道存车主页面（含脚本加载顺序）
+│   ├── track.config.js            # 股道分组与配置（含虚拟/不常用股道名单、颜色阈值）
+│   ├── direction.data.js          # 方向库数据（到站→方向 映射源）
 │   ├── css/
 │   │   └── style.css              # 全局样式
 │   ├── js/
-│   │   ├── app.js                 # 主程序：渲染、状态、交互
-│   │   ├── aggregate.js           # xls 数据按股道聚合（含注意事项筛选）
+│   │   ├── app.js                 # 主程序：数据源 / 主表渲染 / 明细抽屉 / 事件绑定
+│   │   ├── aggregate.js           # xls 数据按股道聚合 + 到站推断（纯函数，含方向库解析）
 │   │   ├── report31814.js         # 站存计算（31814）统计面板
-│   │   └── map-bridge.js          # 地图联动桥接
-│   ├── xlsdata/                   # 示例/导入的 xls 数据
-│   ├── vendor/                    # 第三方依赖
-│   └── Map/                       # 铁路地图模块
+│   │   ├── map-bridge.js          # 地图联动桥接（含加载超时保护）
+│   │   ├── utils.js               # 通用工具：vbVal / carStyle / 防抖 等
+│   │   ├── store.js               # localStorage 持久化封装
+│   │   ├── ui.js                  # UI 组件：Modal / Drawer / Dropdown / Toast
+│   │   └── col-resize.js          # 表格列宽拖拽
+│   ├── tests/
+│   │   └── run.js                 # 纯 Node 回归测试（node HTML/tests/run.js，零依赖）
+│   ├── xlsdata/                   # 示例/导入的 xls 数据（已 gitignore）
+│   ├── vendor/                    # 第三方依赖（xlsx）
+│   └── Map/                       # 铁路地图模块（勿改动）
 │       ├── chinamap.html          # 地图页面
 │       ├── main.js                # 地图主逻辑
 │       ├── css/ js/ images/       # 地图资源
 │       └── map_data/              # 地图数据
-└── .gitignore
+└── .gitignore                     # 已排除 node_modules/ xlsdata/ xlsm/ 等
 ```
 
 ## 功能特性
@@ -78,6 +84,19 @@
   ```
 - **读取数据**：点击「功能 → 设置」选择默认数据文件夹；首次选择后会被记住，之后自动读取。也可通过文件下拉框切换不同数据文件。
 
+## 测试与质量
+
+`aggregate.js` 是纯函数、零 DOM 依赖，回归风险高（规则改错一个分支，站存数字就错且无痕），故配套了 Node 端回归测试：
+
+```bash
+node HTML/tests/run.js
+```
+
+- 纯 Node 运行，**零依赖、无构建步骤**。
+- 覆盖：VBA 函数模拟、carStyle 列索引解耦、方向库解析、到站推断各分支、端到端聚合、股道配置、持久化。
+- 已反向验证：将 `aggregate.js` 还原为旧版漏判写法后，测试会精确失败（指向具体记事），证明测试能兜住真实 Bug。
+- 修改聚合/到站推断逻辑后，**务必先跑测试再提交**。
+
 ## 开发与同步
 
 本仓库使用 Git 管理，已托管于 GitHub。本地修改后：
@@ -85,10 +104,14 @@
 ```bash
 git add -A
 git commit -m "描述你的改动"
-git push
+git push origin master
 ```
 
-> 注意：`.gitignore` 已排除 Excel 临时锁文件（`~$*`）、本地配置（`workbook-path.json`）、调试目录（`_diag/`）及 `node_modules/`，这些内容不会被提交。
+> 注意：`.gitignore` 已排除 Excel 临时锁文件（`~$*`）、本地配置（`workbook-path.json`）、调试目录（`_diag/`）、`node_modules/`、`xlsdata/` 及 `.xlsm` 二进制，这些内容不会被提交。请勿将 `node_modules/` 或测试样本 xls 误提交。
+
+### app.js 结构提示
+
+`app.js`（约 1016 行）未做文件拆分，`state` 为 IIFE 内私有对象。文件顶部注释含**功能区块索引**（列定义 / 数据源 / 主表渲染 / 明细抽屉 / 明细多选 / 事件绑定 / 入口）及对应行号，定位功能时先查该索引。如需拆分，数据源区块（`ensurePerm`/`pickFolder`/`loadFromDir` 等）耦合最弱、最优先。
 
 ## 版本
 

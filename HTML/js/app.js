@@ -5,6 +5,26 @@
  *   - 方向库、股道配置通过 <script src> 加载（file:// 下唯一可靠方式）
  *   - xls 通过 File System Access API 读取，目录句柄存 IndexedDB 实现"打开即自动读取"
  *   - 不支持该 API 的浏览器自动降级为 <input type="file"> 手动选择
+ *
+ * ============================ 功能区块索引 ============================
+ * 本文件约 1016 行，按职责划分为以下区块，便于定位（行号为当前快照，后续可能偏移）：
+ *
+ *   [列定义]        L13   COLUMNS / DETAIL_COLS —— 主表与明细表的列元数据
+ *   [数据源]        L77   ensurePerm / pickFolder / loadFromDir / readAndRender
+ *                        / renderFileSwitcher —— FSA 权限、IndexedDB、目录读取、文件切换
+ *                        （最独立、state 引用最少；含浏览器原生 API，改后需手动点验）
+ *   [主表渲染]      L302  renderDest / render / computeTotals / renderEmpty
+ *                        —— 到站着色、主表 tbody 构建、合计、空态
+ *   [明细抽屉]      L564  updateDetailTitle / openDetail / closeDetail / stepDetail
+ *                        —— 股道明细抽屉的打开、翻页、标题
+ *   [明细多选]      L764  selectRow / renderDrag / endDrag / clearDetailSel
+ *                        —— 明细行拖拽范围选 + 单击切换（bind 内联，未抽组件）
+ *   [事件绑定]      L729  bind —— 全部 DOM 事件绑定
+ *   [入口]          L969  init —— 启动编排
+ *
+ * 说明：state 为 IIFE 内私有对象（约 51 处引用），故未做文件拆分；
+ *       如需拆分，数据源区块（L77-301）耦合最弱，最优先。
+ * =====================================================================
  */
 (function () {
   'use strict';
