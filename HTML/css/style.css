@@ -42,11 +42,24 @@ html, body {
   color: var(--text);
   font-family: "Microsoft YaHei", "微软雅黑", "Segoe UI", "PingFang SC", sans-serif;
   font-size: 13px;
+}
+
+/* ================= 页面纵向三段布局 =================
+ * 工具栏 / 表格区 / 状态栏 用 flex 纵向排列，各自按内容或剩余空间分配高度。
+ * 旧实现是「工具栏绝对定位 + 表格区 top:46px / bottom:30px 硬编码」：
+ * 工具栏设了 flex-wrap:wrap，窗口变窄换行后高度会变，
+ * 表格区顶部却被钉死在 46px，导致首行被永久遮挡。
+ * 改为 flex 后高度自适应，不再有任何魔数。 */
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
   overflow: hidden;
 }
 
 /* ================= 顶部工具栏 ================= */
 .toolbar {
+  flex: 0 0 auto;              /* 按内容取高，换行也不影响表格区 */
   display: flex;
   align-items: center;
   gap: 8px;
@@ -414,11 +427,8 @@ html, body {
 
 /* ================= 表格区 ================= */
 .table-wrap {
-  position: absolute;
-  top: 46px;
-  left: 0;
-  right: 0;
-  bottom: 30px;
+  flex: 1 1 auto;
+  min-height: 0;               /* 关键：允许在 flex 容器内收缩，否则不会出滚动条 */
   overflow: auto;
   background: var(--panel);
 }
@@ -562,9 +572,7 @@ td.train-loop { background: #ffe0b2 !important; font-weight: 600; }
 
 /* ================= 状态栏 ================= */
 .statusbar {
-  position: absolute;
-  left: 0; right: 0; bottom: 0;
-  height: 30px;
+  flex: 0 0 auto;
   line-height: 30px;
   padding: 0 12px;
   background: var(--head-bg);
@@ -859,24 +867,6 @@ td.dest span.station-link:hover {
   animation: spin .8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-
-/* 帮助提示 */
-.hint {
-  padding: 10px 14px;
-  background: #fffbe6;
-  border: 1px solid #ffe58f;
-  border-radius: 4px;
-  margin: 10px 12px;
-  font-size: 12px;
-  line-height: 1.7;
-  color: #614700;
-}
-.hint code {
-  background: #f1f2f6;
-  padding: 1px 5px;
-  border-radius: 3px;
-  font-family: Consolas, monospace;
-}
 
 /* ================= 设置浮窗 ================= */
 .settings-modal { width: 460px; }

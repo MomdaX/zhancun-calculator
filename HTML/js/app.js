@@ -26,17 +26,24 @@
   ];
 
   // fmt: track = 股道显示名（到发线加"道"）  dest = 到站按方向着色
+  // col 取 Aggregate.COL 常量：SMIS 导出列序变动时只需改 aggregate.js 一处。
+  //
+  // 【关于旧注释的更正】此处原写作「aggregate.js 在 app.js 之后才加载，不能在
+  // IIFE 顶部引用 COL，必须做成函数」，与 index.html 的实际加载顺序相反：
+  // aggregate.js（第 207 行）先于 app.js（第 210 行）。且本文件第 67 行的
+  // `var COL = Aggregate.COL;` 本就是顶层引用，早已证明该限制不存在。
+  // 列定义是常量，故直接写成常量数组，无需再包一层函数。
   var DETAIL_COLS = [
-    { i: 0, t: '股道', w: 54, fmt: 'track' },
-    { i: 1, t: '顺', w: 34 },
-    { i: 2, t: '车种', w: 68 }, { i: 3, t: '车号', w: 78 },
-    { i: 4, t: '自重', w: 52 }, { i: 5, t: '换长', w: 50, cls: 'mid' },
-    { i: 6, t: '载重', w: 56, cls: 'mid' },
-    { i: 7, t: '到站', w: 120, fmt: 'dest' },
-    { i: 8, t: '方向', w: 42 }, { i: 9, t: '品名', w: 90 },
-    { i: 10, t: '发站', w: 110, fmt: 'dest' },
-    { i: 13, t: '记事', w: 170 },
-    { i: 14, t: '车次', w: 62 }, { i: 15, t: '到达时间', w: 128 }
+    { col: Aggregate.COL.TRACK,   t: '股道', w: 54, fmt: 'track' },
+    { col: Aggregate.COL.SEQ,     t: '顺', w: 34 },
+    { col: Aggregate.COL.CARTYPE, t: '车种', w: 68 }, { col: Aggregate.COL.CARNO, t: '车号', w: 78 },
+    { col: Aggregate.COL.TARE,    t: '自重', w: 52 }, { col: Aggregate.COL.LEN,   t: '换长', w: 50, cls: 'mid' },
+    { col: Aggregate.COL.LOAD,    t: '载重', w: 56, cls: 'mid' },
+    { col: Aggregate.COL.DEST,    t: '到站', w: 120, fmt: 'dest' },
+    { col: Aggregate.COL.DIR,     t: '方向', w: 42 }, { col: Aggregate.COL.GOODS, t: '品名', w: 90 },
+    { col: Aggregate.COL.FROM,    t: '发站', w: 110, fmt: 'dest' },
+    { col: Aggregate.COL.NOTE,    t: '记事', w: 170 },
+    { col: Aggregate.COL.TRAIN,   t: '车次', w: 62 }, { col: Aggregate.COL.ARRTIME, t: '到达时间', w: 128 }
   ];
 
   /* ============================ 全局状态 ============================ */
@@ -50,86 +57,20 @@
     detailIdx: -1,
     detailSel: null,       // 明细多选行集合（存 r.raw 的下标）
     printDate: null,       // 数据源打印日期（作为停时基准）
-    showVirtual: true      // 是否显示虚拟股道（X 线）
+    fileList: null,       // 文件夹内文件列表（多文件时使用）
+    showVirtual: true     // 是否显示虚拟股道（X 线）
   };
 
-  var $ = function (id) { return document.getElementById(id); };
-
-  /**
-   * 安全绑定事件：元素不存在时静默跳过。
-   * 避免某个 DOM 缺失导致 bind() 整体中断、后续功能全部失效。
-   */
-  function on(id, evt, fn) {
-    var el = $(id);
-    if (el) el.addEventListener(evt, fn);
-    return el;
-  }
-
-  function escapeHtml(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
-  function toast(msg, type) {
-    var t = $('toast');
-    t.textContent = msg;
-    t.className = 'toast show' + (type ? ' ' + type : '');
-    clearTimeout(t._timer);
-    t._timer = setTimeout(function () { t.className = 'toast'; }, 2600);
-  }
-
-  (function () {
-    var t = $('toast');
-    if (t) {
-      t.addEventListener('mouseenter', function () {
-        clearTimeout(t._timer);
-      });
-      t.addEventListener('mouseleave', function () {
-        t._timer = setTimeout(function () { t.className = 'toast'; }, 800);
-      });
-    }
-  })();
+  var $ = Utils.$;
+  var on = Utils.on;
+  var escapeHtml = Utils.escapeHtml;
+  var toast = Utils.toast;
+  // 原始数据的列索引常量（定义见 aggregate.js），避免各处散落魔数
+  var COL = Aggregate.COL;
 
   function loading(show, text) {
     $('loadingText').textContent = text || '正在解析…';
     $('loading').className = show ? 'loading show' : 'loading';
-  }
-
-  /* =================== IndexedDB：记住目录句柄 =================== */
-  var DB_NAME = 'YardStorageDB', STORE = 'handles';
-
-  function openDB() {
-    return new Promise(function (res, rej) {
-      var q = indexedDB.open(DB_NAME, 1);
-      q.onupgradeneeded = function () {
-        if (!q.result.objectStoreNames.contains(STORE)) q.result.createObjectStore(STORE);
-      };
-      q.onsuccess = function () { res(q.result); };
-      q.onerror = function () { rej(q.error); };
-    });
-  }
-
-  function idbSet(k, v) {
-    return openDB().then(function (db) {
-      return new Promise(function (res, rej) {
-        var tx = db.transaction(STORE, 'readwrite');
-        tx.objectStore(STORE).put(v, k);
-        tx.oncomplete = function () { res(); };
-        tx.onerror = function () { rej(tx.error); };
-      });
-    }).catch(function () { /* 存储失败不影响主流程 */ });
-  }
-
-  function idbGet(k) {
-    return openDB().then(function (db) {
-      return new Promise(function (res, rej) {
-        var tx = db.transaction(STORE, 'readonly');
-        var rq = tx.objectStore(STORE).get(k);
-        rq.onsuccess = function () { res(rq.result); };
-        rq.onerror = function () { rej(rq.error); };
-      });
-    }).catch(function () { return null; });
   }
 
   /* =================== 目录权限 =================== */
@@ -172,17 +113,24 @@
 
   /* =================== 文件加载入口 =================== */
 
+  /** 记住已选定的数据文件夹名（统一两处写入，避免重复直调 Store） */
+  function rememberFolder(h) {
+    if (h && h.name) Store.set('folderName', h.name);
+  }
+
   /** 选择文件夹（File System Access API） */
   function pickFolder() {
     if (!window.showDirectoryPicker) {
-      toast('当前浏览器不支持文件夹选择，请点「选择文件」', 'error');
+      // 已直接弹出文件选择器，提示语不必再指向某个不存在的按钮
+      toast('当前浏览器不支持文件夹选择，请在弹出的窗口中选择 xls 文件', 'error');
       $('fileInputMulti').click();
       return;
     }
     window.showDirectoryPicker({ id: 'yardXls', mode: 'read' })
       .then(function (h) {
-        localStorage.setItem('zhancun.folderName', h.name);
-        return idbSet('xlsDir', h).then(function () {
+        rememberFolder(h);
+        syncPickFolderBtn(false);   // 已选定，按钮功成身退
+        return Store.async.set('xlsDir', h).then(function () {
           state.dirHandle = h;
           return loadFromDir(h, true);
         });
@@ -222,6 +170,14 @@
     return Promise.resolve(filePromise)
       .then(function (file) {
         return file.arrayBuffer();
+      })
+      .then(function (buf) {
+        // 让出一帧，确保 loading 遮罩先渲染出来再开始同步解析
+        return new Promise(function (resolve) {
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () { resolve(buf); });
+          });
+        });
       })
       .then(function (buf) {
         var wb = XLSX.read(new Uint8Array(buf), { type: 'array', cellDates: true });
@@ -316,12 +272,6 @@
         if (f) readAndRender(f.handle.getFile(), f.name, state.fileList);
       });
     }
-    var fmt = function (d) {
-      return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
-             ('0' + d.getDate()).slice(-2) + ' ' +
-             ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
-    };
-
     // 先算出目标选中项，写入 innerHTML 后立即还原
     var idx = -1;
     for (var i = 0; i < files.length; i++) {
@@ -332,7 +282,7 @@
     sel.innerHTML = files.map(function (f, i) {
       var match = f.name.match(/共\s*(\d+)\s*辆/);
       var count = match ? match[1] : '?';
-      var label = count + '辆-' + fmt(new Date(f.lastModified));
+      var label = count + '辆-' + Utils.formatDateTime(new Date(f.lastModified));
       var isNew = (i === 0);
       if (isNew) label += ' ● NEW';
       return '<option value="' + i + '"' +
@@ -412,6 +362,22 @@
     return out;
   }
 
+  /**
+   * 同步工具栏「选择数据文件夹」按钮的显隐。
+   *
+   * 该按钮只在「当前没有可用数据文件夹」时出现：
+   *   首次使用 / 句柄丢失 / 上次读取失败 / 浏览器不支持自动读取
+   * 用户选过一次后，目录句柄存进 IndexedDB，下次启动自动读取，按钮即收起，
+   * 之后要换文件夹走「功能 ▾ → 设置 → 修改」。
+   *
+   * 所有分支都必须经过这里：分散写 style.display 必然漏掉某条路径，
+   * 漏掉就会变成「状态栏提示让你点按钮，但按钮是隐藏的」。
+   */
+  function syncPickFolderBtn(show) {
+    var btn = $('btnPickFolder');
+    if (btn) btn.style.display = show ? '' : 'none';
+  }
+
   /** 同步工具栏「虚拟股道」开关的文案与高亮态 */
   function syncVirtualBtn() {
     var btn = $('btnToggleVirtual');
@@ -434,15 +400,15 @@
       return '<th class="' + cls.trim() + '"' + style + '>' + escapeHtml(c.title) + '</th>';
     }).join('');
 
-    // 表头被 innerHTML 重建，需重新挂载列宽拖拽手柄
-    var g = $('grid');
-    if (g && g.__mountColHandles) g.__mountColHandles();
+    // 表头被 innerHTML 重建，需重新挂载列宽拖拽手柄并恢复记忆列宽
+    ColResize.safeGet($('grid')).remount();
 
+    var vis = visibleRows();
     var thr = YardConfig.thresholds;
     var tbody = $('tbody');
     var html = [];
 
-    visibleRows().forEach(function (item) {
+    vis.forEach(function (item) {
       var r = item.r, idx = item.idx;
       var track = r.track;
       var cfg = YardConfig.getTrack(track);
@@ -477,7 +443,7 @@
       var hasOil = false;
       if (r.raw && !YardConfig.isMarkSuppressed(track)) {
         for (var k = 0; k < r.raw.length; k++) {
-          if (/汽油|航煤/.test(String(r.raw[k][9] || ''))) { hasOil = true; break; }
+          if (/汽油|航煤/.test(String(r.raw[k][COL.GOODS] || ''))) { hasOil = true; break; }
         }
       }
 
@@ -529,25 +495,35 @@
 
     // 合计行（与可见行保持一致，隐藏虚拟股道后合计同步变化）
     var tc = 0, tl = 0, tw = 0, told = 0;
-    visibleRows().forEach(function (item) {
+    vis.forEach(function (item) {
       var r = item.r;
       tc += r.count || 0; tl += r.length || 0; tw += r.load || 0; told += r.oldCar || 0;
     });
-    $('tfoot').innerHTML = '<tr>' +
-      '<td class="col-a" colspan="2">合计</td>' +
-      '<td></td>' +
-      '<td class="num mid">' + tc + '</td>' +
-      '<td></td>' +
-      '<td class="num mid">' + (Math.round(tl * 10) / 10) + '</td>' +
-      '<td id="footTank"></td>' +
-      '<td></td><td></td><td></td>' +
-      '<td class="num mid">' + (Math.round(tw * 10) / 10) + '</td>' +
-      '<td class="num mid">' + told + '</td>' +
-      '</tr>';
+    // 由 COLUMNS 逐列生成：增删列时合计行自动跟随，
+    // 不再需要手工数着补 <td>（原写死 colspan + 固定个数的空 td，加一列就整体错位）。
+    var FOOT_VALUES = {
+      count: tc,
+      length: Math.round(tl * 10) / 10,
+      load: Math.round(tw * 10) / 10,
+      oldCar: told
+    };
+    var footCells = [];
+    COLUMNS.forEach(function (c, i) {
+      // 前两列（注意事项 / 股道）是冻结列，合计标签横跨这两列
+      if (i === 0) { footCells.push('<td class="col-a" colspan="2">合计</td>'); return; }
+      if (i === 1) return;                       // 已被上面的 colspan=2 覆盖
+      if (c.key === 'dest') { footCells.push('<td id="footTank"></td>'); return; }
+      if (Object.prototype.hasOwnProperty.call(FOOT_VALUES, c.key)) {
+        footCells.push('<td class="num mid">' + FOOT_VALUES[c.key] + '</td>');
+        return;
+      }
+      footCells.push('<td></td>');
+    });
+    $('tfoot').innerHTML = '<tr>' + footCells.join('') + '</tr>';
 
     // 罐车结存（自备罐/路罐）
     var zb = 0, lg = 0;
-    visibleRows().forEach(function (item) {
+    vis.forEach(function (item) {
       var re = /(自备罐|路罐)(\d+)/g, m;
       var d = item.r.dest || '';
       while ((m = re.exec(d))) {
@@ -557,7 +533,7 @@
     $('footTank').textContent = zb + '(自)/' + lg + '(路)';
 
     // 状态栏
-    $('stTrack').textContent = visibleRows().filter(function (item) { return item.r.count; }).length;
+    $('stTrack').textContent = vis.filter(function (item) { return item.r.count; }).length;
     $('stCount').textContent = tc;
     $('stLen').textContent = Math.round(tl * 10) / 10;
     $('stLoad').textContent = Math.round(tw * 10) / 10;
@@ -565,20 +541,16 @@
   }
 
   /* =================== 明细抽屉 =================== */
-  /** 计算一组明细行的合计：辆数 / 换长 / 总重（总重 = 自重[4] + 载重[6]，均 1 位小数）。
+  /** 计算一组明细行的合计：辆数 / 换长 / 总重（总重 = 自重 + 载重，均 1 位小数）。
    *  rows 为 r.raw 的子数组；为空时返回全 0。 */
   function computeTotals(rows) {
-    var parseNum = function (v) {
-      if (v == null || v === '') return 0;
-      var m = /^[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/.exec(String(v).trim());
-      return m ? (parseFloat(m[0]) || 0) : 0;
-    };
+    var parseNum = Utils.vbVal;   // 与聚合引擎同用一套取数规则，保证明细与主表口径一致
     var len = 0, selfW = 0, loadW = 0;
     for (var k = 0; k < rows.length; k++) {
       var row = rows[k];
-      len += parseNum(row[5]);                        // 换长
-      selfW += parseNum(row[4]);                      // 自重
-      loadW += parseNum(row[6]);                      // 载重
+      len += parseNum(row[COL.LEN]);                  // 换长
+      selfW += parseNum(row[COL.TARE]);               // 自重
+      loadW += parseNum(row[COL.LOAD]);               // 载重
     }
     return {
       count: rows.length,
@@ -587,10 +559,6 @@
       loadW: Math.round(loadW * 10) / 10,
       weight: Math.round((selfW + loadW) * 10) / 10   // 总重 = 自重 + 载重
     };
-  }
-  /** 明细合计（全部行）：兼容旧调用 */
-  function detailTotals(r) {
-    return computeTotals(r.raw || []);
   }
   /** 动态刷新抽屉标题：有选中行时按选中行求和，无选中行时恢复为全部行合计 */
   function updateDetailTitle() {
@@ -611,35 +579,7 @@
       '<span class="dt-total dt-weight' + (t.weight > 5000 ? ' warn' : '') + '">总重：' + t.weight.toFixed(1) + '</span>';
   }
   /** 车种/车号颜色规则（对齐 VBA 显示信息.bas） */
-  function carStyle(row) {
-    var t = String(row[2] || '');
-    var n = String(row[3] || '');
-    var cls = '';  // 车种字体类
-    var bg = '';   // 车种背景类
-    var clsN = ''; // 车号字体类
-    var bgN = '';  // 车号背景类
-
-    // 车种字体颜色
-    if (t.indexOf('DK') === 0) { cls = 'car-red'; }
-    else if (t.indexOf('YW') === 0 || t.indexOf('YZ') === 0) { cls = 'car-red'; }
-    else if (t.indexOf('B') === 0) { cls = 'car-purple'; }
-    else if (t.indexOf('K') === 0) { cls = 'car-blue'; }
-    else if (t.indexOf('T') === 0) { cls = 'car-pink'; }
-
-    // 车种背景
-    if (t.indexOf('P') === 0) { bg = 'car-yellow-bg'; }
-    else if (/X/.test(t) && cls === '') { bg = 'car-grey-bg'; }  // 平板车，仅当无其他字体规则时
-
-    // 车号：自备罐
-    if (n.charAt(0) === '0') {
-      if (n.charAt(1) === '7') { bgN = 'car-self-bold'; clsN = 'car-self-bold'; }
-      else { bgN = 'car-grey-bg'; clsN = 'car-grey-bg'; }
-    } else {
-      clsN = cls;  // 车号继承车种字体颜色
-    }
-
-    return { cls: cls, bg: bg, clsN: clsN, bgN: bgN };
-  }
+  var carStyle = Utils.carStyle;
 
   function openDetail(idx) {
     var r = state.rows[idx];
@@ -648,22 +588,23 @@
     state.detailSel = new Set();   // 重置多选（每次打开明细都清空选中）
     updateDetailTitle();           // 初始：按全部行求和（无选中）
 
+    // 列定义是常量（DETAIL_COLS），表头与每一行共用同一份
     $('detailHead').innerHTML = DETAIL_COLS.map(function (c) {
       // 记事列：加 col-flex 类（仅用于允许换行），仍写内联 width，作为独立可拖拽列
       var cls = (c.t === '记事') ? ' col-flex' : '';
       return '<th class="' + cls.trim() + '" style="width:' + c.w + 'px">' + escapeHtml(c.t) + '</th>';
     }).join('') + '<th style="width:60px">停时h</th>';
 
-    // 表头被 innerHTML 重建，需重新挂载列宽拖拽手柄
+    // 表头被 innerHTML 重建，需重新挂载列宽拖拽手柄并恢复记忆列宽
     var dt = $('detailTable');
-    if (dt && dt.__mountColHandles) dt.__mountColHandles();
+    ColResize.safeGet(dt).remount();
 
     var list = r.raw || [];
     var base = state.printDate || new Date();
     $('detailBody').innerHTML = list.map(function (row, i) {
       var cs = carStyle(row);
       var tds = DETAIL_COLS.map(function (c) {
-        var raw = row[c.i];
+        var raw = row[c.col];
         if (c.fmt === 'track') {
           var t = YardConfig.getTrack(raw);
           return '<td class="center">' +
@@ -679,22 +620,22 @@
           }
           return '<td class="dest"></td>';
         }
-        // 车种列 (i=2)
-        if (c.i === 2) {
+        // 车种列
+        if (c.col === COL.CARTYPE) {
           var clsA = [c.cls, cs.cls, cs.bg].filter(Boolean).join(' ');
           return '<td' + (clsA ? ' class="' + clsA + '"' : '') + '>' +
                  escapeHtml(raw == null ? '' : raw) + '</td>';
         }
-        // 车号列 (i=3)
-        if (c.i === 3) {
+        // 车号列
+        if (c.col === COL.CARNO) {
           var clsB = [c.cls, cs.clsN, cs.bgN].filter(Boolean).join(' ');
           return '<td' + (clsB ? ' class="' + clsB + '"' : '') + '>' +
                  escapeHtml(raw == null ? '' : raw) + '</td>';
         }
-        // 品名列 (i=9)：汽油/航煤标黄底（对齐 VBA 显示信息.bas）
-        if (c.i === 9) {
+        // 品名列：汽油/航煤标黄底（对齐 VBA 显示信息.bas）
+        if (c.col === COL.GOODS) {
           var pm = raw == null ? '' : String(raw);
-          var jishi = row[13] == null ? '' : String(row[13]);
+          var jishi = row[COL.NOTE] == null ? '' : String(row[COL.NOTE]);
           if ((pm.indexOf('汽油') !== -1 || pm.indexOf('航煤') !== -1 || jishi.indexOf('汽油') !== -1) && jishi !== '原装汽油') {
             var clsP = c.cls ? c.cls + ' car-yellow-bg' : 'car-yellow-bg';
             return '<td class="' + clsP + '">' + escapeHtml(pm) + '</td>';
@@ -707,15 +648,10 @@
     }).join('');
 
     // 停时列：需单独计算
+    // 复用 Utils.parseArriveTime：兼容 Date 实例、"2026/9/2T08:30:00"、"2026年9月2日" 等写法
     var body = $('detailBody').querySelectorAll('tr');
     list.forEach(function (row, i) {
-      var arr = row[15];
-      var d = null;
-      if (arr instanceof Date) d = arr;
-      else if (arr) {
-        var m = /(\d{4})[-/](\d{1,2})[-/](\d{1,2})[\sT]*(\d{1,2})?:?(\d{1,2})?/.exec(String(arr));
-        if (m) d = new Date(+m[1], +m[2] - 1, +m[3], m[4] ? +m[4] : 0, m[5] ? +m[5] : 0);
-      }
+      var d = Utils.parseArriveTime(row[COL.ARRTIME]);
       var hrs = d ? Math.floor((base - d) / 3600000) : '';
       var td = body[i] && body[i].querySelector('td.stay');
       if (td) {
@@ -728,15 +664,13 @@
     });
 
     // 明细打开时按内容自适应列宽（渲染完 body 后测量，逐列 autoFit）
-    if (dt && dt.__resetColWidths) dt.__resetColWidths();
+    ColResize.safeGet(dt).reset();
 
-    $('drawer').classList.add('show');
-    $('drawerMask').classList.add('show');
+    UI.Drawer.open('drawer');
   }
 
   function closeDetail() {
-    $('drawer').classList.remove('show');
-    $('drawerMask').classList.remove('show');
+    UI.Drawer.close('drawer');
   }
 
   /** 切换上/下一股道：只在当前可见的行之间移动，跳过被隐藏的虚拟股道 */
@@ -791,200 +725,16 @@
     MapBridge.open({ to: station, title: '钦州港 → ' + station + '（径路）' });
   }
 
-  /* =================== 表头列宽拖拽 =================== */
-  /**
-   * 表头列宽可拖动调整（重构版）。
-   *
-   * 设计（从表格基础布局模型解决，而非打补丁）：
-   *  - 拖拽手柄是 th 内的真实 <div class="col-handle">，而非伪元素 ::after 或坐标遍历。
-   *    sticky 左列(col-a/col-b)会浮在普通列上方遮挡 e.target，伪元素/坐标法都会命中错乱
-   *    （旧 bug：第三列起选不中）。真实手柄设 z-index 高于 sticky 列，命中 100% 准确。
-   *  - 表格 width:max-content + table-layout:fixed，列宽由 th.style.width 决定，
-   *    浏览器不会自作主张放大/压缩列（根治"越拖越大、其它列也变"）。
-   *  - 主表/明细表均无 transform:scale 缩放，mousemove 用 clientX 差值即像素，天然跟手，
-   *    无需 tableScale 归一化。
-   *
-   * @param {HTMLTableElement} table
-   * @param {Function} [onResize] 宽度变化时回调 (th, width)
-   */
-  function enableColResize(table, onResize, persistKey, flexCols) {
-    var thead = table && table.tHead;
-    if (!thead) return;
-    var headRow = thead.rows && thead.rows[0];
-    if (!headRow) return;
-
-    var MIN = 30;            // 最小列宽
-    var drag = null;
-
-    /** 读取持久化列宽（localStorage）。返回数组或 null */
-    function loadStored() {
-      if (!persistKey) return null;
-      try {
-        var s = localStorage.getItem(persistKey);
-        var arr = s ? JSON.parse(s) : null;
-        return (arr && arr.length === headRow.cells.length) ? arr : null;
-      } catch (e) { return null; }
-    }
-
-    /** 动态识别弹性列索引（基于 flexCols 标题匹配当前表头）
-     *  弹性列（如到站/记事）：不写 width，table-layout:fixed 下自动吃满容器剩余空间。 */
-    function buildFlexSet() {
-      var set = {};
-      if (flexCols && flexCols.length) {
-        for (var fi = 0; fi < headRow.cells.length; fi++) {
-          if (flexCols.indexOf(headRow.cells[fi].textContent.trim()) >= 0) set[fi] = true;
-        }
-      }
-      return set;
-    }
-
-    /** 临时切到 auto + 全 nowrap，逼浏览器按「每列最长单行内容」算出最真实的列宽。
-     *  同步测量，不会触发可见重绘。返回各列 offsetWidth 数组。
-     *  测量完后恢复每列原来的内联 width，避免调用方只写一列时其它列丢失宽度。 */
-    function measureContentWidths() {
-      var prevLayout = table.style.tableLayout;
-      var prevWidth = table.style.width;
-      var prevWidths = [];
-      for (var i = 0; i < headRow.cells.length; i++) prevWidths.push(headRow.cells[i].style.width);
-      table.classList.add('measuring');
-      table.style.tableLayout = 'auto';
-      table.style.width = 'auto';
-      for (var i = 0; i < headRow.cells.length; i++) headRow.cells[i].style.width = '';
-      var widths = [];
-      for (var j = 0; j < headRow.cells.length; j++) widths.push(headRow.cells[j].offsetWidth);
-      table.classList.remove('measuring');
-      table.style.tableLayout = prevLayout;
-      table.style.width = prevWidth;
-      for (var i = 0; i < headRow.cells.length; i++) headRow.cells[i].style.width = prevWidths[i];
-      return widths;
-    }
-
-    /** 应用持久化列宽到各 th（拖拽/刷新/重渲染后调用，保证不丢失）。
-     *  无记忆时执行首次内容自适应（像 Excel 打开即按内容宽），每列都独立精确 px。 */
-    function applyStoredWidths() {
-      var arr = loadStored();
-      if (!arr) { autoFitAll(); return; }    // 首次：内容自适应
-      for (var i = 0; i < headRow.cells.length; i++) {
-        var cell = headRow.cells[i];
-        var w = arr[i];
-        if (typeof w === 'number' && w >= MIN) {
-          cell.style.width = w + 'px';
-          if (onResize) onResize(cell, w);
-        }
-      }
-    }
-
-    /** 持久化当前列宽到 localStorage（弹性列也记，便于完整还原） */
-    function persistWidths() {
-      if (!persistKey) return;
-      var widths = [];
-      for (var i = 0; i < headRow.cells.length; i++) {
-        widths.push(Math.round(headRow.cells[i].offsetWidth));
-      }
-      try { localStorage.setItem(persistKey, JSON.stringify(widths)); } catch (e) {}
-    }
-
-    /** 重置为自适应（清空拖动记忆，恢复到按内容计算的列宽）；弹性列吸收剩余空间 */
-    function resetToAuto() {
-      if (persistKey) { try { localStorage.removeItem(persistKey); } catch (e) {} }
-      autoFitAll();
-      persistWidths();
-    }
-
-    /** 在每个 th 右缘挂载真实拖拽手柄（最后一列不加，无下一列可拖） */
-    function mountHandles() {
-      var cells = headRow.cells;
-      for (var i = 0; i < cells.length; i++) {
-        var th = cells[i];
-        if (th.querySelector(':scope > .col-handle')) continue;   // 去重
-        var h = document.createElement('div');
-        h.className = 'col-handle' + (i === cells.length - 1 ? ' last' : '');
-        h.addEventListener('mousedown', onHandleDown);
-        h.addEventListener('dblclick', onHandleDbl);
-        th.appendChild(h);
-      }
-    }
-
-    function onHandleDown(e) {
-      var handle = e.currentTarget;
-      var th = handle.parentElement;     // 手柄即 th 的直接子元素
-      if (e.button !== 0) return;
-      e.preventDefault();
-      e.stopPropagation();               // 阻止冒泡到行的单击选中逻辑
-      handle.classList.add('active');
-      drag = { th: th, handle: handle, startX: e.clientX, startW: th.offsetWidth };
-      document.body.classList.add('col-resize-active');
-    }
-
-    function onHandleDbl(e) {
-      var th = e.currentTarget.parentElement;
-      e.preventDefault();
-      e.stopPropagation();
-      autoFit(th);
-    }
-
-    function colIdx(th) {
-      return Array.prototype.indexOf.call(th.parentNode.children, th);
-    }
-
-    /** 双击分隔线 → 只有当前这一列恢复为内容自适应（像 Excel：双击列边=该列自适应），
-     *  其它列宽度完全不动。 */
-    function autoFit(th) {
-      var idx = colIdx(th);
-      var widths = measureContentWidths();
-      th.style.width = Math.max(MIN, widths[idx]) + 'px';   // 只写当前列
-      if (onResize) onResize(th, th.offsetWidth);
-    }
-
-    /** 「自适应列宽」按钮：所有列各自按真实内容宽重测并写精确 px（一次性全部自适应）。 */
-    function autoFitAll() {
-      var widths = measureContentWidths();
-      for (var m = 0; m < headRow.cells.length; m++) {
-        var cell = headRow.cells[m];
-        cell.style.width = Math.max(MIN, widths[m]) + 'px';   // 每列独立
-        if (onResize) onResize(cell, cell.offsetWidth);
-      }
-    }
-
-    document.addEventListener('mousemove', function (e) {
-      if (!drag) return;
-      // 无缩放，clientX 差值即像素差，分隔线直接跟手
-      var dx = e.clientX - drag.startX;
-      var w = Math.max(MIN, Math.round(drag.startW + dx));
-      drag.th.style.width = w + 'px';
-      if (onResize) onResize(drag.th, w);
-    });
-
-    document.addEventListener('mouseup', function () {
-      if (!drag) return;
-      drag.handle.classList.remove('active');
-      drag = null;
-      document.body.classList.remove('col-resize-active');
-      persistWidths();          // 拖拽结束即记忆，刷新/重渲染不丢失
-    });
-
-    // 挂载手柄（首次调用先挂一次；render/renderDetail 重建表头后需再次调用）
-    mountHandles();
-    // 应用已记忆列宽；无记忆则首次内容自适应（render 重建表头后也会再次调用）
-    applyStoredWidths();
-    // 暴露给 render/renderDetail：表头被 innerHTML 重建后，重新把手柄挂上去并恢复记忆
-    table.__mountColHandles = function () { mountHandles(); applyStoredWidths(); };
-    // 暴露给「自适应列宽」按钮：重置为内容自适应
-    table.__resetColWidths = resetToAuto;
-  }
-
   /* =================== 事件绑定 =================== */
   function bind() {
-    on('fileInput', 'change', function (e) {
-      var f = e.target.files[0];
-      if (f) readAndRender(f, f.name, null);
-      e.target.value = '';
-    });
-
     on('fileInputMulti', 'change', function (e) {
       var f = e.target.files[0];
       if (f) readAndRender(f, f.name, null);
       e.target.value = '';
+    });
+
+    on('btnPickFolder', 'click', function () {
+      pickFolder();
     });
 
     on('btnReload', 'click', function () {
@@ -1111,68 +861,43 @@
     // 自适应列宽（重置为内容自适应，清除手动拖动记忆）
     on('btnAutoFitCols', 'click', function () {
       var g = $('grid'), dt = $('detailTable');
-      if (g && g.__resetColWidths) g.__resetColWidths();
-      if (dt && dt.__resetColWidths) dt.__resetColWidths();
-      if (g) g.style.setProperty('--col-a-w', $('grid').querySelector('thead th.col-a').offsetWidth + 'px');
+      ColResize.safeGet(g).reset();
+      ColResize.safeGet(dt).reset();
+      var thA = g && g.querySelector('thead th.col-a');
+      if (g && thA) g.style.setProperty('--col-a-w', thA.offsetWidth + 'px');
       toast('列宽已重置为自适应', 'ok');
     });
 
-    on('btnCloseDrawer', 'click', closeDetail);
-    on('drawerMask', 'click', closeDetail);
     on('btnPrevTrack', 'click', function () { stepDetail(-1); });
     on('btnNextTrack', 'click', function () { stepDetail(1); });
 
-    // 功能下拉菜单
-    var btnMenu = $('btnMenu');
-    var menuList = $('menuList');
-    if (btnMenu && menuList) {
-      btnMenu.addEventListener('click', function (e) {
-        e.stopPropagation();
-        menuList.style.display = menuList.style.display === 'none' ? 'block' : 'none';
-      });
-      menuList.addEventListener('click', function (e) {
-        var item = e.target.closest('.menu-item');
-        if (!item) return;
-        menuList.style.display = 'none';
-        var action = item.getAttribute('data-action');
+    /* ---- 浮窗 / 抽屉 / 下拉菜单 -----
+     * 注册后自动获得「点空白处关闭 + ESC 关栈顶」，新增面板无需再改 ESC 处理。 */
+    UI.Modal.register('modal31814');
+    UI.Modal.register('modalSettings', { onOpen: refreshFolderPath });
+    UI.Drawer.register('drawer', { maskId: 'drawerMask' });
+
+    // 各面板的关闭按钮
+    on('btnCloseDrawer', 'click', closeDetail);
+    on('rptClose', 'click', function () { UI.Modal.close('modal31814'); });
+    on('btnSettingsClose', 'click', function () { UI.Modal.close('modalSettings'); });
+
+    // 功能下拉菜单（组件负责展开 / 收起 / 点外部关闭）
+    UI.Dropdown('btnMenu', 'menuList', {
+      onSelect: function (item, action) {
         if (action === '31814' && typeof window.Report31814 !== 'undefined') {
           window.Report31814.open(state.rawRows, state.currentFile);
         } else if (action === 'settings') {
-          var m = $('modalSettings');
-          if (m) {
-            refreshFolderPath();
-            m.classList.add('show');
-          }
+          UI.Modal.open('modalSettings');
         }
-      });
-      document.addEventListener('click', function () { menuList.style.display = 'none'; });
-    }
-
-    // 31814 浮窗关闭
-    var rptClose = $('rptClose');
-    var modal31814 = $('modal31814');
-    if (rptClose && modal31814) {
-      rptClose.addEventListener('click', function () { modal31814.classList.remove('show'); });
-      modal31814.addEventListener('click', function (e) {
-        if (e.target === modal31814) modal31814.classList.remove('show');
-      });
-    }
-
-    // 设置浮窗关闭
-    var btnSettingsClose = $('btnSettingsClose');
-    var modalSettings = $('modalSettings');
-    if (btnSettingsClose && modalSettings) {
-      btnSettingsClose.addEventListener('click', function () { modalSettings.classList.remove('show'); });
-      modalSettings.addEventListener('click', function (e) {
-        if (e.target === modalSettings) modalSettings.classList.remove('show');
-      });
-    }
+      }
+    });
 
     // 设置：表格字号滑块
     var gridFontSize = $('gridFontSize');
     var gridFontSizeVal = $('gridFontSizeVal');
     if (gridFontSize && gridFontSizeVal) {
-      var savedFs = localStorage.getItem('zhancun.gridFontSize');
+      var savedFs = Store.get('gridFontSize', '');
       if (savedFs) {
         gridFontSize.value = savedFs;
         gridFontSizeVal.textContent = savedFs + 'px';
@@ -1184,11 +909,16 @@
           ticks[i].classList.toggle('active', ticks[i].textContent === v);
         }
       }
+      // 拖动滑块会高频触发 input，写存储走防抖，避免每次都落盘 localStorage
+      var saveFontSize = Utils.debounce(function (v) {
+        Store.set('gridFontSize', v);
+      }, 300);
+
       gridFontSize.addEventListener('input', function () {
         var v = gridFontSize.value;
         gridFontSizeVal.textContent = v + 'px';
         $('grid').style.fontSize = v + 'px';
-        localStorage.setItem('zhancun.gridFontSize', v);
+        saveFontSize(v);
         highlightTick(v);
       });
       highlightTick(gridFontSize.value);
@@ -1199,7 +929,7 @@
     var btnSettingFolder = $('btnSettingFolder');
     function refreshFolderPath() {
       if (folderPath) {
-        var name = localStorage.getItem('zhancun.folderName');
+        var name = Store.get('folderName', '');
         folderPath.textContent = name || '未设置';
         folderPath.title = name || '';
       }
@@ -1211,22 +941,15 @@
       });
     }
 
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') {
-        closeDetail();
-        if (modal31814) modal31814.classList.remove('show');
-        if (modalSettings) modalSettings.classList.remove('show');
+    // 表头列宽拖动（persistKey 用于本地记忆，刷新/重渲染不丢失）
+    ColResize.enable($('grid'), {
+      persistKey: 'zhancun.grid.cols',
+      onResize: function (th, w) {
+        // 首列宽变化 → 同步「股道」列的冻结偏移，避免两列之间露缝
+        if (th.classList.contains('col-a')) $('grid').style.setProperty('--col-a-w', w + 'px');
       }
     });
-
-    // 表头列宽拖动（persistKey 用于本地记忆，刷新/重渲染不丢失）
-    // flexCols：主页「到站」列作为弹性列，吸收剩余横向空间
-    enableColResize($('grid'), function (th, w) {
-      // 首列宽变化 → 同步「股道」列的冻结偏移，避免两列之间露缝
-      if (th.classList.contains('col-a')) $('grid').style.setProperty('--col-a-w', w + 'px');
-    }, 'zhancun.grid.cols', ['到站']);
-    // 明细「记事」列作为弹性列
-    enableColResize($('detailTable'), null, 'zhancun.detail.cols', ['记事']);
+    ColResize.enable($('detailTable'), { persistKey: 'zhancun.detail.cols' });
   }
 
   /* =================== 空框架 =================== */
@@ -1244,13 +967,11 @@
 
   /* =================== 初始化 =================== */
   function init() {
-    // 方向库
+    // 方向库（惰性单例：全局只解析一次，报表模块共用同一份实例）
     if (typeof window.DirectionData !== 'string') {
       toast('方向库未加载，到站着色将不可用', 'error');
-      state.dirIndex = { map: {}, stations: [] };
-    } else {
-      state.dirIndex = Aggregate.buildDirectionIndex(window.DirectionData);
     }
+    state.dirIndex = Aggregate.getDirectionIndex();
 
     bind();
     syncVirtualBtn();
@@ -1260,17 +981,20 @@
 
     // 恢复上次选择的文件夹，自动读取最新 xls
     if (!window.showDirectoryPicker) {
-      $('stMsg').textContent = '当前浏览器不支持自动读取，请在设置中手动选择文件夹';
+      $('stMsg').textContent = '当前浏览器不支持自动读取，请点「选择数据文件夹」手动选取文件';
+      syncPickFolderBtn(true);   // 该分支下点击会降级为文件选择
       return;
     }
 
-    idbGet('xlsDir').then(function (h) {
+    Store.async.get('xlsDir').then(function (h) {
       if (!h) {
         $('stMsg').textContent = '首次使用：请点「选择数据文件夹」，之后将自动读取最新文件';
+        syncPickFolderBtn(true);   // 显示入口，让用户一眼就能找到
         return;
       }
+      syncPickFolderBtn(false);  // 已记住文件夹，按钮收起
       state.dirHandle = h;
-      localStorage.setItem('zhancun.folderName', h.name);
+      rememberFolder(h);
       // 静默恢复：权限未授予时不弹窗，等用户点击
       if (h.queryPermission) {
         return h.queryPermission({ mode: 'read' }).then(function (p) {
@@ -1280,7 +1004,8 @@
       }
       return loadFromDir(h, false);
     }).catch(function () {
-      $('stMsg').textContent = '请点「选择数据文件夹」开始';
+      $('stMsg').textContent = '读取上次的文件夹失败，请点「选择数据文件夹」重新选择';
+      syncPickFolderBtn(true);   // 句柄不可用，重新亮出入口
     });
   }
 

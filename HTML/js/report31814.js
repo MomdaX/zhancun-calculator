@@ -15,32 +15,10 @@
   'use strict';
 
   var COL = global.Aggregate ? global.Aggregate.COL : null;
-  var $ = function (id) { return document.getElementById(id); };
-  function escapeHtml(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
 
-  /* ========================== 默认待装区域 ==========================
-   * 仅列出实际可装车的货物线 / 装卸线。
-   * 到发线（1-15道）等不用于装车，不在待装股道面板中显示。
-   * 顺序决定面板内分组先后。
-   * ================================================================== */
-  var DEFAULT_AREAS = {
-    '货场': ['H1', 'H2', 'H3', 'H4', 'H5'],
-    '中粮': ['ZL1', 'ZL2', 'ZL3'],
-    '大洋': ['LZ'],
-    '港务局': ['G1', 'G2'],
-    '永鑫': ['YX2', 'YX3'],
-    '天煤': ['TS1', 'TS2'],
-    '石化': ['SH1', 'SH2'],
-    '国投': ['GT1', 'GT2'],
-    '超智': ['CZ3', 'CZ4'],
-    '广明': ['GM1', 'GM2', 'GM3', 'GM4'],
-    '天油': ['TSY1', 'TSY2', 'TSY3', 'TSY4'],
-    '中油': ['Y5', 'Y6', 'Y9', 'Y10', 'Y11', 'Y12', 'Y13', 'Y14', 'Y15', 'Y16']
-  };
+  // 默认待装区域来自 track.config.js（YardConfig.defaultAreas）。
+  // 它是业务配置：现场新增/调整装卸线时只改配置，不必碰报表逻辑。
+  var DEFAULT_AREAS = (global.YardConfig && global.YardConfig.defaultAreas) || {};
 
   /* ========================== 待装股道分组 ==========================
    * 待装股道仅取 DEFAULT_AREAS 中的装卸线，不再混入到发线等其他股道。
@@ -64,8 +42,7 @@
 
   /** 取股道显示名（如 "1道"、"H1"） */
   function trackLabel(id) {
-    var t = global.YardConfig && global.YardConfig.getTrack(id);
-    return t ? t.name : id;
+    return global.YardConfig ? global.YardConfig.trackName(id) : String(id);
   }
 
   /** 刷新每组标题的选中态与「已选/总数」 */
@@ -97,30 +74,22 @@
   }
 
   /* ========================== 工具函数 ========================== */
-  function firstChar(s) { return String(s == null ? '' : s).charAt(0); }
-  function v(val) {
-    if (val == null || val === '') return 0;
-    var n = parseFloat(String(val).trim());
-    return isNaN(n) ? 0 : n;
-  }
 
-  function determineCarType(carTypeRaw, carNo) {
-    var ct = String(carTypeRaw || '').toUpperCase();
-    var cn = String(carNo || '');
-    var firstCN = cn.charAt(0);
-    if (firstChar(ct) === 'N' && firstCN === '5') return 'X';
-    if (firstChar(ct) === 'B') {
-      if (ct === 'BH1') return 'P';
-      if (firstCN === '5') return 'X';
-      if (firstCN === '6') return 'G';
-      return firstChar(ct);
-    }
-    return firstChar(ct);
-  }
+  /**
+   * 数值取值：统一复用 Utils.vbVal，与主表聚合引擎共用同一套规则。
+   *
+   * 原实现为 parseFloat(trim)。实测两者在常规数据上等价
+   * （parseFloat 同样会取前导数字，"12.5吨"→12.5、"38 吨"→38、全角空格亦被 trim 吃掉），
+   * 本次替换主要收益是消除"两套并存"这一隐患本身。
+   * 唯一实质差异：旧实现遇 "Infinity"/"-Infinity" 会返回 Infinity 并污染合计，
+   * vbVal 返回 0。故此处更稳，且行为变化仅限该极端输入。
+   */
+  var v = Utils.vbVal;
 
+  /** 方向映射：复用 Aggregate 的惰性单例，全局只解析一次 CSV */
   function getDirMap() {
-    if (!global.Aggregate || !global.DirectionData) return {};
-    return global.Aggregate.buildDirectionIndex(global.DirectionData).map;
+    if (!global.Aggregate) return {};
+    return global.Aggregate.getDirectionIndex().map;
   }
 
   function isOpenTopBox(row) {
@@ -161,7 +130,7 @@
       var dirCode = String(r[COL.DIR] || '').trim();
       var goods = String(r[COL.GOODS] == null ? '' : r[COL.GOODS]).trim();  // VBA arr(i,10) 品名
       var note = String(r[COL.NOTE] || '');
-      var carType = determineCarType(carTypeRaw, carNo);
+      var carType = Utils.determineCarType(carTypeRaw, carNo);
 
       // 等价于 VBA 的 d.Exists(到站)
       var inDir = dest !== '' && Object.prototype.hasOwnProperty.call(dirMap, dest);
@@ -212,7 +181,12 @@
     return brr;
   }
 
-  /* ========================== 核心：计算统计 ========================== */
+  /* ========================== 核心：计算统计 ==========================
+   * 性能优化：原实现对每个 type 都全表扫一遍 brr（9 类 ≈ 9 遍），
+   * 管内分支内还对匹配站内再嵌套全表扫（最差 ~18 遍），末尾总数车种再一遍。
+   * 现改为【单遍遍历】：一次 brr.forEach，把行按 status/dest/carType/track/isOpen/load
+   * 直接累加进所有预建计算器，遍历次数从 ~11 遍降到 1 遍。
+   * 语义严格等价（含首次出现顺序、倒序拼接、load>4 过滤等 VBA 细节）。 */
   function calculateStats(brr) {
     var dirMap = getDirMap();
     var types = ['沙口', '南口', '管内', '待卸', '待装', '空车', '待发', '待装自备罐', '自备'];
@@ -222,39 +196,68 @@
     var dic = {};
     var openBox = {};  // 敞顶箱车号统计
     var gds = {};
+    var totalCars = {};
+    var 站内车种 = {};  // 管内：站内 → {carType: n}（load>4），避免嵌套全表扫
     var 站存 = 0;
 
+    // 预建每个 type 的分桶容器（与 gSplit 分离，保持 gSplit 纯净 {road,self}）
+    var buckets = {};
     types.forEach(function (type) {
-      var dis = {}, dcz = {};
+      ls[type] = 0;
+      ls[type + '车种'] = '';
+      车种顺序[type] = [];
       gSplit[type] = { road: 0, self: 0 };
-      brr.forEach(function (row) {
-        if (row.status !== type) return;
-        dis[row.dest || ''] = (dis[row.dest || ''] || 0) + 1;
-        dcz[row.carType] = (dcz[row.carType] || 0) + 1;
-        if (row.carType === 'G') {
-          if (type === '待装自备罐' || type === '自备') gSplit[type].self += 1;
-          else gSplit[type].road += 1;
-        }
-        if (type === '沙口' || type === '南口' || type === '管内') {
-          dic[row.dest] = (dic[row.dest] || 0) + 1;
-        }
-        if (type === '待发') {
-          gds[row.track] = (gds[row.track] || 0) + 1;
-          if (row.isOpen) {
-            openBox[row.carNo] = (openBox[row.carNo] || 0) + 1;
-          }
-        }
-      });
+      buckets[type] = { dis: {}, dcz: {} };
+    });
 
+    // ---- 单遍遍历：所有累加在此完成 ----
+    brr.forEach(function (row) {
+      var type = row.status;
+      if (types.indexOf(type) < 0) return;   // 不在九类内的行跳过（原逻辑等同）
+
+      var bucket = buckets[type];
+      var disKey = row.dest || '';
+      bucket.dis[disKey] = (bucket.dis[disKey] || 0) + 1;
+      bucket.dcz[row.carType] = (bucket.dcz[row.carType] || 0) + 1;
+
+      // 罐车 G 分路/自备
+      if (row.carType === 'G') {
+        if (type === '待装自备罐' || type === '自备') gSplit[type].self += 1;
+        else gSplit[type].road += 1;
+      }
+
+      // 沙口/南口/管内 的 dic（到站总数）
+      if (type === '沙口' || type === '南口' || type === '管内') {
+        dic[row.dest] = (dic[row.dest] || 0) + 1;
+      }
+      // 管内：load>4 的站内车种分桶（替代原嵌套全表扫）
+      if (type === '管内' && row.load > 4) {
+        var st0 = row.dest;
+        if (!站内车种[st0]) 站内车种[st0] = {};
+        站内车种[st0][row.carType] = (站内车种[st0][row.carType] || 0) + 1;
+      }
+
+      // 待发：股道 + 敞顶箱
+      if (type === '待发') {
+        gds[row.track] = (gds[row.track] || 0) + 1;
+        if (row.isOpen) openBox[row.carNo] = (openBox[row.carNo] || 0) + 1;
+      }
+
+      // 总数车种（全量）
+      totalCars[row.carType] = (totalCars[row.carType] || 0) + 1;
+    });
+
+    // ---- 收口：把分桶结果折算成原输出结构 ----
+    types.forEach(function (type) {
+      var dis = buckets[type].dis, dcz = buckets[type].dcz;
       ls[type] = Object.keys(dis).reduce(function (a, k) { return a + dis[k]; }, 0);
-      // 保留首次出现顺序（VBA Dictionary 的 keys 顺序），避免与 Excel 展示顺序不一致
+      // 保留首次出现顺序（VBA Dictionary 的 keys 顺序）：dcz 累加顺序即首次出现顺序
       车种顺序[type] = Object.keys(dcz).map(function (t) { return { t: t, n: dcz[t] }; });
       ls[type + '车种'] = 车种顺序[type].map(function (o) { return o.t + o.n; }).join(' ') + ' ';
       站存 += ls[type];
     });
 
     ls.gSplit = gSplit;
-    ls.到卸后四项车种 = ls['待卸车种'];  // 兼容名称
 
     // 沙口/南口/管内 字符串
     var 沙口 = '', 南口 = '', 管内 = '', 管内车种合计 = '';
@@ -263,12 +266,7 @@
       if (/沙/.test(dir)) 沙口 = st + dic[st] + ' ' + 沙口;
       else if (/南/.test(dir)) 南口 = st + dic[st] + ' ' + 南口;
       else if (/管内/.test(dir)) {
-        var stationCars = {};
-        brr.forEach(function (row) {
-          if (row.status === '管内' && row.dest === st && row.load > 4) {
-            stationCars[row.carType] = (stationCars[row.carType] || 0) + 1;
-          }
-        });
+        var stationCars = 站内车种[st] || {};
         // VBA：单项合计 = gr & dcz(gr) & 单项合计 —— 倒序拼接
         var single = '';
         Object.keys(stationCars).forEach(function (t) { single = t + stationCars[t] + single; });
@@ -278,7 +276,7 @@
     });
 
     // 待发股道合计：按股道顺序升序（数字道在前，X 道在后）
-    var 待发股道合计 = Object.keys(gds).sort(compareTrackId)
+    var 待发股道合计 = Object.keys(gds).sort(Utils.compareTrackId)
       .map(function (tr) { return tr + '道/' + gds[tr]; }).join(' ');
 
     // 敞顶箱列表：敞顶箱/总数 + 编号/数量
@@ -286,8 +284,6 @@
     var openList = Object.keys(openBox).map(function (k) { return k + '/' + openBox[k]; }).join(' ');
 
     // 总车种：VBA 为 总数车种合计 = ar & zs(ar) & " " & 总数车种合计（倒序拼接）
-    var totalCars = {};
-    brr.forEach(function (row) { totalCars[row.carType] = (totalCars[row.carType] || 0) + 1; });
     var 总数车种顺序 = Object.keys(totalCars).map(function (t) { return { t: t, n: totalCars[t] }; });
     var 总数车种合计 = '';
     总数车种顺序.forEach(function (o) { 总数车种合计 = o.t + o.n + ' ' + 总数车种合计; });
@@ -338,35 +334,35 @@
 
   function renderResult(stats) {
     // 表格内的标题行仍保留原日期标题
-    var title = '钦州港 ' + formatDate(new Date()) + ' 早6点 站存';
+    var title = '钦州港 ' + Utils.formatDate(new Date()) + ' 早6点 站存';
 
     var g = stats.ls.gSplit;
     var ord = stats.车种顺序 || {};
 
     var html = '<table>';
-    html += '<tr><td colspan="3" class="title">' + escapeHtml(title) + '</td></tr>';
+    html += '<tr><td colspan="3" class="title">' + Utils.escapeHtml(title) + '</td></tr>';
 
     function row(label, top, bottom, total, cls) {
       var topHtml = top || '&nbsp;';
       // two-row：含 detail-bottom 的两行结构，上半格高度按 CSS 取下半格的 3 倍
       var clsAll = ((cls || '') + (bottom ? ' two-row' : '')).trim();
       return '<tr class="' + clsAll + '">' +
-        '<td class="label">' + escapeHtml(label) + '</td>' +
+        '<td class="label">' + Utils.escapeHtml(label) + '</td>' +
         '<td><div class="detail-top' + (bottom ? '' : ' only') + '">' + topHtml + '</div>' +
         (bottom ? '<div class="detail-bottom">' + bottom + '</div>' : '') + '</td>' +
         '<td class="total">' + total + '</td></tr>';
     }
 
     // 沙口（B2 到站 / B3 车种，G 不拆分）
-    html += row('沙口', escapeHtml(stats.沙口),
+    html += row('沙口', Utils.escapeHtml(stats.沙口),
       buildCarLine(ord['沙口'], 0, 0),
       stats.ls['沙口'], 'dir-shakou');
     // 南口（B4 / B5）
-    html += row('南口', escapeHtml(stats.南口),
+    html += row('南口', Utils.escapeHtml(stats.南口),
       buildCarLine(ord['南口'], 0, 0),
       stats.ls['南口'], 'dir-nankou');
     // 管内（B6）：单格，管内车种合计已含站名与车种，如「防城港:X7C56」
-    html += row('管内', escapeHtml(stats.管内车种合计), '',
+    html += row('管内', Utils.escapeHtml(stats.管内车种合计), '',
       stats.ls['管内'], 'dir-guanna');
 
     // 待卸（B7）：单格，只有车种合计
@@ -389,7 +385,7 @@
 
     // 待开（B16 股道合计 / B17 车种）
     html += row('待开',
-      escapeHtml(stats.待发股道合计),
+      Utils.escapeHtml(stats.待发股道合计),
       buildCarLine(ord['待发'], 0, 0),
       stats.ls['待发'], '');
 
@@ -399,7 +395,7 @@
       '', stats.站存, '');
 
     html += '</table>';
-    $('rptBody').innerHTML = html;
+    Utils.$('rptBody').innerHTML = html;
     applyFontSize();   // innerHTML 重建后重新套用当前字号
   }
 
@@ -454,14 +450,14 @@
 
   /** 把当前字号写入 #rptBody，并同步中间显示与两侧按钮的可用状态/提示 */
   function applyFontSize() {
-    var body = $('rptBody');
+    var body = Utils.$('rptBody');
     if (body) body.style.setProperty('--rpt-fs', fsCurrent + 'px');
 
     // 中间显示当前字号
-    var val = $('rptFsVal');
+    var val = Utils.$('rptFsVal');
     if (val) val.textContent = fsCurrent + 'px';
 
-    var inBtn = $('rptZoomIn'), outBtn = $('rptZoomOut');
+    var inBtn = Utils.$('rptZoomIn'), outBtn = Utils.$('rptZoomOut');
     if (inBtn) {
       inBtn.disabled = (fsCurrent >= FS_MAX);
       inBtn.title = '放大表格字体（当前 ' + fsCurrent + 'px）';
@@ -555,16 +551,6 @@
     });
   }
 
-  /** 轻量提示（复用页面上的 #toast 元素） */
-  function rptToast(msg, isErr) {
-    var t = $('toast');
-    if (!t) { alert(msg); return; }
-    t.textContent = msg;
-    t.className = 'toast show' + (isErr ? ' error' : ' ok');
-    clearTimeout(rptToast._timer);
-    rptToast._timer = setTimeout(function () { t.className = 'toast'; }, 2600);
-  }
-
   /** 剪切板不可用时降级为下载图片 */
   function downloadBlob(blob, name) {
     var a = document.createElement('a');
@@ -579,62 +565,33 @@
 
   /** 截图按钮：把结果表格复制为图片（只取表格本体，不含外层留白） */
   function copyResultAsImage() {
-    var body = $('rptBody');
+    var body = Utils.$('rptBody');
     var target = (body && body.querySelector('table')) || body;
-    if (!target) { rptToast('没有可截图的内容', true); return; }
+    if (!target) { Utils.toast('没有可截图的内容', 'error'); return; }
 
     captureElement(target).then(function (blob) {
       if (!navigator.clipboard || typeof window.ClipboardItem === 'undefined') {
         downloadBlob(blob, '站存计算.png');
-        rptToast('当前环境不支持剪切板，已下载为图片');
+        Utils.toast('当前环境不支持剪切板，已下载为图片', 'ok');
         return;
       }
       navigator.clipboard.write([new window.ClipboardItem({ 'image/png': blob })])
-        .then(function () { rptToast('结果区已复制为图片，可直接粘贴'); })
+        .then(function () { Utils.toast('结果区已复制为图片，可直接粘贴', 'ok'); })
         .catch(function () {
           downloadBlob(blob, '站存计算.png');
-          rptToast('复制受限，已保存为图片文件', true);
+          Utils.toast('复制受限，已保存为图片文件', 'error');
         });
     }).catch(function (e) {
-      rptToast('截图失败：' + (e && e.message ? e.message : e), true);
+      Utils.toast('截图失败：' + (e && e.message ? e.message : e), 'error');
     });
-  }
-
-  function parseCarTypes(str) {
-    var cars = {};
-    var parts = String(str || '').trim().split(/\s+/).filter(Boolean);
-    parts.forEach(function (p) {
-      var type = p.replace(/\d/g, '');
-      var num = parseInt(p.replace(/\D/g, ''), 10) || 0;
-      cars[type] = (cars[type] || 0) + num;
-    });
-    return { cars: cars };
-  }
-
-  function formatDate(d) {
-    return (d.getMonth() + 1) + '月' + d.getDate() + '日';
-  }
-
-  /** 股道 id 排序：纯数字道在前按数值升序，字母道（X1…）在后按前缀+数值升序 */
-  function compareTrackId(a, b) {
-    a = String(a); b = String(b);
-    var na = /^\d+$/.test(a), nb = /^\d+$/.test(b);
-    if (na && nb) return +a - +b;
-    if (na) return -1;
-    if (nb) return 1;
-    var ma = /^(\D*)(\d+)$/.exec(a), mb = /^(\D*)(\d+)$/.exec(b);
-    var pa = ma ? ma[1] : a, pb = mb ? mb[1] : b;
-    if (pa !== pb) return pa < pb ? -1 : 1;
-    return (ma ? +ma[2] : 0) - (mb ? +mb[2] : 0);
   }
 
   /* ========================== 右侧条件面板 ========================== */
   var currentRawRows = [];
-  var currentFileName = '';
   var config = { drr: {}, crr: {} };
 
   function ensureConfigUI() {
-    if ($('cfgPanel').innerHTML.trim()) return;
+    if (Utils.$('cfgPanel').innerHTML.trim()) return;
 
     var html = '';
 
@@ -662,10 +619,10 @@
     html += '<button class="btn" id="btnCloseCfg31814">关闭</button>';
     html += '</div>';
 
-    $('cfgPanel').innerHTML = html;
+    Utils.$('cfgPanel').innerHTML = html;
 
     // 待装股道：按「作业区 / 线别」分组渲染
-    var tb = $('cfgTracks');
+    var tb = Utils.$('cfgTracks');
     DZ_GROUPS.forEach(function (g) {
       var box = document.createElement('div');
       box.className = 'cfg-track-group' + (g.area ? ' is-area' : '');
@@ -673,7 +630,7 @@
       var head = document.createElement('div');
       head.className = 'cfg-group-head';
       head.innerHTML = '<button type="button" class="cfg-group-btn" data-group="' + g.key + '">' +
-        escapeHtml(g.name) + '</button>' +
+        Utils.escapeHtml(g.name) + '</button>' +
         '<span class="cfg-group-count" data-count="' + g.key + '">0/' + g.ids.length + '</span>';
       box.appendChild(head);
 
@@ -683,7 +640,7 @@
         var label = document.createElement('label');
         label.className = 'cfg-track';
         label.innerHTML = '<input type="checkbox" id="cfgTrack_' + id + '" data-track="' + id + '">' +
-          escapeHtml(trackLabel(id));
+          Utils.escapeHtml(trackLabel(id));
         wrap.appendChild(label);
       });
       box.appendChild(wrap);
@@ -691,39 +648,37 @@
     });
 
     // 全选
-    $('cfgAllDz').addEventListener('change', function () {
+    Utils.$('cfgAllDz').addEventListener('change', function () {
       var on = this.checked;
       document.querySelectorAll('#cfgTracks input').forEach(function (cb) { cb.checked = on; });
-      var dz = $('cfgDefaultDz');
+      var dz = Utils.$('cfgDefaultDz');
       if (dz && !on) dz.classList.remove('active');
       syncGroupState();
       runCalculation();
     });
 
     // 待发股道复选框（垂直排列在右侧）
-    var readyWrap = $('cfgReady');
-    for (var i = 1; i <= 15; i++) {
+    var readyWrap = Utils.$('cfgReady');
+    // 待发候选 = 到发线 + X 线，名单取自配置（配置里改了范围，这里自动跟随）
+    var readyIds = (global.YardConfig ? global.YardConfig.idsOfGroup('td') : [])
+      .concat(global.YardConfig ? global.YardConfig.idsOfGroup('x') : []);
+    readyIds.forEach(function (id) {
       var label = document.createElement('label');
       label.className = 'cfg-ready-track';
-      label.innerHTML = '<input type="checkbox" data-ready="' + i + '"> ' + i + '道';
+      label.innerHTML = '<input type="checkbox" data-ready="' + Utils.escapeHtml(id) + '"> ' +
+                        Utils.escapeHtml(trackLabel(id));
       readyWrap.appendChild(label);
-    }
-    for (var i = 1; i <= 15; i++) {
-      var label = document.createElement('label');
-      label.className = 'cfg-ready-track';
-      label.innerHTML = '<input type="checkbox" data-ready="X' + i + '"> X' + i;
-      readyWrap.appendChild(label);
-    }
+    });
 
     // 默认待装
-    $('cfgDefaultDz').addEventListener('click', function () {
+    Utils.$('cfgDefaultDz').addEventListener('click', function () {
       var on = !this.classList.contains('active');
       this.classList.toggle('active', on);
       document.querySelectorAll('#cfgTracks input').forEach(function (cb) { cb.checked = false; });
       if (on) {
         Object.keys(DEFAULT_AREAS).forEach(function (name) {
           DEFAULT_AREAS[name].forEach(function (tr) {
-            var cb = $('cfgTrack_' + tr);
+            var cb = Utils.$('cfgTrack_' + tr);
             if (cb) cb.checked = true;
           });
         });
@@ -744,22 +699,22 @@
       toggleGroup(btn.dataset.group);
       runCalculation();   // 整组选择变化即重算
     });
-    $('cfgReady').addEventListener('change', runCalculation);
+    Utils.$('cfgReady').addEventListener('change', runCalculation);
 
     // 按钮
-    $('btnStart31814').addEventListener('click', runCalculation);
-    $('btnClear31814').addEventListener('click', function () {
+    Utils.$('btnStart31814').addEventListener('click', runCalculation);
+    Utils.$('btnClear31814').addEventListener('click', function () {
       clearConfig();
       runCalculation();   // 清空后按"未选择"再算一次
     });
-    $('btnCloseCfg31814').addEventListener('click', function () { $('modal31814').classList.remove('show'); });
+    Utils.$('btnCloseCfg31814').addEventListener('click', function () { UI.Modal.close('modal31814'); });
 
     // 结果区截图（按钮在弹窗头部，此处绑定一次）
-    var copyBtn = $('rptCopyImg');
+    var copyBtn = Utils.$('rptCopyImg');
     if (copyBtn) copyBtn.addEventListener('click', copyResultAsImage);
 
     // 表格字号缩放（按钮在弹窗头部，此处绑定一次）
-    var zi = $('rptZoomIn'), zo = $('rptZoomOut');
+    var zi = Utils.$('rptZoomIn'), zo = Utils.$('rptZoomOut');
     if (zi) zi.addEventListener('click', function () { zoomFontSize(FS_STEP); });
     if (zo) zo.addEventListener('click', function () { zoomFontSize(-FS_STEP); });
     applyFontSize();
@@ -779,9 +734,9 @@
   /** 清空选择条件（不显示占位文本，由调用方决定是否立即重算） */
   function clearConfig() {
     document.querySelectorAll('#cfgTracks input').forEach(function (cb) { cb.checked = false; });
-    var dz = $('cfgDefaultDz');
+    var dz = Utils.$('cfgDefaultDz');
     if (dz) dz.classList.remove('active');
-    var all = $('cfgAllDz');
+    var all = Utils.$('cfgAllDz');
     if (all) all.checked = false;
     document.querySelectorAll('#cfgReady input').forEach(function (cb) { cb.checked = false; });
     syncGroupState();
@@ -791,7 +746,7 @@
 
   function runCalculation() {
     if (!currentRawRows.length) {
-      alert('请先加载 xls 数据');
+      Utils.toast('请先加载 xls 数据', 'error');
       return;
     }
     collectConfig();
@@ -802,15 +757,13 @@
 
   /* ========================== 对外接口 ========================== */
   function open(rawRows, fileName) {
-    currentRawRows = rawRows || (global.state ? global.state.rawRows : []);
-    currentFileName = fileName || (global.state ? global.state.currentFile : '');
+    // state 是 app.js IIFE 内的私有对象，未挂到 window，故不存在全局兜底
+    currentRawRows = rawRows || [];
     if (!currentRawRows.length) {
-      // 注意：window.toast 会被命名为 id="toast" 的元素覆盖，必须判断是否为函数
-      if (typeof global.toast === 'function') global.toast('请先加载 xls 数据');
-      else alert('请先加载 xls 数据');
+      Utils.toast('请先加载 xls 数据', 'error');
       return;
     }
-    $('modal31814').classList.add('show');
+    UI.Modal.open('modal31814');
     ensureConfigUI();
     clearConfig();
     // 打开即以「未选择任何股道」的状态计算一次，

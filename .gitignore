@@ -25,3 +25,7 @@ Thumbs.db
 # Node 依赖（体积大，按需重装）
 HTML/node_modules/
 node_modules/
+
+# 测试数据来源（xlsdata/ 为本地测试样本，不入版本库）
+xlsdata/
+HTML/xlsdata/

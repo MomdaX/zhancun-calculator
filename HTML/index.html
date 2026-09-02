@@ -20,6 +20,7 @@
   </svg>
   <span class="title">站存车统计</span>
 
+  <button class="btn" id="btnPickFolder" title="选择数据文件夹" style="display:none">选择数据文件夹</button>
   <button class="btn" id="btnReload" title="刷新数据">刷新</button>
 
   <span class="spacer"></span>
@@ -193,10 +194,13 @@
 </div>
 
 <!-- 兜底：普通文件选择（任何浏览器都可用） -->
-<input type="file" id="fileInput" accept=".xls,.xlsx" style="display:none">
 <input type="file" id="fileInputMulti" accept=".xls,.xlsx" multiple style="display:none">
 
 <!-- ================= 依赖 ================= -->
+<script src="js/utils.js" charset="utf-8"></script>
+<script src="js/store.js" charset="utf-8"></script>
+<script src="js/ui.js" charset="utf-8"></script>
+<script src="js/col-resize.js" charset="utf-8"></script>
 <script src="track.config.js" charset="utf-8"></script>
 <script src="direction.data.js" charset="utf-8"></script>
 <script src="vendor/xlsx.full.min.js"></script>

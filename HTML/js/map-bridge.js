@@ -16,20 +16,12 @@
   var POST_ORIGIN = '*';      // file:// 下 origin 为 'null'
   var READY_TIMEOUT = 60000;  // Map 初始化超时（毫秒）
 
-  var el = {};                // 缓存 DOM
   var state = {
     ready: false,
-    pending: null,            // 就绪前待发的径路请求
-    openCount: 0,
-    stations: 0,
-    loadingShown: false
+    pending: null
   };
-  var listeners = [];
 
-  function $(id) {
-    if (!el[id]) el[id] = document.getElementById(id);
-    return el[id];
-  }
+  var $ = Utils.$;
 
   /** 创建 iframe（懒加载：首次打开地图时才建，避免拖慢主页面启动） */
   function ensureFrame() {
@@ -50,10 +42,11 @@
     }
 
     showMask(true);
+    startWatchdog();      // 每次打开重新计时，超时提示才对得上本次打开
     sendPath(opt.to);
   }
 
-  function close() { showMask(false); }
+  function close() { stopWatchdog(); showMask(false); }
 
   function showMask(show) {
     var mask = $('mapMask');
@@ -87,7 +80,6 @@
       if (t) t.textContent = text;
     }
     box.style.display = show ? 'flex' : 'none';
-    state.loadingShown = show;
   }
 
   function setStatus(text, isError) {
@@ -105,6 +97,7 @@
     switch (m.type) {
       case 'map:ready':
         state.ready = true;
+        stopWatchdog();       // 已就绪，本次打开的超时保护使命完成
         showLoading(false);
         setStatus('地图已就绪，起点：钦州港');
         if (state.pending) {
@@ -127,20 +120,33 @@
         }
         break;
     }
-
-    listeners.forEach(function (fn) {
-      try { fn(m); } catch (err) {}
-    });
   }
 
   /* ---------------- 超时保护 ---------------- */
+
+  var watchdogTimer = null;
+
+  /**
+   * 启动（或重置）超时保护。
+   *
+   * 必须从 open() 调用，不能只在 init() 里跑一次：
+   * init 的一次性定时器从页面加载开始计时，用户若在 60 秒之后才打开地图，
+   * 该定时器早已触发完毕，超时提示永远不会出现（等于保护失效）。
+   */
   function startWatchdog() {
-    setTimeout(function () {
+    stopWatchdog();
+    watchdogTimer = setTimeout(function () {
+      watchdogTimer = null;
       if (!state.ready && $('mapMask') && $('mapMask').style.display === 'flex') {
         showLoading(false);
         setStatus('地图加载超时，请检查 Map 目录是否完整', true);
       }
     }, READY_TIMEOUT);
+  }
+
+  /** 取消超时保护（地图就绪、用户主动关闭、重新打开时重新计时） */
+  function stopWatchdog() {
+    if (watchdogTimer) { clearTimeout(watchdogTimer); watchdogTimer = null; }
   }
 
   /* ---------------- 初始化 ---------------- */
@@ -164,10 +170,13 @@
     }
 
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && mask && mask.style.display === 'flex') close();
+      if (e.key !== 'Escape') return;
+      // 浮窗优先：若 31814 等 UI 浮窗开着，先让其处理 ESC，避免一次按键同时关掉浮窗和地图。
+      // 必须用 anyOpen()（无参）——isOpen(id) 不传 id 时恒为 false，这条分支会失效。
+      if (global.UI && global.UI.Modal &&
+          global.UI.Modal.anyOpen() && global.UI.Modal.closeTop()) return;
+      if (mask && mask.style.display === 'flex') close();
     });
-
-    startWatchdog();
   }
 
   if (document.readyState === 'loading') {
@@ -177,7 +186,6 @@
   global.MapBridge = {
     open: open,
     close: close,
-    isReady: function () { return state.ready; },
-    onMessage: function (fn) { if (typeof fn === 'function') listeners.push(fn); }
+    isReady: function () { return state.ready; }
   };
 })(window);

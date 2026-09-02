@@ -33,88 +33,20 @@
   };
 
   /* ==========================================================================
-   * VBA 函数模拟
+   * VBA 函数模拟 —— 全部复用 Utils
    * ========================================================================== */
-
-  /** VBA InStr：找不到返回 0，找到返回 1 基位置；查找空串返回 1 */
-  function vbInStr(haystack, needle) {
-    haystack = haystack == null ? '' : String(haystack);
-    needle = needle == null ? '' : String(needle);
-    if (needle === '') return 1;
-    var i = haystack.indexOf(needle);
-    return i === -1 ? 0 : i + 1;
-  }
-
-  /** VBA Val：从字符串开头解析数字，失败返回 0 */
-  function vbVal(v) {
-    if (v === null || v === undefined) return 0;
-    if (typeof v === 'number') return v;
-    var s = String(v).trim().replace(/^[\s　]+/, '');
-    var m = /^[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/.exec(s);
-    if (!m) return 0;
-    var n = parseFloat(m[0]);
-    return isNaN(n) ? 0 : n;
-  }
-
-  /** VBA Left(str, n) */
-  function vbLeft(s, n) {
-    return String(s == null ? '' : s).substring(0, n);
-  }
-
-  /** VBA Mid(str, start, len)：start 为 1 基 */
-  function vbMid(s, start, len) {
-    s = String(s == null ? '' : s);
-    var a = Math.max(0, start - 1);
-    return len === undefined ? s.substring(a) : s.substring(a, a + len);
-  }
-
-  /**
-   * 正则_车种：从车种字符串提取车型字母
-   * VBA 原逻辑：取 [^\d]+ 部分，再按 C/X/P/G/YW/T/B/D/K 顺序匹配
-   */
-  function extractCarType(carType) {
-    var s = String(carType == null ? '' : carType);
-    var m = /[^\d]+/.exec(s);
-    var t = m ? m[0] : '';
-    var order = ['C', 'X', 'P', 'G', 'YW', 'T', 'B', 'D', 'K'];
-    var result = t;
-    for (var i = 0; i < order.length; i++) {
-      var ls = order[i];
-      if (t.indexOf(ls) >= 0) {
-        // NX 系列特判为 X
-        result = (vbLeft(t, 1) === 'N' && vbMid(t, 2, 1) === 'X') ? 'X' : vbLeft(t, 1);
-        break;
-      }
-      result = t;
-    }
-    return result;
-  }
-
-  /** 解析到达时间字符串 → Date，失败返回 null */
-  function parseArriveTime(v) {
-    if (v === null || v === undefined || v === '') return null;
-    if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
-    var s = String(v).trim();
-    if (!s) return null;
-    var m = /(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})[日T\s]*(\d{1,2})?:?(\d{1,2})?:?(\d{1,2})?/.exec(s);
-    if (!m) return null;
-    var d = new Date(
-      +m[1], +m[2] - 1, +m[3],
-      m[4] ? +m[4] : 0, m[5] ? +m[5] : 0, m[6] ? +m[6] : 0
-    );
-    return isNaN(d.getTime()) ? null : d;
-  }
-
-  /** 小时差：等价于 VBA DateDiff("h", from, to) */
-  function hoursDiff(from, to) {
-    if (!from) return 0;
-    return (to.getTime() - from.getTime()) / 3600000;
-  }
+  var vbInStr = Utils.vbInStr;
+  var vbVal = Utils.vbVal;
+  var vbLeft = Utils.vbLeft;
+  var vbMid = Utils.vbMid;
+  var extractCarType = Utils.extractCarType;
+  var parseArriveTime = Utils.parseArriveTime;
+  var hoursDiff = Utils.hoursDiff;
 
   /* ==========================================================================
    * 到站推断 —— 翻译自 VBA 开头的三段 If/ElseIf
    * ========================================================================== */
-  function resolveDest(row, dirStations, now) {
+  function resolveDest(row, dirStations, now, firstCharIndex) {
     var load = vbVal(row[COL.LOAD]);
     var dest = String(row[COL.DEST] == null ? '' : row[COL.DEST]).trim();
     var note = String(row[COL.NOTE] == null ? '' : row[COL.NOTE]).trim();
@@ -136,11 +68,45 @@
        * （如 防城@1 先于 防城港@4、贵阳 先于 贵阳南、昭通 先于 昭通北），
        * 取第一个会把「防城港」截成「防城」。
        * 等长时保留原顺序（先出现者优先），与旧行为一致。 */
+      /* 优化：借倒排索引把候选站名收窄到一小撮，只对候选做「最长命中」比较，
+       * 避免对 583 条全表线性扫描。无索引（兼容性）时退化为全表扫描，语义相同。
+       *
+       * 【已修正的漏判】原实现只取 firstCharIndex[note.charAt(0)] 一个桶，
+       * 隐含假设「站名一定出现在记事的开头」，原注释还断言"不会漏"。
+       * 实际记事大量使用前缀写法——"装防城港箱 天驰"、"排防城敞顶箱 27292"——
+       * 站名并不在首位，首字桶为空 → 判定为未命中 → 到站被错误归入车种/罐型（C/X/自备罐）。
+       * 实测 1339 行真实数据中有 93 行（6.95%）因此判错。
+       *
+       * 修正：站名 s 出现在 note 中 ⇒ s 的首字必然出现在 note 的某个位置，
+       * 故遍历 note 的每个「不同字符」取桶求并集，即不会漏判。 */
       var best = '';
-      for (var k = 0; k < dirStations.length; k++) {
-        var s = dirStations[k];
-        if (!s) continue;
-        if (vbInStr(note, s) > 0 && s.length > best.length) best = s;
+      if (firstCharIndex && note) {
+        var cand = {}, seenCh = {}, candCount = 0;
+        for (var ci = 0; ci < note.length; ci++) {
+          var ch = note.charAt(ci);
+          if (seenCh['@' + ch]) continue;
+          seenCh['@' + ch] = 1;
+          var bucket = firstCharIndex[ch];
+          if (!bucket) continue;
+          for (var b = 0; b < bucket.length; b++) {
+            var nm = bucket[b];
+            if (nm && !cand['@' + nm]) { cand['@' + nm] = 1; candCount++; }
+          }
+        }
+        // 按 dirStations 原序遍历候选：与全表扫描完全等价（等长时先出现者胜）
+        if (candCount) {
+          for (var k = 0; k < dirStations.length; k++) {
+            var s = dirStations[k];
+            if (!s || !cand['@' + s]) continue;
+            if (vbInStr(note, s) > 0 && s.length > best.length) best = s;
+          }
+        }
+      } else {
+        for (var kk = 0; kk < dirStations.length; kk++) {
+          var ss = dirStations[kk];
+          if (!ss) continue;
+          if (vbInStr(note, ss) > 0 && ss.length > best.length) best = ss;
+        }
       }
 
       if (best) {                                  // 优先到站
@@ -203,6 +169,8 @@
     var oldCarHours = cfg.oldCarHours != null ? cfg.oldCarHours : 47;
     directionMap = directionMap || {};
     dirStations = dirStations || [];
+    // 与 directionMap/dirStations 同源的惰性单例，取其首字倒排索引供 resolveDest 加速
+    var _dirIndexForResolve = getDirectionIndex();
 
     // ---- 预处理：修正到站（等价于 VBA 循环体内的三段判断） ----
     var pre = [];
@@ -215,18 +183,16 @@
       // __destRaw：原始到站（车站名）。明细抽屉如实展示，不参与聚合改写
       row.__destRaw = String(r[COL.DEST] == null ? '' : r[COL.DEST]);
 
-      // 聚合用的到站在副本上计算，避免污染原始值
-      var work = r.slice();
+      // 聚合用的到站：仅当需要清空 DEST 时才复制，否则直接用原数组引用
       var loadRaw = r[COL.LOAD];
       var destRaw = r[COL.DEST];
-      // VBA：载重为空但到站非空 → 清空到站
-      if ((loadRaw === '' || loadRaw === null || loadRaw === undefined) &&
-          !(destRaw === '' || destRaw === null || destRaw === undefined)) {
-        work[COL.DEST] = '';
-      }
+      var needClear = (loadRaw === '' || loadRaw === null || loadRaw === undefined) &&
+          !(destRaw === '' || destRaw === null || destRaw === undefined);
+      var work = needClear ? r.slice() : r;
+      if (needClear) work[COL.DEST] = '';
 
       // __dest：聚合后的到站分类（可能是车站名，也可能是 路罐/自备罐/黑罐/车种）
-      row.__dest = resolveDest(work, dirStations, now);
+      row.__dest = resolveDest(work, dirStations, now, _dirIndexForResolve && _dirIndexForResolve.firstCharIndex);
       row.__carType = extractCarType(r[COL.CARTYPE]);
       row.__track = track;
       pre.push(row);
@@ -263,14 +229,10 @@
         // 方向分类
         var dirCode = String(row2[COL.DIR] == null ? '' : row2[COL.DIR]).trim();
         var loadV = vbVal(row2[COL.LOAD]);
-        function hasDir(d) {
-          for (var x = 0; x < dirSet.length; x++) if (dirSet[x] === d) return true;
-          return false;
-        }
-        if (dirCode === '3' && !hasDir('南口')) dirSet.push('南口');
-        else if (dirCode === '2' && !hasDir('管内')) dirSet.push('管内');
-        else if (dirCode === '6' && loadV > 20 && !hasDir('到卸')) dirSet.push('到卸');
-        else if (vbInStr('236', dirCode) === 0 && !hasDir('沙口')) dirSet.push('沙口');
+        if (dirCode === '3' && dirSet.indexOf('南口') < 0) dirSet.push('南口');
+        else if (dirCode === '2' && dirSet.indexOf('管内') < 0) dirSet.push('管内');
+        else if (dirCode === '6' && loadV > 20 && dirSet.indexOf('到卸') < 0) dirSet.push('到卸');
+        else if (vbInStr('236', dirCode) === 0 && dirSet.indexOf('沙口') < 0) dirSet.push('沙口');
 
         // 到站统计（用聚合后的分类值 __dest，原始值 __destRaw 留给明细展示）
         var dst = String(row2.__dest == null ? '' : row2.__dest).trim() || '空车';
@@ -391,7 +353,38 @@
       map[st] = dr;
       stations.push(st);
     }
-    return { map: map, stations: stations };
+
+    /* 首字倒排索引：「站名首字 → 站名列表」。
+     * resolveDest 用 note 中出现的每个字符去取桶求并集收窄候选，
+     * 不再对每行全表线性扫描 583 条。语义与全表扫描完全一致（仍是找 note 中最长命中）。 */
+    var firstCharIndex = {};
+    for (var s = 0; s < stations.length; s++) {
+      var name = stations[s];
+      var ch = name.charAt(0);
+      if (!firstCharIndex[ch]) firstCharIndex[ch] = [];
+      firstCharIndex[ch].push(name);
+    }
+
+    return { map: map, stations: stations, firstCharIndex: firstCharIndex };
+  }
+
+  /* ==========================================================================
+   * 方向库单例
+   * --------------------------------------------------------------------------
+   * direction.data.js 有 583 条记录，每次 buildDirectionIndex 都要完整跑一遍
+   * CSV 解析。报表每次「开始计算」会调用两次（设置车流属性 / 计算统计），
+   * 加上主程序启动一次，等于同一份数据被反复解析。
+   * 改为惰性单例：全局只解析一次，主程序与报表共用同一份实例。
+   * ========================================================================== */
+  var _dirIndex = null;
+
+  function getDirectionIndex() {
+    if (!_dirIndex) {
+      _dirIndex = (typeof global.DirectionData === 'string')
+        ? buildDirectionIndex(global.DirectionData)
+        : { map: {}, stations: [] };
+    }
+    return _dirIndex;
   }
 
   global.Aggregate = {
@@ -399,9 +392,9 @@
     aggregate: aggregate,
     parseCSV: parseCSV,
     buildDirectionIndex: buildDirectionIndex,
-    extractCarType: extractCarType,
+    getDirectionIndex: getDirectionIndex,
     // 供调试/测试
-    _vbInStr: vbInStr, _vbVal: vbVal, _vbLeft: vbLeft, _vbMid: vbMid,
-    _resolveDest: resolveDest, _hoursDiff: hoursDiff
+    _vbInStr: Utils.vbInStr, _vbVal: Utils.vbVal, _vbLeft: Utils.vbLeft, _vbMid: Utils.vbMid,
+    _resolveDest: resolveDest, _hoursDiff: Utils.hoursDiff
   };
 })(window);
