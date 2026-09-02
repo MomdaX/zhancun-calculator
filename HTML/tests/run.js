@@ -209,11 +209,62 @@ suite('到站推断', () => {
   t('段2：载重>15 且到站钦州港 → 到卸', () => {
     eq(rd(mkRow({ LOAD: 60, DEST: '钦州港' })), '到卸');
   });
+  t('段2 细化：记事含卸车地点 → 识别为具体地点而非到卸', () => {
+    eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '卸永鑫' })), '永鑫');
+    eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '卸货场' })), '货场');
+    eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '天盛卸' })), '天盛');
+    eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '港务局卸车' })), '港务局');
+  });
+  t('段2 细化：普通多词取首个（无"转"时）', () => {
+    eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '永鑫货场' })), '永鑫');
+    eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '货场永鑫' })), '货场');
+  });
+  t('段2 细化："转"改卸写法取转之后末位', () => {
+    eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '货场转永鑫' })), '永鑫');
+    eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '永鑫转货场' })), '货场');
+  });
+  t('段2 细化：记事无地点词仍回落到卸', () => {
+    eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '待卸' })), '到卸');
+  });
+  t('段2 细化：卸车地点可配置（Store.unloadSpots 覆盖默认）', () => {
+    const saved = sandbox.Store;   // 脚本在 vm 沙箱运行，global 即 sandbox
+    sandbox.Store = { get: k => (k === 'unloadSpots' ? ['大榄坪', '勒沟'] : null) };
+    eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '卸大榄坪' })), '大榄坪');
+    eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '勒沟转大榄坪' })), '大榄坪');
+    // 默认列表里的词不再生效
+    eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '卸永鑫' })), '到卸');
+    sandbox.Store = saved;   // 还原，避免影响后续用例
+  });
+
+  t('段2 细化：取词前先按"转"截断（仅取转之后的子串）', () => {
+    // 默认列表含 永鑫/货场/天盛/港务局，但配置里删掉永鑫后：
+    const saved = sandbox.Store;
+    sandbox.Store = { get: k => (k === 'unloadSpots' ? ['货场', '天盛', '港务局'] : null) };
+    eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '货场转永鑫' })), '到卸'); // 永鑫不在配置
+    eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '天盛转货场' })), '货场'); // 取转后
+    sandbox.Store = saved;
+  });
   t('段3：载重/到站/记事皆空，按车种车号判定', () => {
     eq(rd(mkRow({ CARTYPE: 'G60', CARNO: '6123456' })), '路罐');
     eq(rd(mkRow({ CARTYPE: 'G70', CARNO: '0712345' })), '黑罐');
     eq(rd(mkRow({ CARTYPE: 'G70', CARNO: '0512345' })), '自备罐');
     eq(rd(mkRow({ CARTYPE: 'C70', CARNO: '1234567' })), 'C');
+  });
+  t('段1 黑罐细化：G7 罐车按收货人列识别为具体黑罐子类', () => {
+    // 默认配置 中粮/外运
+    eq(rd(mkRow({ CARTYPE: 'G70', CARNO: '0712345', CONSIGNEE: '中粮' })), '中粮');
+    eq(rd(mkRow({ CARTYPE: 'G70', CARNO: '0712345', CONSIGNEE: '外运物流' })), '外运');
+    // 收货人不含配置词 → 回落笼统"黑罐"
+    eq(rd(mkRow({ CARTYPE: 'G70', CARNO: '0712345', CONSIGNEE: '其他客户' })), '黑罐');
+    // 非 G7 罐不受影响
+    eq(rd(mkRow({ CARTYPE: 'G70', CARNO: '0512345', CONSIGNEE: '中粮' })), '自备罐');
+  });
+  t('段1 黑罐细化：可配置（Store.blackTankSpots 覆盖默认）', () => {
+    const saved = sandbox.Store;
+    sandbox.Store = { get: k => (k === 'blackTankSpots' ? ['益海', '九三'] : null) };
+    eq(rd(mkRow({ CARTYPE: 'G70', CARNO: '0712345', CONSIGNEE: '益海嘉里' })), '益海');
+    eq(rd(mkRow({ CARTYPE: 'G70', CARNO: '0712345', CONSIGNEE: '中粮' })), '黑罐'); // 默认词失效
+    sandbox.Store = saved;
   });
   t('段1：记事命中站名时取「最长」匹配（防城港 不被截成 防城）', () => {
     eq(rd(mkRow({ LOAD: 5, DEST: '钦州港', NOTE: '防城港卸' })), '防城港');

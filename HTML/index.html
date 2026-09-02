@@ -144,6 +144,38 @@
           <button class="btn" id="btnSettingFolder">修改</button>
         </div>
       </div>
+      <div class="setting-divider"></div>
+      <div class="setting-row setting-row-col">
+        <label class="setting-label">卸车地点
+          <span class="setting-hint">到卸车记事栏含以下地点时，识别为具体卸车地点</span>
+        </label>
+        <div class="unload-spots" id="unloadSpots">
+          <!-- 列表项由 app.js 渲染，新增按钮也置于此容器内（作为最后一项） -->
+          <button class="btn add-spot-btn" id="btnAddUnloadSpot" title="新增卸车地点">
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+              <line x1="8" y1="3" x2="8" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <line x1="3" y1="8" x2="13" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <span>新增</span>
+          </button>
+        </div>
+      </div>
+      <div class="setting-divider"></div>
+      <div class="setting-row setting-row-col">
+        <label class="setting-label">黑罐识别
+          <span class="setting-hint">G07罐车收货人含以下名称时，识别为具体黑罐子类</span>
+        </label>
+        <div class="unload-spots" id="blackTankSpots">
+          <!-- 列表项由 app.js 渲染，新增按钮也置于此容器内（作为最后一项） -->
+          <button class="btn add-spot-btn" id="btnAddBlackTankSpot" title="新增黑罐识别">
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+              <line x1="8" y1="3" x2="8" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <line x1="3" y1="8" x2="13" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <span>新增</span>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </div>

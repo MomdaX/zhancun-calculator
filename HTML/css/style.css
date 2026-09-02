@@ -207,7 +207,7 @@ body {
 }
 .rpt-right {
   flex: 0 0 45%;
-  padding: 14px;
+  padding: 1px 10px 1px 10px;
   overflow: auto;
   background: #f9fafb;
 }
@@ -352,8 +352,98 @@ body {
   border-radius: 4px;
   background: #fff;
 }
-.rpt-right .cfg-track-group { margin-bottom: 8px; }
-.rpt-right .cfg-track-group:last-child { margin-bottom: 0; }
+.rpt-right .cfg-section { margin-bottom: 10px; }
+.rpt-right .cfg-section:last-child { margin-bottom: 0; }
+.rpt-right .cfg-section-head {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+  background: #eef3fb;
+  padding: 5px 10px;
+  margin-bottom: 5px;
+  border-radius: 5px;
+  border-bottom: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.rpt-right .cfg-section-head:hover { background: #dbe8f5; }
+.rpt-right .cfg-section-head .cfg-group-count { font-weight: 400; }
+.rpt-right .cfg-section-groups {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+}
+.rpt-right .cfg-track-group {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.rpt-right .cfg-divider {
+  flex-basis: 100%;
+  height: 2px;
+  background: var(--border-strong);
+  margin: 3px 0 3px;
+}
+.rpt-right .cfg-correction {
+  flex-basis: 100%;
+}
+.rpt-right .cfg-correction-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+.rpt-right .cfg-correction-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 1px 6px;
+}
+.rpt-right .cfg-corr-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text);
+}
+.rpt-right .cfg-corr-letter {
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--text);
+}
+.rpt-right .cfg-corr-field input {
+  width: 36px;
+  padding: 4px 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.rpt-right .cfg-corr-field input::-webkit-outer-spin-button,
+.rpt-right .cfg-corr-field input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.rpt-right #btnCorrect {
+  padding: 5px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #fff;
+  background: #2f7ed8;
+  border: 1px solid #2f7ed8;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.rpt-right #btnCorrect:hover { background: #2569b5; }
 /* 分组标题行：组名可点击 = 整组全选/取消 */
 .rpt-right .cfg-group-head {
   display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
@@ -598,7 +688,7 @@ td.train-loop { background: #ffe0b2 !important; font-weight: 600; }
 .drawer {
   position: fixed;
   top: 0; right: 0; bottom: 0;
-  width: 74%;
+  width: 90%;
   max-width: 1400px;
   background: var(--panel);
   box-shadow: -3px 0 14px rgba(0,0,0,.18);
@@ -999,6 +1089,83 @@ td.dest span.station-link:hover {
   border: 1px solid var(--border);
   word-break: break-all;
   line-height: 1.5;
+}
+
+/* 卸车地点配置 */
+.setting-row-col .setting-label { margin-bottom: 2px; }
+.setting-hint {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.unload-spots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.spot-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  font-size: 12px;
+  color: var(--text);
+  background: #eef3fb;
+  border: 1px solid #c9dbf3;
+  border-radius: 4px;
+  cursor: default;
+  font-family: inherit;
+}
+
+/* 鼠标悬停时右上角显示删除 × */
+.spot-item .spot-del {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 16px;
+  height: 16px;
+  line-height: 14px;
+  text-align: center;
+  font-size: 13px;
+  color: #fff;
+  background: #e5484d;
+  border: 1.5px solid #fff;
+  border-radius: 50%;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s;
+}
+.spot-item:hover .spot-del { opacity: 1; }
+
+/* 输入态：点击新增后出现的编辑项 */
+.spot-item.spot-editing {
+  padding: 2px 6px;
+  background: #fff;
+  border-style: dashed;
+  border-color: #6ea8fe;
+  cursor: text;
+}
+.spot-item.spot-editing .spot-input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text);
+  width: 72px;
+  padding: 0;
+}
+
+.add-spot-btn {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* 菜单项中的图标 */

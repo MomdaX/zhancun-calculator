@@ -29,6 +29,7 @@
   var COL = {
     TRACK: 0, SEQ: 1, CARTYPE: 2, CARNO: 3, TARE: 4, LEN: 5,
     LOAD: 6, DEST: 7, DIR: 8, GOODS: 9, FROM: 10,
+    CONSIGNEE: 12,                       // 收货人（品名之后、记事之前）
     NOTE: 13, TRAIN: 14, ARRTIME: 15
   };
 
@@ -43,20 +44,44 @@
   var parseArriveTime = Utils.parseArriveTime;
   var hoursDiff = Utils.hoursDiff;
 
+  /** 卸车地点默认列表（用户可在设置面板增删，存于 Store.unloadSpots） */
+  var DEFAULT_UNLOAD_SPOTS = ['永鑫', '货场', '天盛', '港务局'];
+
+  /** 黑罐细化默认列表（G7 罐车按收货人列识别为具体黑罐子类，存于 Store.blackTankSpots） */
+  var DEFAULT_BLACK_TANK_SPOTS = ['中粮', '外运'];
+
   /* ==========================================================================
    * 到站推断 —— 翻译自 VBA 开头的三段 If/ElseIf
    * ========================================================================== */
   function resolveDest(row, dirStations, now, firstCharIndex) {
-    var load = vbVal(row[COL.LOAD]);
+  var load = vbVal(row[COL.LOAD]);
     var dest = String(row[COL.DEST] == null ? '' : row[COL.DEST]).trim();
     var note = String(row[COL.NOTE] == null ? '' : row[COL.NOTE]).trim();
+    var consignee = String(row[COL.CONSIGNEE] == null ? '' : row[COL.CONSIGNEE]).trim();
     var carType = String(row[COL.CARTYPE] == null ? '' : row[COL.CARTYPE]);
     var carNo = String(row[COL.CARNO] == null ? '' : row[COL.CARNO]);
+
+    /* 黑罐细化：G7 罐车的收货人列若含配置词（默认 中粮/外运），则把笼统的
+     * "黑罐"识别为具体子类（中粮/外运）。列表来自 Store.blackTankSpots，可在设置增删。
+     * 取「首个命中」的词（收货人列无"转"改写法，按列表顺序即可）。 */
+    function resolveBlackTank(text) {
+      var list = (global.Store && global.Store.get)
+        ? (global.Store.get('blackTankSpots', null) || DEFAULT_BLACK_TANK_SPOTS)
+        : DEFAULT_BLACK_TANK_SPOTS;
+      if (!text) return '';
+      for (var i = 0; i < list.length; i++) {
+        if (vbInStr(text, list[i]) > 0) return list[i];
+      }
+      return '';
+    }
 
     function tankJudge() {
       if (vbLeft(carType, 1) === 'G' && vbLeft(carNo, 1) === '6') return '路罐';
       if (vbLeft(carType, 1) === 'G' && vbLeft(carNo, 1) === '0') {
-        return vbMid(carNo, 2, 1) === '7' ? '黑罐' : '自备罐';
+        // G7 罐：先按收货人列细化（中粮/外运…），否则回落笼统"黑罐"。
+        // 注意：空记事的车只走这里（段1 因 note!=='' 跳过），故细化必须在此生效。
+        if (vbMid(carNo, 2, 1) === '7') return resolveBlackTank(consignee) || '黑罐';
+        return '自备罐';
       }
       return extractCarType(carType);
     }
@@ -130,7 +155,8 @@
         }
       } else if (vbLeft(carType, 1) === 'G' && vbLeft(carNo, 1) === '0') {
         if (vbMid(carNo, 2, 1) === '7') {
-          dest = '黑罐';
+          // G7 罐：先按收货人列细化（中粮/外运…），否则回落笼统"黑罐"
+          dest = resolveBlackTank(consignee) || '黑罐';
         } else if (vbInStr(note, '原装') === 0) {
           if (vbInStr(note, '汽油') > 0) dest = '汽油';
           else if (vbInStr(note, '柴油') > 0) dest = '柴油';
@@ -145,7 +171,31 @@
     }
 
     // 段2：载重>15 且 到站为"钦州港" → 到卸
-    if (load > 15 && dest === '钦州港') return '到卸';
+    if (load > 15 && dest === '钦州港') {
+      /* 卸车地点细化：到卸车若记事中明确写了卸车地点，则把到站识别为具体地点，
+       * 不再统一显示"到卸"。地点词来自设置（Store.unloadSpots，默认 4 个），
+       * 用户可在「设置 → 卸车地点」里增删。
+       *
+       * 取词规则：
+       *  - 普通多词（"永鑫货场"）：取记事里【首个】出现的地点词。
+       *  - 含"转"的改卸写法（"货场转永鑫"）："转"表示改卸，取【转之后】那段里的
+       *    首个地点词（永鑫），忽略转之前的部分。 */
+      var UNLOAD_SPOTS = (global.Store && global.Store.get)
+        ? (global.Store.get('unloadSpots', null) || DEFAULT_UNLOAD_SPOTS)
+        : DEFAULT_UNLOAD_SPOTS;
+      var scan = note;
+      var zhuan = vbInStr(note, '转');
+      if (zhuan > 0) scan = note.substring(zhuan - 1 + 1);  // 只看"转"之后的子串
+      var bestPos = -1, bestSpot = '';
+      for (var ui = 0; ui < UNLOAD_SPOTS.length; ui++) {
+        var pos = vbInStr(scan, UNLOAD_SPOTS[ui]);
+        if (pos > 0 && (bestPos < 0 || pos < bestPos)) {
+          bestPos = pos;
+          bestSpot = UNLOAD_SPOTS[ui];
+        }
+      }
+      return bestSpot || '到卸';
+    }
 
     // 段3：载重、到站、记事均为空
     if (row[COL.LOAD] === '' || row[COL.LOAD] === null || row[COL.LOAD] === undefined) {

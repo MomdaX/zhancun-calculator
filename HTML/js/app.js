@@ -63,7 +63,7 @@
     { col: Aggregate.COL.DIR,     t: '方向', w: 42 }, { col: Aggregate.COL.GOODS, t: '品名', w: 90 },
     { col: Aggregate.COL.FROM,    t: '发站', w: 110, fmt: 'dest' },
     { col: Aggregate.COL.NOTE,    t: '记事', w: 170 },
-    { col: Aggregate.COL.TRAIN,   t: '车次', w: 62 }, { col: Aggregate.COL.ARRTIME, t: '到达时间', w: 128 }
+    { col: Aggregate.COL.TRAIN,   t: '车次', w: 62 }, { col: Aggregate.COL.CONSIGNEE, t: '收货人', w: 100 }, { col: Aggregate.COL.ARRTIME, t: '到达时间', w: 128 }
   ];
 
   /* ============================ 全局状态 ============================ */
@@ -319,6 +319,36 @@
    * @param {boolean} clickable 是否标记可双击的车站（仅明细页为 true，
    *        主表是汇总串如「德保44」，双击无意义，故不加虚线下划线）
    */
+  /**
+   * 判断片段是否为「卸车地点」（到卸车的细化去向，如 永鑫/货场/天盛/港务局）。
+   * 列表来自 Store.unloadSpots（用户在设置里增删），与 aggregate 段2 共用同一份配置。
+   * 未配置时回落默认 4 个，保证无设置也能正确加粗。
+   *
+   * 到站串片段是"永鑫50"（地点+车数），要先去掉尾部数字再匹配地点词。
+   */
+  function isUnloadSpot(p) {
+    if (!p) return false;
+    var name = String(p).replace(/\d+$/, '');   // 去尾数：永鑫50 → 永鑫
+    if (!name) return false;
+    var list = (Store.get && Store.get('unloadSpots', null)) ||
+               ['永鑫', '货场', '天盛', '港务局'];
+    return list.indexOf(name) >= 0;
+  }
+
+  /**
+   * 判断片段是否为「黑罐细化子类」（G7 罐车按收货人识别，如 中粮/外运）。
+   * 列表来自 Store.blackTankSpots，与 aggregate 段1 共用同一份配置。
+   * 未配置时回落默认 中粮/外运。
+   */
+  function isBlackTankSpot(p) {
+    if (!p) return false;
+    var name = String(p).replace(/\d+$/, '');
+    if (!name) return false;
+    var list = (Store.get && Store.get('blackTankSpots', null)) ||
+               ['中粮', '外运'];
+    return list.indexOf(name) >= 0;
+  }
+
   function renderDest(text, clickable) {
     if (!text) return '';
     var parts = String(text).trim().split(/\s+/).filter(Boolean);
@@ -328,6 +358,11 @@
       // 属性标记优先（对应 VBA 的 Array("YW","D","P","到卸","黑罐")）
       if (/^(YW|D|P)/.test(p)) cls = 'danger';
       else if (/^(到卸|黑罐)/.test(p)) cls = 'heavy';
+      // 卸车地点（到卸的细化，如 永鑫/货场/天盛/港务局，或用户在设置里增删的）
+      // 与"到卸"同款黑加粗。列表来自 Store.unloadSpots，与 aggregate 段2 一致。
+      else if (isUnloadSpot(p)) cls = 'heavy';
+      // 黑罐细化子类（G7 罐按收货人识别，如 中粮/外运），与"黑罐"同款加粗
+      else if (isBlackTankSpot(p)) cls = 'heavy';
       else {
         var m = /[\u4e00-\u9fa5]+/.exec(p);
         if (m) {
@@ -683,8 +718,11 @@
       }
     });
 
-    // 明细打开时按内容自适应列宽（渲染完 body 后测量，逐列 autoFit）
-    ColResize.safeGet(dt).reset();
+    // 注意：此处【不再】调用 ColResize.reset()——reset 会清掉记忆并重新自适应，
+    // 导致用户拖好的列宽在「关闭再打开抽屉」或「切换股道」后失效。
+    // 记忆的恢复已由 openDetail 顶部的 ColResize.safeGet(dt).remount() 完成
+    // （remount 内部：有记忆→恢复记忆宽度，无记忆→首次内容自适应）。
+    // 如需强制重置为自适应，用设置里的「列宽自适应」按钮（btnAutoFitCols）。
 
     UI.Drawer.open('drawer');
   }
@@ -731,8 +769,10 @@
     var station = span.getAttribute('data-station');
     if (!station) return;
 
-    // 排除补显的罐车分类（路罐/自备罐等），它们不是车站名
-    if (NOT_STATION[station] || /^[CXPGYWTBDKN]/.test(station)) {
+    // 排除补显的罐车分类（路罐/自备罐等），它们不是车站名。
+    // 卸车地点（永鑫/货场 等）与黑罐细化子类（中粮/外运）也不是车站，一并排除。
+    if (NOT_STATION[station] || isUnloadSpot(station) || isBlackTankSpot(station) ||
+        /^[CXPGYWTBDKN]/.test(station)) {
       toast('「' + station + '」不是车站名，无法生成径路', 'error');
       return;
     }
@@ -873,6 +913,7 @@
       var vids = YardConfig.virtualIds || [];
       if (!vids.length) { toast('配置中没有虚拟股道', 'error'); return; }
       state.showVirtual = !state.showVirtual;
+      Store.set('showVirtual', state.showVirtual);   // 持久记忆，刷新后保持
       syncVirtualBtn();
       render();
       toast((state.showVirtual ? '已显示' : '已隐藏') + '不常用股道（共 ' + vids.length + ' 条）', 'ok');
@@ -961,6 +1002,113 @@
       });
     }
 
+    // 设置：可配置「标签列表」（卸车地点 / 黑罐识别共用同一套交互）
+    // 改完任一配置后，用新配置重跑聚合并刷新主表（recompute 是共享的）
+    function recompute() {
+      if (!state.rawRows || !state.rawRows.length) { render(); return; }
+      var base = state.printDate || new Date();
+      var agg = Aggregate.aggregate(state.rawRows, state.dirIndex.map,
+                                    state.dirIndex.stations, YardConfig.thresholds, base);
+      var ordered = [], known = {}, extra = [];
+      YardConfig.tracks.forEach(function (t) {
+        if (agg[t.id]) ordered.push(agg[t.id]);
+        else ordered.push({ track: t.id, direction: '', count: 0, carTypes: '',
+                            length: 0, dest: '', train: '', load: 0, oldCar: 0, raw: [] });
+        known[t.id] = 1;
+      });
+      Object.keys(agg).forEach(function (k) { if (!known[k]) extra.push(agg[k]); });
+      extra.sort(function (a, b) { return a.track.localeCompare(b.track, 'zh'); });
+      state.rows = ordered.concat(extra);
+      render();
+    }
+
+    /**
+     * 初始化一个「可增删标签列表」设置项（行内输入交互）。
+     * @param containerId 列表容器 id（内含地点项 + 新增按钮）
+     * @param addBtnId   新增按钮 id
+     * @param storeKey   持久化键（Store.get/set）
+     * @param defaultList 未配置时的默认值
+     */
+    function initSpotConfig(containerId, addBtnId, storeKey, defaultList) {
+      var el = $(containerId);
+      var addBtn = $(addBtnId);
+      if (!el) return;
+      var adding = false;
+
+      function getList() {
+        var list = Store.get(storeKey, null);
+        return Array.isArray(list) ? list : null;   // null → 用默认
+      }
+      function renderList() {
+        var list = getList() || defaultList;
+        var html = list.map(function (name) {
+          return '<span class="spot-item" data-name="' + escapeHtml(name) + '">' +
+                   escapeHtml(name) +
+                   '<button class="spot-del" title="删除" aria-label="删除">×</button>' +
+                 '</span>';
+        }).join('');
+        if (adding) {
+          html += '<span class="spot-item spot-editing">' +
+                    '<input class="spot-input" type="text" maxlength="20" ' +
+                    'placeholder="输入名称" autocomplete="off" />' +
+                  '</span>';
+        }
+        el.innerHTML = html;
+        if (addBtn) el.appendChild(addBtn);   // 按钮每次重挂回末尾
+        if (adding) {
+          var inp = el.querySelector('.spot-input');
+          if (inp) inp.focus();
+        }
+      }
+      function commit() {
+        var inp = el.querySelector('.spot-input');
+        var name = inp ? inp.value.trim() : '';
+        adding = false;
+        if (!name) { renderList(); return; }
+        var list = getList() || defaultList;
+        if (list.indexOf(name) >= 0) { UI.toast(name + ' 已存在'); renderList(); return; }
+        list.push(name);
+        Store.set(storeKey, list);
+        renderList();
+        recompute();
+      }
+      function cancel() { if (!adding) return; adding = false; renderList(); }
+
+      renderList();
+
+      el.addEventListener('click', function (e) {
+        var del = e.target.closest ? e.target.closest('.spot-del') : null;
+        if (!del) return;
+        var name = del.parentNode.getAttribute('data-name');
+        var list = getList() || defaultList;
+        Store.set(storeKey, list.filter(function (n) { return n !== name; }));
+        renderList();
+        recompute();
+      });
+      el.addEventListener('keydown', function (e) {
+        if (!e.target.classList || !e.target.classList.contains('spot-input')) return;
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+      });
+      el.addEventListener('focusout', function (e) {
+        if (e.target.classList && e.target.classList.contains('spot-input')) commit();
+      });
+      if (addBtn) {
+        addBtn.addEventListener('click', function () {
+          if (adding) { var i = el.querySelector('.spot-input'); if (i) i.focus(); return; }
+          adding = true;
+          renderList();
+        });
+      }
+    }
+
+    // 卸车地点（aggregate 段2 读取，默认 永鑫/货场/天盛/港务局）
+    initSpotConfig('unloadSpots', 'btnAddUnloadSpot', 'unloadSpots',
+                   ['永鑫', '货场', '天盛', '港务局']);
+    // 黑罐识别（aggregate 段1 G7 罐按收货人识别，默认 中粮/外运）
+    initSpotConfig('blackTankSpots', 'btnAddBlackTankSpot', 'blackTankSpots',
+                   ['中粮', '外运']);
+
     // 表头列宽拖动（persistKey 用于本地记忆，刷新/重渲染不丢失）
     ColResize.enable($('grid'), {
       persistKey: 'zhancun.grid.cols',
@@ -994,6 +1142,11 @@
     state.dirIndex = Aggregate.getDirectionIndex();
 
     bind();
+
+    // 恢复「隐藏非常用股道」的持久记忆（设置里切换时写入 Store.showVirtual）
+    var savedVirtual = Store.get('showVirtual', null);
+    if (savedVirtual !== null) state.showVirtual = !!savedVirtual;
+
     syncVirtualBtn();
 
     // 先渲染空框架：让页面一打开就呈现完整股道清单，便于核对配置

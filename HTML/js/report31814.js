@@ -40,6 +40,21 @@
   var DZ_GROUP_MAP = {};
   DZ_GROUPS.forEach(function (g) { DZ_GROUP_MAP[g.key] = g; });
 
+  // 大组（作业区）→ 子组 key 列表，按配置顺序组织
+  var DZ_SECTIONS = (global.YardConfig && global.YardConfig.areaSections) || [];
+  var DZ_SECTION_GROUPS = DZ_SECTIONS.map(function (sec) {
+    return {
+      name: sec.name,
+      groups: sec.groups
+        .map(function (gn) {
+          var hit = null;
+          DZ_GROUPS.forEach(function (g) { if (g.name === gn) hit = g.key; });
+          return hit;
+        })
+        .filter(function (k) { return k != null; })
+    };
+  }).filter(function (s) { return s.groups.length; });
+
   /** 取股道显示名（如 "1道"、"H1"） */
   function trackLabel(id) {
     return global.YardConfig ? global.YardConfig.trackName(id) : String(id);
@@ -342,15 +357,17 @@
     var html = '<table>';
     html += '<tr><td colspan="3" class="title">' + Utils.escapeHtml(title) + '</td></tr>';
 
-    function row(label, top, bottom, total, cls) {
+    function row(label, top, bottom, total, cls, ids) {
       var topHtml = top || '&nbsp;';
       // two-row：含 detail-bottom 的两行结构，上半格高度按 CSS 取下半格的 3 倍
       var clsAll = ((cls || '') + (bottom ? ' two-row' : '')).trim();
+      var topId = ids && ids.top ? ' id="' + ids.top + '"' : '';
+      var totalId = ids && ids.total ? ' id="' + ids.total + '"' : '';
       return '<tr class="' + clsAll + '">' +
         '<td class="label">' + Utils.escapeHtml(label) + '</td>' +
-        '<td><div class="detail-top' + (bottom ? '' : ' only') + '">' + topHtml + '</div>' +
+        '<td><div class="detail-top' + (bottom ? '' : ' only') + '"' + topId + '>' + topHtml + '</div>' +
         (bottom ? '<div class="detail-bottom">' + bottom + '</div>' : '') + '</td>' +
-        '<td class="total">' + total + '</td></tr>';
+        '<td class="total"' + totalId + '>' + total + '</td></tr>';
     }
 
     // 沙口（B2 到站 / B3 车种，G 不拆分）
@@ -368,7 +385,7 @@
     // 待卸（B7）：单格，只有车种合计
     html += row('待卸',
       buildCarLine(ord['待卸'], 0, 0),
-      '', stats.ls['待卸'], '');
+      '', stats.ls['待卸'], '', { top: 'dxTop', total: 'dxTotal' });
 
     // 待装（B8）：G 拆分为自备罐(分子) / 路罐(分母)，与车种同行显示
     html += row('待装',
@@ -381,7 +398,7 @@
     html += row('空车',
       buildCarLine(ord['空车'], g['空车'].road, g['自备'].self),
       '',
-      stats.ls['空车'] + stats.ls['自备'], '');
+      stats.ls['空车'] + stats.ls['自备'], '', { top: 'kcTop', total: 'kcTotal' });
 
     // 待开（B16 股道合计 / B17 车种）
     html += row('待开',
@@ -397,6 +414,117 @@
     html += '</table>';
     Utils.$('rptBody').innerHTML = html;
     applyFontSize();   // innerHTML 重建后重新套用当前字号
+    lastStats = stats; // 供「待卸纠正」依据自动值重算
+    // 仅当用户点过「待卸校对」才套用纠正；否则保持自动值（避免打开时立即改值）
+    if (corrApplied) applyCorrection();
+  }
+
+  /* ===================== 待卸纠正（对应 VBA 待卸纠正） =====================
+   * 自动算出的待卸与实况有偏差时，在面板底部 C/X/P 输入框填入正确车数，
+   * 点击「待卸校对」后：待卸取输入值；对应车种的偏差从空车中增减（多了放到空车，
+   * 少了从空车取），使待卸精确等于输入值、空车总数相应找平。
+   * ======================================================================= */
+  var lastStats = null;
+  var corrApplied = false;   // 仅当用户点击「待卸校对」后才真正套用纠正
+
+  function carMapFromOrdered(ordered) {
+    var m = {};
+    (ordered || []).forEach(function (o) { m[o.t] = o.n; });
+    return m;
+  }
+  function orderedFromCarMap(map, order) {
+    var seen = {}, out = [];
+    order.forEach(function (t) {
+      if (t in map && !seen[t]) { out.push({ t: t, n: map[t] }); seen[t] = true; }
+    });
+    Object.keys(map).forEach(function (t) {
+      if (!seen[t]) out.push({ t: t, n: map[t] });
+    });
+    return out;
+  }
+  function orderedTotal(ordered) {
+    return (ordered || []).reduce(function (s, o) { return s + (o.n || 0); }, 0);
+  }
+  function readCorr(id, autoVal) {
+    var el = document.getElementById(id);
+    if (!el) return autoVal;
+    var v = String(el.value).trim();
+    if (v === '') return autoVal;
+    var n = parseInt(v, 10);
+    return isNaN(n) ? autoVal : n;
+  }
+
+  function applyCorrection() {
+    if (!lastStats) return;
+    var ord = lastStats.车种顺序 || {};
+    var autoDx = carMapFromOrdered(ord['待卸']);
+
+    var inpC = readCorr('corrC', autoDx.C || 0);
+    var inpX = readCorr('corrX', autoDx.X || 0);
+    var inpP = readCorr('corrP', autoDx.P || 0);
+    var inpG = readCorr('corrG', autoDx.G || 0);
+
+    // 四个输入都为空 → 不纠正，保持自动值
+    if (Utils.$('corrC').value.trim() === '' &&
+        Utils.$('corrX').value.trim() === '' &&
+        Utils.$('corrP').value.trim() === '' &&
+        Utils.$('corrG').value.trim() === '') return;
+
+    var delta = {
+      C: inpC - (autoDx.C || 0),
+      X: inpX - (autoDx.X || 0),
+      P: inpP - (autoDx.P || 0),
+      G: inpG - (autoDx.G || 0)
+    };
+    var g = lastStats.ls.gSplit;
+    var corrTypes = ['C', 'X', 'P', 'G'];
+
+    // —— 待卸：在原顺序基础上替换 C/X/P/G 的值为输入值（位置不变）——
+    var dxPresent = {}, dxOrdered = [];
+    (ord['待卸'] || []).forEach(function (o) {
+      dxPresent[o.t] = true;
+      if (o.t === 'C') dxOrdered.push({ t: 'C', n: inpC });
+      else if (o.t === 'X') dxOrdered.push({ t: 'X', n: inpX });
+      else if (o.t === 'P') dxOrdered.push({ t: 'P', n: inpP });
+      else if (o.t === 'G') dxOrdered.push({ t: 'G', n: inpG });
+      else dxOrdered.push(o);
+    });
+    // 原顺序中没有、但用户输入了的车种，补到末尾
+    corrTypes.forEach(function (t) {
+      var el = document.getElementById('corr' + t);
+      if (!dxPresent[t] && el && el.value.trim() !== '') {
+        dxOrdered.push({ t: t, n: { C: inpC, X: inpX, P: inpP, G: inpG }[t] });
+      }
+    });
+    var dxTop = Utils.$('dxTop');
+    if (dxTop) dxTop.innerHTML = buildCarLine(dxOrdered, 0, 0);
+    var dxTotal = Utils.$('dxTotal');
+    if (dxTotal) dxTotal.textContent = orderedTotal(dxOrdered);
+
+    // —— 空车：C/X/P 按相反偏差增减；G 对应分母(路罐)按相反偏差增减 ——
+    var kcPresent = {}, kcOrdered = [];
+    (ord['空车'] || []).forEach(function (o) {
+      kcPresent[o.t] = true;
+      if (o.t === 'C') kcOrdered.push({ t: 'C', n: Math.max(0, (o.n || 0) - delta.C) });
+      else if (o.t === 'X') kcOrdered.push({ t: 'X', n: Math.max(0, (o.n || 0) - delta.X) });
+      else if (o.t === 'P') kcOrdered.push({ t: 'P', n: Math.max(0, (o.n || 0) - delta.P) });
+      else kcOrdered.push(o);
+    });
+    corrTypes.forEach(function (t) {
+      if (t === 'G') return; // G 走分母，不计入分子
+      var el = document.getElementById('corr' + t);
+      if (!kcPresent[t] && el && el.value.trim() !== '') {
+        kcOrdered.push({ t: t, n: Math.max(0, -(delta[t])) });
+      }
+    });
+    var newRoad = Math.max(0, g['空车'].road - delta.G);
+    var kcTop = Utils.$('kcTop');
+    if (kcTop) kcTop.innerHTML = buildCarLine(kcOrdered, newRoad, g['自备'].self);
+    var kcTotal = Utils.$('kcTotal');
+    if (kcTotal) {
+      var autoKcTotal = lastStats.ls['空车'] + lastStats.ls['自备'];
+      kcTotal.textContent = autoKcTotal - (delta.C + delta.X + delta.P + delta.G);
+    }
   }
 
   /* ========================== 结果区截图 ==========================
@@ -621,9 +749,10 @@
 
     Utils.$('cfgPanel').innerHTML = html;
 
-    // 待装股道：按「作业区 / 线别」分组渲染
+    // 待装股道：按「大组(作业区) / 子组(线别) / 股道」三层渲染
     var tb = Utils.$('cfgTracks');
-    DZ_GROUPS.forEach(function (g) {
+
+    function buildGroup(g) {
       var box = document.createElement('div');
       box.className = 'cfg-track-group' + (g.area ? ' is-area' : '');
 
@@ -644,7 +773,122 @@
         wrap.appendChild(label);
       });
       box.appendChild(wrap);
-      tb.appendChild(box);
+      return box;
+    }
+
+    // 仅渲染股道（不含子组标题/按钮），用于单组大组
+    function buildTracksOnly(g) {
+      var wrap = document.createElement('div');
+      wrap.className = 'cfg-group-tracks';
+      g.ids.forEach(function (id) {
+        var label = document.createElement('label');
+        label.className = 'cfg-track';
+        label.innerHTML = '<input type="checkbox" id="cfgTrack_' + id + '" data-track="' + id + '">' +
+          Utils.escapeHtml(trackLabel(id));
+        wrap.appendChild(label);
+      });
+      return wrap;
+    }
+
+    // 配置中存在大组划分时，按「作业区」分段；否则退回扁平单层
+    if (DZ_SECTION_GROUPS.length) {
+      DZ_SECTION_GROUPS.forEach(function (sec) {
+        var secEl = document.createElement('div');
+        secEl.className = 'cfg-section';
+
+        var secHead = document.createElement('div');
+        secHead.className = 'cfg-section-head';
+        secHead.textContent = sec.name;
+        secHead.setAttribute('data-groups', sec.groups.join(','));
+
+        var secBody = document.createElement('div');
+        secBody.className = 'cfg-section-groups';
+
+        if (sec.groups.length === 1) {
+          // 仅一组：隐藏子组按钮，计数移到段标题后
+          var g = DZ_GROUP_MAP[sec.groups[0]];
+          if (g) {
+            var cnt = document.createElement('span');
+            cnt.className = 'cfg-group-count';
+            cnt.setAttribute('data-count', g.key);
+            cnt.textContent = '0/' + g.ids.length;
+            secHead.appendChild(cnt);
+            secBody.appendChild(buildTracksOnly(g));
+          }
+        } else {
+          sec.groups.forEach(function (key) {
+            var g = DZ_GROUP_MAP[key];
+            if (g) secBody.appendChild(buildGroup(g));
+          });
+        }
+        secEl.appendChild(secHead);
+        secEl.appendChild(secBody);
+
+        tb.appendChild(secEl);
+      });
+
+      // 点击段标题：整段全选 / 清空全选
+      tb.querySelectorAll('.cfg-section-head').forEach(function (head) {
+        head.addEventListener('click', function () {
+          var keys = (head.getAttribute('data-groups') || '').split(',').filter(Boolean);
+          var anyUnchecked = false;
+          keys.forEach(function (k) {
+            var g = DZ_GROUP_MAP[k];
+            if (!g) return;
+            g.ids.forEach(function (id) {
+              var cb = document.getElementById('cfgTrack_' + id);
+              if (cb && !cb.checked) anyUnchecked = true;
+            });
+          });
+          var on = anyUnchecked;
+          keys.forEach(function (k) {
+            var g = DZ_GROUP_MAP[k];
+            if (!g) return;
+            g.ids.forEach(function (id) {
+              var cb = document.getElementById('cfgTrack_' + id);
+              if (cb) cb.checked = on;
+            });
+          });
+          syncGroupState();
+          runCalculation();
+        });
+      });
+    } else {
+      DZ_GROUPS.forEach(function (g) { tb.appendChild(buildGroup(g)); });
+    }
+
+    // 待卸纠正：置于最底部，与上方大组用分隔线隔开
+    var corr = document.createElement('div');
+    corr.className = 'cfg-correction';
+    corr.innerHTML =
+      '<div class="cfg-divider"></div>' +
+      '<div class="cfg-correction-row">' +
+        '<label class="cfg-corr-field"><span class="cfg-corr-letter">C</span><input type="number" id="corrC" min="0" step="1" placeholder="0"></label>' +
+        '<label class="cfg-corr-field"><span class="cfg-corr-letter">X</span><input type="number" id="corrX" min="0" step="1" placeholder="0"></label>' +
+        '<label class="cfg-corr-field"><span class="cfg-corr-letter">P</span><input type="number" id="corrP" min="0" step="1" placeholder="0"></label>' +
+        '<label class="cfg-corr-field"><span class="cfg-corr-letter">G</span><input type="number" id="corrG" min="0" step="1" placeholder="0"></label>' +
+        '<button type="button" class="btn" id="btnCorrect">待卸校对</button>' +
+      '</div>';
+    tb.appendChild(corr);
+
+    Utils.$('btnCorrect').addEventListener('click', function () {
+      syncGroupState();
+      corrApplied = true;     // 只有点击校对后才真正套用纠正
+      applyCorrection();
+    });
+
+    // 纠正输入框：失焦/回车时本地持久记忆
+    ['corrC', 'corrX', 'corrP', 'corrG'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      var save = function () {
+        var all = (global.Store && global.Store.get) ? global.Store.get('corrInputs', {}) : {};
+        all = all || {};
+        all[id] = el.value;
+        if (global.Store) global.Store.set('corrInputs', all);
+      };
+      el.addEventListener('change', save);
+      el.addEventListener('blur', save);
     });
 
     // 全选
@@ -742,6 +986,7 @@
     syncGroupState();
     config.drr = {};
     config.crr = {};
+    corrApplied = false;   // 清空数据后，待卸纠正回到未套用状态（需重新点校对）
   }
 
   function runCalculation() {
@@ -749,6 +994,8 @@
       Utils.toast('请先加载 xls 数据', 'error');
       return;
     }
+    // 股道变化触发的重算一律按自动值呈现；纠正需用户再次点击「待卸校对」
+    corrApplied = false;
     collectConfig();
     var brr = setCarProperties(currentRawRows, config.drr, config.crr);
     var stats = calculateStats(brr);
@@ -766,6 +1013,13 @@
     UI.Modal.open('modal31814');
     ensureConfigUI();
     clearConfig();
+    // 打开时恢复上次本地持久记忆的纠正输入
+    var savedCorr = (global.Store && global.Store.get) ? global.Store.get('corrInputs', {}) : {};
+    savedCorr = savedCorr || {};
+    ['corrC', 'corrX', 'corrP', 'corrG'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.value = (savedCorr[id] != null ? savedCorr[id] : '');
+    });
     // 打开即以「未选择任何股道」的状态计算一次，
     // 之后用户勾选待装/待发股道会自动重算
     runCalculation();
