@@ -48,6 +48,7 @@
     dirHandle: null,       // 文件夹句柄
     selectedIdx: -1,
     detailIdx: -1,
+    detailSel: null,       // 明细多选行集合（存 r.raw 的下标）
     printDate: null,       // 数据源打印日期（作为停时基准）
     showVirtual: true      // 是否显示虚拟股道（X 线）
   };
@@ -545,38 +546,57 @@
   }
 
   /* =================== 明细抽屉 =================== */
-  /** 计算明细合计：辆数 / 换长 / 总重（总重 = 自重[4] + 载重[6]，均 1 位小数） */
-  function detailTotals(r) {
-    var list = r.raw || [];
+  /** 计算一组明细行的合计：辆数 / 换长 / 总重（总重 = 自重[4] + 载重[6]，均 1 位小数）。
+   *  rows 为 r.raw 的子数组；为空时返回全 0。 */
+  function computeTotals(rows) {
     var parseNum = function (v) {
       if (v == null || v === '') return 0;
       var m = /^[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/.exec(String(v).trim());
       return m ? (parseFloat(m[0]) || 0) : 0;
     };
-    var len = 0, weight = 0;
-    for (var k = 0; k < list.length; k++) {
-      var row = list[k];
-      len += parseNum(row[5]);                  // 换长
-      weight += parseNum(row[4]) + parseNum(row[6]); // 自重 + 载重 = 总重
+    var len = 0, selfW = 0, loadW = 0;
+    for (var k = 0; k < rows.length; k++) {
+      var row = rows[k];
+      len += parseNum(row[5]);                        // 换长
+      selfW += parseNum(row[4]);                      // 自重
+      loadW += parseNum(row[6]);                      // 载重
     }
     return {
-      count: r.count || 0,
+      count: rows.length,
       length: Math.round(len * 10) / 10,
-      weight: Math.round(weight * 10) / 10
+      selfW: Math.round(selfW * 10) / 10,
+      loadW: Math.round(loadW * 10) / 10,
+      weight: Math.round((selfW + loadW) * 10) / 10   // 总重 = 自重 + 载重
     };
+  }
+  /** 明细合计（全部行）：兼容旧调用 */
+  function detailTotals(r) {
+    return computeTotals(r.raw || []);
+  }
+  /** 动态刷新抽屉标题：有选中行时按选中行求和，无选中行时恢复为全部行合计 */
+  function updateDetailTitle() {
+    var r = state.rows[state.detailIdx];
+    if (!r) return;
+    var list = r.raw || [];
+    var rows = (state.detailSel && state.detailSel.size)
+      ? list.filter(function (_, i) { return state.detailSel.has(i); })
+      : list;
+    var t = computeTotals(rows);
+    var name = YardConfig.getTrack(r.track);
+    $('drawerTitle').innerHTML =
+      '<span class="dt-name">' + escapeHtml(name ? name.name : r.track) + ' - </span>' +
+      '<span class="dt-total">辆数：' + t.count + '</span>' +
+      '<span class="dt-total' + (t.length > 70 ? ' warn' : '') + '">换长：' + t.length.toFixed(1) + '</span>' +
+      '<span class="dt-total">自重：' + t.selfW.toFixed(1) + '</span>' +
+      '<span class="dt-total">载重：' + t.loadW.toFixed(1) + '</span>' +
+      '<span class="dt-total dt-weight' + (t.weight > 5000 ? ' warn' : '') + '">总重：' + t.weight.toFixed(1) + '</span>';
   }
   function openDetail(idx) {
     var r = state.rows[idx];
     if (!r) return;
     state.detailIdx = idx;
-    var cfgTrack = r.track;
-    var name = YardConfig.getTrack(cfgTrack);
-    var t = detailTotals(r);
-    $('drawerTitle').innerHTML =
-      '<span class="dt-name">' + escapeHtml(name ? name.name : cfgTrack) + ' - </span>' +
-      '<span class="dt-total">辆数：' + t.count + '</span>' +
-      '<span class="dt-total">换长：' + t.length.toFixed(1) + '</span>' +
-      '<span class="dt-total">总重：' + t.weight.toFixed(1) + '</span>';
+    state.detailSel = new Set();   // 重置多选（每次打开明细都清空选中）
+    updateDetailTitle();           // 初始：按全部行求和（无选中）
 
     $('detailHead').innerHTML = DETAIL_COLS.map(function (c) {
       // 记事列：加 col-flex 类（仅用于允许换行），仍写内联 width，作为独立可拖拽列
@@ -590,7 +610,7 @@
 
     var list = r.raw || [];
     var base = state.printDate || new Date();
-    $('detailBody').innerHTML = list.map(function (row) {
+    $('detailBody').innerHTML = list.map(function (row, i) {
       var tds = DETAIL_COLS.map(function (c) {
         var raw = row[c.i];
         if (c.fmt === 'track') {
@@ -613,7 +633,7 @@
         return '<td' + (c.cls ? ' class="' + c.cls + '"' : '') + '>' +
                escapeHtml(raw == null ? '' : raw) + '</td>';
       }).join('');
-      return '<tr>' + tds + '<td class="stay"></td></tr>';
+      return '<tr data-i="' + i + '">' + tds + '<td class="stay"></td></tr>';
     }).join('');
 
     // 停时列：需单独计算
@@ -935,6 +955,85 @@
       if (!sp) return;
       e.stopPropagation();
       openStationMap(sp);
+    });
+
+    // 明细中：按下行 → 拖动多选（拖动中实时调整范围，松开确定）；单击 → 切换选中
+    var dragSel = { active: false, moved: false, anchor: -1, snap: null, mode: 'add' };
+    function selectRow(i, on) {
+      if (!state.detailSel) state.detailSel = new Set();
+      var tr = $('detailBody').querySelector('tr[data-i="' + i + '"]');
+      if (on) { state.detailSel.add(i); if (tr) tr.classList.add('selected'); }
+      else { state.detailSel.delete(i); if (tr) tr.classList.remove('selected'); }
+    }
+    function clearDetailSel() {
+      if (state.detailSel) state.detailSel.clear();
+      var sels = $('detailBody').querySelectorAll('tr.selected');
+      for (var k = 0; k < sels.length; k++) sels[k].classList.remove('selected');
+      updateDetailTitle();
+    }
+    // 拖动中按「快照 + (anchor..cur) 按 mode 应用」实时渲染选中
+    function renderDrag(cur) {
+      if (!state.detailSel) state.detailSel = new Set();
+      var snap = dragSel.snap, add = dragSel.mode === 'add';
+      // 还原快照
+      var sels = $('detailBody').querySelectorAll('tr');
+      for (var k = 0; k < sels.length; k++) {
+        var idx = +sels[k].getAttribute('data-i');
+        if (snap.has(idx)) { state.detailSel.add(idx); sels[k].classList.add('selected'); }
+        else { state.detailSel.delete(idx); sels[k].classList.remove('selected'); }
+      }
+      if (cur >= 0 && dragSel.anchor >= 0) {
+        var a = Math.min(dragSel.anchor, cur), b = Math.max(dragSel.anchor, cur);
+        for (var j = a; j <= b; j++) selectRow(j, add);
+      }
+      updateDetailTitle();
+    }
+    on('detailBody', 'mousedown', function (e) {
+      var tr = e.target.closest('tr');
+      if (!tr || tr.querySelector('td.stay') === e.target) return;
+      e.preventDefault();
+      if (!state.detailSel) state.detailSel = new Set();
+      dragSel.active = true;
+      dragSel.moved = false;
+      dragSel.anchor = +tr.getAttribute('data-i');
+      dragSel.snap = new Set(state.detailSel);   // 记录拖动前选中快照
+      // 起点已选中 → 取消模式；否则 → 加入模式（仅用于拖动，单击在 click 中处理）
+      dragSel.mode = state.detailSel.has(dragSel.anchor) ? 'del' : 'add';
+    });
+    on('detailBody', 'mouseover', function (e) {
+      if (!dragSel.active) return;
+      var tr = e.target.closest('tr');
+      if (!tr) return;
+      var i = +tr.getAttribute('data-i');
+      dragSel.moved = true;
+      renderDrag(i);                             // 实时按当前行调整整段
+    });
+    function endDrag() {
+      if (dragSel.active) {
+        dragSel.active = false;
+        dragSel.anchor = -1;
+        dragSel.snap = null;
+      }
+    }
+    document.addEventListener('mouseup', endDrag);
+    // 单击（未发生拖动）时切换该行选中状态；拖动已在 mouseover 中实时应用
+    on('detailBody', 'click', function (e) {
+      if (dragSel.moved) { dragSel.moved = false; return; }
+      var tr = e.target.closest('tr');
+      if (!tr || tr.querySelector('td.stay') === e.target) return;
+      var i = +tr.getAttribute('data-i');
+      selectRow(i, !state.detailSel.has(i));
+      updateDetailTitle();
+    });
+    // 点击表格外（如抽屉头/标题，或表格任意外部区域）清空选中
+    var dh = document.querySelector('.drawer-head');
+    if (dh) dh.addEventListener('click', clearDetailSel);
+    on('drawerTitle', 'click', clearDetailSel);
+    document.addEventListener('mousedown', function (e) {
+      // 正在拖动表格内选择时不触发清空
+      if (dragSel.active) return;
+      var dt = $('detailTable');
+      if (dt && !dt.contains(e.target)) clearDetailSel();
     });
 
     // 单击选中

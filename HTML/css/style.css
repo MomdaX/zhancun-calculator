@@ -59,6 +59,11 @@ html, body {
   z-index: 10;
 }
 
+.toolbar .brand-emblem {
+  flex: 0 0 auto;
+  align-self: center;
+  margin-right: 4px;
+}
 .toolbar .title {
   font-size: 15px;
   font-weight: 700;
@@ -605,9 +610,13 @@ td.train-loop { background: #ffe0b2 !important; font-weight: 600; }
   gap: 10px;
   background: #f8fafb;
 }
-.drawer-head h3 { margin: 0; font-size: 14px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.drawer-head h3 { margin: 0; font-size: 14px; display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
 .drawer-head h3 .dt-name { font-weight: 700; }
-.drawer-head h3 .dt-total { font-weight: 600; color: #1f6feb; white-space: nowrap; }
+.drawer-head h3 .dt-total { font-weight: 600; color: #1f6feb; white-space: nowrap; padding: 2px 8px; border-radius: 4px; }
+/* 总重加边框，便于区分 */
+.drawer-head h3 .dt-total.dt-weight { border: 1px solid #b3d4ff; background: #f3f8ff; }
+/* 超限高亮：换长或总重超过阈值时整项红色强调 */
+.drawer-head h3 .dt-total.warn { color: #fff !important; background: #e03131 !important; border-color: #e03131 !important; }
 .drawer-head .spacer { flex: 1; }
 .drawer-body { flex: 1; overflow: auto; padding: 0; }
 
@@ -642,12 +651,17 @@ table.detail thead th {
 }
 table.detail tbody tr:nth-child(even) td { background: var(--row-alt); }
 table.detail tbody tr:hover td { background: var(--row-hover); }
+table.detail tbody tr { cursor: pointer; }
+/* 选中行（多选）：以背景色高亮为主，去掉外框，保持行内无框线 */
 table.detail tbody tr.selected td {
-  background: #d6ecff !important;
+  background: #a9d4ff !important;
 }
-table.detail tbody tr.selected {
-  outline: 2px solid var(--accent);
-  outline-offset: -1px;
+table.detail tbody tr.selected:hover td {
+  background: #93c8ff !important;
+}
+/* 行首加一道蓝色强调条，便于快速辨识选中行（不破坏表格框线） */
+table.detail tbody tr.selected td:first-child {
+  box-shadow: inset 3px 0 0 #1864ab;
 }
 table.detail td.mid { text-align: center; font-variant-numeric: tabular-nums; }
 

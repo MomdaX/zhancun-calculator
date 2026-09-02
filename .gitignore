@@ -4,10 +4,15 @@
 
 # 临时调试/诊断文件
 _tmp_*/
+HTML/_tmp_*
 _v.xls
 z9.xls
 data.xls
 _diag/
+
+# IDE / 编辑器本地配置
+.trae/
+.workbuddy/
 
 # 本地配置（可能含环境相关路径）
 workbook-path.json

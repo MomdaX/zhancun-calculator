@@ -9,7 +9,16 @@
 
 <!-- ================= 工具栏 ================= -->
 <div class="toolbar">
-  <span class="title">股道存车</span>
+  <svg class="brand-emblem" viewBox="0 0 64 64" width="26" height="26" aria-label="铁路路徽" role="img">
+    <circle cx="32" cy="32" r="30" fill="#1f6feb" stroke="#1453b8" stroke-width="2"/>
+    <!-- 上方展翼：象征铁道 -->
+    <path d="M14 26 C22 18 42 18 50 26 L46 30 C40 25 24 25 18 30 Z" fill="#fff"/>
+    <!-- 中央“人”字 -->
+    <path d="M32 24 L40 44 L34 44 L32 38 L30 44 L24 44 Z" fill="#fff"/>
+    <!-- 底部钢轨线 -->
+    <rect x="18" y="46" width="28" height="3" rx="1.5" fill="#fff"/>
+  </svg>
+  <span class="title">站存车统计</span>
 
   <button class="btn primary" id="btnPickFolder" title="选择存放 xls 的文件夹，之后会自动记住">选择数据文件夹</button>
   <button class="btn" id="btnPickFile" title="直接选择单个 xls 文件">选择文件</button>
