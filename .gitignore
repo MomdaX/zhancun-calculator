@@ -1,4 +1,4 @@
-# Excel 临时锁定文件
+﻿# Excel 临时锁定文件
 ~$*.xls*
 ~$*.xlsm
 
@@ -20,7 +20,3 @@ Thumbs.db
 # Node 依赖（体积大，按需重装）
 HTML/node_modules/
 node_modules/
-
-# 第三方工具管理的运行时/缓存（非源码）
-.trae/
-.workbuddy/

@@ -407,9 +407,16 @@
   function render() {
     // 表头
     $('headRow').innerHTML = COLUMNS.map(function (c) {
-      return '<th class="' + (c.cls || '') + '" style="width:' + c.width + 'px">' +
-             escapeHtml(c.title) + '</th>';
+      var cls = c.cls || '';
+      // 到站列：加 col-flex 类（仅用于允许换行），仍写内联 width，作为独立可拖拽列
+      if (c.key === 'dest') cls += ' col-flex';
+      var style = ' style="width:' + c.width + 'px"';
+      return '<th class="' + cls.trim() + '"' + style + '>' + escapeHtml(c.title) + '</th>';
     }).join('');
+
+    // 表头被 innerHTML 重建，需重新挂载列宽拖拽手柄
+    var g = $('grid');
+    if (g && g.__mountColHandles) g.__mountColHandles();
 
     var thr = YardConfig.thresholds;
     var tbody = $('tbody');
@@ -470,8 +477,15 @@
           inner = (v === 0 || v === '' || v == null) ? '' : escapeHtml(String(v));
           cls += ' num';
         } else {
-          inner = escapeHtml(v == null ? '' : v);
-          if (!c.cls && !c.num) cls += ' center';
+          var rawNote = (v == null ? '' : String(v));
+          // 注意事项列：聚合时已用 \n 分隔各关键词（超71.86吨 / 扣修 …），
+          // 转成 <br> 才能逐条换行；方向列同理（render 内已处理）。
+          if (c.key === 'note') {
+            inner = escapeHtml(rawNote).replace(/\n/g, '<br>');
+          } else {
+            inner = escapeHtml(rawNote);
+            if (!c.cls && !c.num) cls += ' center';
+          }
         }
 
         // 条件样式
@@ -531,17 +545,48 @@
   }
 
   /* =================== 明细抽屉 =================== */
+  /** 计算明细合计：辆数 / 换长 / 总重（总重 = 自重[4] + 载重[6]，均 1 位小数） */
+  function detailTotals(r) {
+    var list = r.raw || [];
+    var parseNum = function (v) {
+      if (v == null || v === '') return 0;
+      var m = /^[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/.exec(String(v).trim());
+      return m ? (parseFloat(m[0]) || 0) : 0;
+    };
+    var len = 0, weight = 0;
+    for (var k = 0; k < list.length; k++) {
+      var row = list[k];
+      len += parseNum(row[5]);                  // 换长
+      weight += parseNum(row[4]) + parseNum(row[6]); // 自重 + 载重 = 总重
+    }
+    return {
+      count: r.count || 0,
+      length: Math.round(len * 10) / 10,
+      weight: Math.round(weight * 10) / 10
+    };
+  }
   function openDetail(idx) {
     var r = state.rows[idx];
     if (!r) return;
     state.detailIdx = idx;
     var cfgTrack = r.track;
     var name = YardConfig.getTrack(cfgTrack);
-    $('drawerTitle').textContent = (name ? name.name : cfgTrack) + ' - 明细（' + (r.count || 0) + ' 辆）';
+    var t = detailTotals(r);
+    $('drawerTitle').innerHTML =
+      '<span class="dt-name">' + escapeHtml(name ? name.name : cfgTrack) + ' - </span>' +
+      '<span class="dt-total">辆数：' + t.count + '</span>' +
+      '<span class="dt-total">换长：' + t.length.toFixed(1) + '</span>' +
+      '<span class="dt-total">总重：' + t.weight.toFixed(1) + '</span>';
 
     $('detailHead').innerHTML = DETAIL_COLS.map(function (c) {
-      return '<th style="width:' + c.w + 'px">' + escapeHtml(c.t) + '</th>';
+      // 记事列：加 col-flex 类（仅用于允许换行），仍写内联 width，作为独立可拖拽列
+      var cls = (c.t === '记事') ? ' col-flex' : '';
+      return '<th class="' + cls.trim() + '" style="width:' + c.w + 'px">' + escapeHtml(c.t) + '</th>';
     }).join('') + '<th style="width:60px">停时h</th>';
+
+    // 表头被 innerHTML 重建，需重新挂载列宽拖拽手柄
+    var dt = $('detailTable');
+    if (dt && dt.__mountColHandles) dt.__mountColHandles();
 
     var list = r.raw || [];
     var base = state.printDate || new Date();
@@ -591,6 +636,9 @@
         }
       }
     });
+
+    // 明细打开时按内容自适应列宽（渲染完 body 后测量，逐列 autoFit）
+    if (dt && dt.__resetColWidths) dt.__resetColWidths();
 
     $('drawer').classList.add('show');
     $('drawerMask').classList.add('show');
@@ -655,135 +703,184 @@
 
   /* =================== 表头列宽拖拽 =================== */
   /**
-   * 表头列宽可拖动调整。
-   * 拖动标记由 CSS 伪元素 ::after 绘制（不新增 DOM），此处只做命中判定与宽度计算。
+   * 表头列宽可拖动调整（重构版）。
+   *
+   * 设计（从表格基础布局模型解决，而非打补丁）：
+   *  - 拖拽手柄是 th 内的真实 <div class="col-handle">，而非伪元素 ::after 或坐标遍历。
+   *    sticky 左列(col-a/col-b)会浮在普通列上方遮挡 e.target，伪元素/坐标法都会命中错乱
+   *    （旧 bug：第三列起选不中）。真实手柄设 z-index 高于 sticky 列，命中 100% 准确。
+   *  - 表格 width:max-content + table-layout:fixed，列宽由 th.style.width 决定，
+   *    浏览器不会自作主张放大/压缩列（根治"越拖越大、其它列也变"）。
+   *  - 主表/明细表均无 transform:scale 缩放，mousemove 用 clientX 差值即像素，天然跟手，
+   *    无需 tableScale 归一化。
+   *
    * @param {HTMLTableElement} table
    * @param {Function} [onResize] 宽度变化时回调 (th, width)
    */
-  function enableColResize(table, onResize) {
+  function enableColResize(table, onResize, persistKey, flexCols) {
     var thead = table && table.tHead;
     if (!thead) return;
+    var headRow = thead.rows && thead.rows[0];
+    if (!headRow) return;
 
-    var HIT = 6;   // 拖动命中宽度，需与 CSS 中 ::after 的 width 一致
-    var MIN = 30;  // 最小列宽
+    var MIN = 30;            // 最小列宽
     var drag = null;
 
-    // Canvas 测文本宽度（复用一个离屏 canvas）
-    var measureCvs = document.createElement('canvas');
-    var measureCtx = measureCvs.getContext('2d');
-
-    function findTh(e) {
-      var th = e.target && e.target.closest ? e.target.closest('th') : null;
-      return th && th.closest('thead') === thead ? th : null;
+    /** 读取持久化列宽（localStorage）。返回数组或 null */
+    function loadStored() {
+      if (!persistKey) return null;
+      try {
+        var s = localStorage.getItem(persistKey);
+        var arr = s ? JSON.parse(s) : null;
+        return (arr && arr.length === headRow.cells.length) ? arr : null;
+      } catch (e) { return null; }
     }
 
-    /** 鼠标是否落在 th 右边缘的拖动区内 */
-    function atEdge(th, x) {
-      var r = th.getBoundingClientRect();
-      return x >= r.right - HIT && x <= r.right + 1;
+    /** 动态识别弹性列索引（基于 flexCols 标题匹配当前表头）
+     *  弹性列（如到站/记事）：不写 width，table-layout:fixed 下自动吃满容器剩余空间。 */
+    function buildFlexSet() {
+      var set = {};
+      if (flexCols && flexCols.length) {
+        for (var fi = 0; fi < headRow.cells.length; fi++) {
+          if (flexCols.indexOf(headRow.cells[fi].textContent.trim()) >= 0) set[fi] = true;
+        }
+      }
+      return set;
     }
 
-    function clearMark() {
-      var prev = thead.querySelector('th.col-resizing');
-      if (prev) prev.classList.remove('col-resizing');
+    /** 临时切到 auto + 全 nowrap，逼浏览器按「每列最长单行内容」算出最真实的列宽。
+     *  同步测量，不会触发可见重绘。返回各列 offsetWidth 数组。
+     *  测量完后恢复每列原来的内联 width，避免调用方只写一列时其它列丢失宽度。 */
+    function measureContentWidths() {
+      var prevLayout = table.style.tableLayout;
+      var prevWidth = table.style.width;
+      var prevWidths = [];
+      for (var i = 0; i < headRow.cells.length; i++) prevWidths.push(headRow.cells[i].style.width);
+      table.classList.add('measuring');
+      table.style.tableLayout = 'auto';
+      table.style.width = 'auto';
+      for (var i = 0; i < headRow.cells.length; i++) headRow.cells[i].style.width = '';
+      var widths = [];
+      for (var j = 0; j < headRow.cells.length; j++) widths.push(headRow.cells[j].offsetWidth);
+      table.classList.remove('measuring');
+      table.style.tableLayout = prevLayout;
+      table.style.width = prevWidth;
+      for (var i = 0; i < headRow.cells.length; i++) headRow.cells[i].style.width = prevWidths[i];
+      return widths;
     }
 
-    /** 取消拖拽（双击时可能已由首次单击触发了拖拽） */
-    function cancelDrag() {
-      if (!drag) return;
-      drag.th.classList.remove('col-resizing');
-      drag = null;
-      document.body.classList.remove('col-resize-active');
+    /** 应用持久化列宽到各 th（拖拽/刷新/重渲染后调用，保证不丢失）。
+     *  无记忆时执行首次内容自适应（像 Excel 打开即按内容宽），每列都独立精确 px。 */
+    function applyStoredWidths() {
+      var arr = loadStored();
+      if (!arr) { autoFitAll(); return; }    // 首次：内容自适应
+      for (var i = 0; i < headRow.cells.length; i++) {
+        var cell = headRow.cells[i];
+        var w = arr[i];
+        if (typeof w === 'number' && w >= MIN) {
+          cell.style.width = w + 'px';
+          if (onResize) onResize(cell, w);
+        }
+      }
     }
 
-    /** 列索引（th 在父行中的位置） */
+    /** 持久化当前列宽到 localStorage（弹性列也记，便于完整还原） */
+    function persistWidths() {
+      if (!persistKey) return;
+      var widths = [];
+      for (var i = 0; i < headRow.cells.length; i++) {
+        widths.push(Math.round(headRow.cells[i].offsetWidth));
+      }
+      try { localStorage.setItem(persistKey, JSON.stringify(widths)); } catch (e) {}
+    }
+
+    /** 重置为自适应（清空拖动记忆，恢复到按内容计算的列宽）；弹性列吸收剩余空间 */
+    function resetToAuto() {
+      if (persistKey) { try { localStorage.removeItem(persistKey); } catch (e) {} }
+      autoFitAll();
+      persistWidths();
+    }
+
+    /** 在每个 th 右缘挂载真实拖拽手柄（最后一列不加，无下一列可拖） */
+    function mountHandles() {
+      var cells = headRow.cells;
+      for (var i = 0; i < cells.length; i++) {
+        var th = cells[i];
+        if (th.querySelector(':scope > .col-handle')) continue;   // 去重
+        var h = document.createElement('div');
+        h.className = 'col-handle' + (i === cells.length - 1 ? ' last' : '');
+        h.addEventListener('mousedown', onHandleDown);
+        h.addEventListener('dblclick', onHandleDbl);
+        th.appendChild(h);
+      }
+    }
+
+    function onHandleDown(e) {
+      var handle = e.currentTarget;
+      var th = handle.parentElement;     // 手柄即 th 的直接子元素
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();               // 阻止冒泡到行的单击选中逻辑
+      handle.classList.add('active');
+      drag = { th: th, handle: handle, startX: e.clientX, startW: th.offsetWidth };
+      document.body.classList.add('col-resize-active');
+    }
+
+    function onHandleDbl(e) {
+      var th = e.currentTarget.parentElement;
+      e.preventDefault();
+      e.stopPropagation();
+      autoFit(th);
+    }
+
     function colIdx(th) {
       return Array.prototype.indexOf.call(th.parentNode.children, th);
     }
 
-    /** 测量文本宽度 */
-    function textWidth(text, font) {
-      measureCtx.font = font;
-      return measureCtx.measureText(text).width;
-    }
-
-    /** 双击分隔线 → 自动调整为最适列宽 */
+    /** 双击分隔线 → 只有当前这一列恢复为内容自适应（像 Excel：双击列边=该列自适应），
+     *  其它列宽度完全不动。 */
     function autoFit(th) {
       var idx = colIdx(th);
-      var font = window.getComputedStyle(th).font;
-      var maxW = textWidth(th.textContent.trim(), font) + 20;
-
-      // 遍历所有 tbody 行中该列单元格
-      var bodies = table.tBodies;
-      for (var b = 0; b < bodies.length; b++) {
-        var rows = bodies[b].rows;
-        for (var r = 0; r < rows.length; r++) {
-          var cell = rows[r].cells[idx];
-          if (!cell) continue;
-          var cf = window.getComputedStyle(cell).font;
-          var w = textWidth(cell.textContent.trim(), cf) + 20;
-          if (w > maxW) maxW = w;
-        }
-      }
-
-      // tfoot（无 colspan 的列才纳入，避免索引错位）
-      if (table.tFoot) {
-        var footRows = table.tFoot.rows;
-        for (var fr = 0; fr < footRows.length; fr++) {
-          var fc = footRows[fr].cells[idx];
-          if (fc && fc.colSpan === 1) {
-            var ff = window.getComputedStyle(fc).font;
-            var fw = textWidth(fc.textContent.trim(), ff) + 20;
-            if (fw > maxW) maxW = fw;
-          }
-        }
-      }
-
-      var finalW = Math.max(MIN, Math.round(maxW));
-      th.style.width = finalW + 'px';
-      if (onResize) onResize(th, finalW);
+      var widths = measureContentWidths();
+      th.style.width = Math.max(MIN, widths[idx]) + 'px';   // 只写当前列
+      if (onResize) onResize(th, th.offsetWidth);
     }
 
-    thead.addEventListener('mousemove', function (e) {
-      if (drag) return;
-      var th = findTh(e);
-      clearMark();
-      if (th && atEdge(th, e.clientX)) th.classList.add('col-resizing');
-    });
-
-    thead.addEventListener('mouseleave', clearMark);
-
-    thead.addEventListener('mousedown', function (e) {
-      if (e.button !== 0 || drag) return;
-      var th = findTh(e);
-      if (!th || !atEdge(th, e.clientX)) return;
-      e.preventDefault();
-      drag = { th: th, startX: e.clientX, startW: th.getBoundingClientRect().width };
-      th.classList.add('col-resizing');
-      document.body.classList.add('col-resize-active');
-    });
-
-    thead.addEventListener('dblclick', function (e) {
-      var th = findTh(e);
-      if (!th || !atEdge(th, e.clientX)) return;
-      e.preventDefault();
-      cancelDrag();
-      autoFit(th);
-    });
+    /** 「自适应列宽」按钮：所有列各自按真实内容宽重测并写精确 px（一次性全部自适应）。 */
+    function autoFitAll() {
+      var widths = measureContentWidths();
+      for (var m = 0; m < headRow.cells.length; m++) {
+        var cell = headRow.cells[m];
+        cell.style.width = Math.max(MIN, widths[m]) + 'px';   // 每列独立
+        if (onResize) onResize(cell, cell.offsetWidth);
+      }
+    }
 
     document.addEventListener('mousemove', function (e) {
       if (!drag) return;
-      var w = Math.max(MIN, Math.round(drag.startW + (e.clientX - drag.startX)));
+      // 无缩放，clientX 差值即像素差，分隔线直接跟手
+      var dx = e.clientX - drag.startX;
+      var w = Math.max(MIN, Math.round(drag.startW + dx));
       drag.th.style.width = w + 'px';
       if (onResize) onResize(drag.th, w);
     });
 
     document.addEventListener('mouseup', function () {
       if (!drag) return;
-      drag.th.classList.remove('col-resizing');
+      drag.handle.classList.remove('active');
       drag = null;
       document.body.classList.remove('col-resize-active');
+      persistWidths();          // 拖拽结束即记忆，刷新/重渲染不丢失
     });
+
+    // 挂载手柄（首次调用先挂一次；render/renderDetail 重建表头后需再次调用）
+    mountHandles();
+    // 应用已记忆列宽；无记忆则首次内容自适应（render 重建表头后也会再次调用）
+    applyStoredWidths();
+    // 暴露给 render/renderDetail：表头被 innerHTML 重建后，重新把手柄挂上去并恢复记忆
+    table.__mountColHandles = function () { mountHandles(); applyStoredWidths(); };
+    // 暴露给「自适应列宽」按钮：重置为内容自适应
+    table.__resetColWidths = resetToAuto;
   }
 
   /* =================== 事件绑定 =================== */
@@ -860,6 +957,15 @@
       toast((state.showVirtual ? '已显示' : '已隐藏') + '不常用股道（共 ' + vids.length + ' 条）', 'ok');
     });
 
+    // 自适应列宽（重置为内容自适应，清除手动拖动记忆）
+    on('btnAutoFitCols', 'click', function () {
+      var g = $('grid'), dt = $('detailTable');
+      if (g && g.__resetColWidths) g.__resetColWidths();
+      if (dt && dt.__resetColWidths) dt.__resetColWidths();
+      if (g) g.style.setProperty('--col-a-w', $('grid').querySelector('thead th.col-a').offsetWidth + 'px');
+      toast('列宽已重置为自适应', 'ok');
+    });
+
     on('btnCloseDrawer', 'click', closeDetail);
     on('drawerMask', 'click', closeDetail);
     on('btnPrevTrack', 'click', function () { stepDetail(-1); });
@@ -902,12 +1008,14 @@
       }
     });
 
-    // 表头列宽拖动
+    // 表头列宽拖动（persistKey 用于本地记忆，刷新/重渲染不丢失）
+    // flexCols：主页「到站」列作为弹性列，吸收剩余横向空间
     enableColResize($('grid'), function (th, w) {
       // 首列宽变化 → 同步「股道」列的冻结偏移，避免两列之间露缝
       if (th.classList.contains('col-a')) $('grid').style.setProperty('--col-a-w', w + 'px');
-    });
-    enableColResize($('detailTable'));
+    }, 'zhancun.grid.cols', ['到站']);
+    // 明细「记事」列作为弹性列
+    enableColResize($('detailTable'), null, 'zhancun.detail.cols', ['记事']);
   }
 
   /* =================== 空框架 =================== */
