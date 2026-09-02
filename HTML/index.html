@@ -32,7 +32,8 @@
   <div class="menu-wrap">
     <button class="btn" id="btnMenu">功能 ▾</button>
     <div class="menu-list" id="menuList" style="display:none">
-      <div class="menu-item" id="menu31814" data-action="31814">站存计算</div>
+      <div class="menu-item" id="menu31814" data-action="31814">站存计算器</div>
+      <div class="menu-item" id="menuProductivity" data-action="productivity">生产效率表</div>
       <div class="menu-item" id="menuSettings" data-action="settings">
         <svg class="menu-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
           <path d="M13.3 5.2l1.1-2.1L13 1.7l-2.1 1.1a5.5 5.5 0 0 0-1.3-.4L9.2 0H6.8l-.4 2.3a5.5 5.5 0 0 0-1.3.4L3 1.7 1.6 3.1l1.1 2.1a5.5 5.5 0 0 0 0 1.6L1.6 8.9 3 10.3l2.1-1.1a5.5 5.5 0 0 0 1.3.4L6.8 12h2.4l.4-2.3a5.5 5.5 0 0 0 1.3-.4l2.1 1.1L14.4 8.9l-1.1-2.1a5.5 5.5 0 0 0 0-1.6zM8 9a2 2 0 1 1 0-4 2 2 0 0 1 0 4z" fill="currentColor"/>
@@ -176,6 +177,69 @@
           </button>
         </div>
       </div>
+      <div class="setting-divider"></div>
+      <div class="setting-row setting-row-col">
+        <label class="setting-label">车型高亮
+          <span class="setting-hint">对齐 VBA 显示信息.bas：按车种前缀高亮车种/车号，可新增车型并设置颜色/加粗</span>
+        </label>
+        <div class="cartype-cfg" id="carTypeCfg">
+          <div class="cartype-cfg-head">
+            <span>车型</span>
+            <span>备注</span>
+            <span>匹配</span>
+            <span>启用</span>
+            <span>加粗</span>
+            <span>颜色</span>
+            <span></span>
+          </div>
+          <!-- 列表项由 app.js 渲染，新增按钮也置于此容器内（作为最后一项） -->
+          <button class="btn add-spot-btn" id="btnAddCarType" title="新增车型高亮">
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+              <line x1="8" y1="3" x2="8" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <line x1="3" y1="8" x2="13" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <span>新增车型</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 生产效率表浮窗 ================= -->
+<div class="modal" id="modalProductivity">
+  <div class="modal-content prod-modal">
+    <div class="modal-head">
+      <h3 id="prodTitleText">生产效率表</h3>
+      <span class="spacer"></span>
+      <button class="btn" id="prodClose">关闭</button>
+    </div>
+    <div class="modal-body prod-body" id="prodBody">
+      <div class="prod-meta">
+        <label>日期<input type="date" id="prodDate"></label>
+        <label>安全起始日<input type="date" id="prodSafeStart"></label>
+        <label>安全天数<input type="text" id="prodSafety" readonly></label>
+        <label>夜班时长(分)<input type="number" id="prodNightH" min="0" step="1"></label>
+        <label>白班时长(分)<input type="number" id="prodDayH" min="0" step="1"></label>
+      </div>
+      <div class="prod-table-wrap">
+        <table class="prod-table prod-main-table" id="prodMainTable">
+          <thead>
+            <tr>
+              <th class="prod-section-col">班次</th>
+              <th>调机</th>
+              <th>钩数</th>
+              <th>生产时间</th>
+              <th>钩分</th>
+              <th>调机利用率</th>
+              <th>总钩数</th>
+              <th>备注</th>
+            </tr>
+          </thead>
+          <tbody id="prodMainBody"></tbody>
+        </table>
+      </div>
+      <label class="prod-notes-label">记事<textarea id="prodNotes"></textarea></label>
     </div>
   </div>
 </div>
@@ -239,6 +303,7 @@
 <script src="js/aggregate.js" charset="utf-8"></script>
 <script src="js/map-bridge.js" charset="utf-8"></script>
 <script src="js/report31814.js" charset="utf-8"></script>
+<script src="js/productivity.js" charset="utf-8"></script>
 <script src="js/app.js" charset="utf-8"></script>
 
 </body>

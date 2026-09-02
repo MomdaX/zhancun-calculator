@@ -174,22 +174,88 @@
    * utils.js 早于 aggregate.js 加载，模块顶层取不到 COL，故在调用时惰性读取
    * （调用点均在 Aggregate 就绪之后）；取不到时退回原魔数，行为不变。
    */
+  // 10 种默认高亮颜色（下拉选择用）
+  Utils.CAR_COLORS = [
+    { name: '红', value: '#e53e3e' },
+    { name: '橙', value: '#dd6b20' },
+    { name: '黄', value: '#ecc94b' },
+    { name: '绿', value: '#38a169' },
+    { name: '青', value: '#319795' },
+    { name: '蓝', value: '#2b6cb0' },
+    { name: '靛', value: '#5a67d8' },
+    { name: '紫', value: '#805ad5' },
+    { name: '粉', value: '#d53f8c' },
+    { name: '灰', value: '#a0aec0' }
+  ];
+
+  // 车型高亮默认配置（数组，可自由新增/删除，对齐 VBA 显示信息.bas）
+  // match: 'starts'(前缀开头) / 'contains'(包含)；bold 决定颜色作用于文字(加粗)还是背景
+  Utils.defaultCarTypeConfig = [
+    { prefix: 'DK', note: '大D车',  match: 'starts',   on: true, bold: true,  color: '#e53e3e' },
+    { prefix: 'YW', note: '客车',   match: 'starts',   on: true, bold: true,  color: '#e53e3e' },
+    { prefix: 'YZ', note: '客车',   match: 'starts',   on: true, bold: true,  color: '#e53e3e' },
+    { prefix: 'B',  note: '机保车', match: 'starts',   on: true, bold: true,  color: '#805ad5' },
+    { prefix: 'K',  note: '老K车',  match: 'starts',   on: true, bold: true,  color: '#2b6cb0' },
+    { prefix: 'T',  note: '检衡车', match: 'starts',   on: true, bold: true,  color: '#d53f8c' },
+    { prefix: 'P',  note: '盖车',   match: 'starts',   on: true, bold: false, color: '#ecc94b' },
+    { prefix: 'X',  note: '平板车', match: 'contains', on: true, bold: false, color: '#a0aec0' }
+  ];
+
+  Utils.getCarTypeConfig = function () {
+    var s = (global.Store && global.Store.get) ? global.Store.get('carTypeStyle', null) : null;
+    if (Array.isArray(s) && s.length) {
+      return s.map(function (e) {
+        return {
+          prefix: e.prefix || '',
+          note: e.note || '',
+          match: e.match === 'contains' ? 'contains' : 'starts',
+          on: e.on !== false,
+          bold: !!e.bold,
+          color: e.color || '#e53e3e'
+        };
+      });
+    }
+    // 深拷贝默认，避免污染
+    return Utils.defaultCarTypeConfig.map(function (e) {
+      return { prefix: e.prefix, note: e.note, match: e.match, on: e.on, bold: e.bold, color: e.color };
+    });
+  };
+
+  // 按当前配置生成动态样式表（车型高亮）
+  Utils.applyCarTypeStyles = function () {
+    var cfg = Utils.getCarTypeConfig();
+    var css = '';
+    for (var i = 0; i < cfg.length; i++) {
+      var e = cfg[i];
+      if (!e.on || !e.prefix) continue;
+      if (e.bold) css += '.ctc-' + i + '{color:' + e.color + ';font-weight:700;}';
+      else css += '.ctc-' + i + '{background-color:' + e.color + ';}';
+    }
+    var el = document.getElementById('carTypeStyleSheet');
+    if (!el) {
+      el = document.createElement('style');
+      el.id = 'carTypeStyleSheet';
+      document.head.appendChild(el);
+    }
+    el.textContent = css;
+  };
+
   Utils.carStyle = function (row) {
     var C = (global.Aggregate && global.Aggregate.COL) || null;
     var iType = C ? C.CARTYPE : 2;
     var iNo = C ? C.CARNO : 3;
     var t = String(row[iType] || '');
     var n = String(row[iNo] || '');
+    var cfg = Utils.getCarTypeConfig();
     var cls = '', bg = '', clsN = '', bgN = '';
 
-    if (t.indexOf('DK') === 0) { cls = 'car-red'; }
-    else if (t.indexOf('YW') === 0 || t.indexOf('YZ') === 0) { cls = 'car-red'; }
-    else if (t.indexOf('B') === 0) { cls = 'car-purple'; }
-    else if (t.indexOf('K') === 0) { cls = 'car-blue'; }
-    else if (t.indexOf('T') === 0) { cls = 'car-pink'; }
-
-    if (t.indexOf('P') === 0) { bg = 'car-yellow-bg'; }
-    else if (/X/.test(t) && cls === '') { bg = 'car-grey-bg'; }
+    for (var i = 0; i < cfg.length; i++) {
+      var e = cfg[i];
+      if (!e.on || !e.prefix) continue;
+      var hit = e.match === 'contains' ? (t.indexOf(e.prefix) > -1) : (t.indexOf(e.prefix) === 0);
+      if (hit) { cls = 'ctc-' + i; break; }
+    }
+    bg = cls; // 背景与文字用同一类（applyCarTypeStyles 决定颜色/bg）
 
     if (n.charAt(0) === '0') {
       if (n.charAt(1) === '7') { bgN = 'car-self-bold'; clsN = 'car-self-bold'; }

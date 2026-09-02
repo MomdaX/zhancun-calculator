@@ -157,6 +157,9 @@ body {
   background: #f8fafb;
 }
 .modal-head h3 { margin: 0; font-size: 15px; }
+/* 标题栏作为拖动把手 */
+.modal-head { cursor: move; user-select: none; }
+.modal-head button, .modal-head input, .modal-head select, .modal-head a { cursor: default; }
 /* spacer 内可放工具按钮，靠右对齐，紧邻「截图 / 关闭」 */
 .modal-head .spacer {
   flex: 1;
@@ -207,7 +210,7 @@ body {
 }
 .rpt-right {
   flex: 0 0 45%;
-  padding: 1px 10px 1px 10px;
+  padding: 1px 5px 2px 5px;
   overflow: auto;
   background: #f9fafb;
 }
@@ -491,7 +494,7 @@ body {
   -ms-overflow-style: none;     /* IE / 旧版 Edge */
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 6px;
+  padding: 3px;
   background: #fff;
   display: flex;
   flex-direction: column;
@@ -512,6 +515,66 @@ body {
 }
 .rpt-right .cfg-ready-track:hover { background: var(--row-hover); }
 .rpt-right .cfg-ready-track input { margin: 0; width: 14px; height: 14px; }
+/* 待发股道：悬浮出现「+」按钮，点击展开车次输入框 */
+.rpt-right .cfg-ready-add {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px; height: 18px;
+  margin-left: 3px;
+  padding: 0;
+  border: 1px solid var(--border, #cbd5e0);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--accent, #2b6cb0);
+  cursor: pointer;
+  line-height: 1;
+}
+.rpt-right .cfg-ready-item:hover .cfg-ready-add { display: inline-flex; }
+.rpt-right .cfg-ready-add:hover { background: var(--accent, #2b6cb0); color: #fff; border-color: var(--accent-dark, #2c5282); }
+.rpt-right .cfg-ready-train-holder {
+  flex-basis: 100%;
+  padding: 2px 0 3px 0;
+  display: none;
+}
+.rpt-right .cfg-ready-train {
+  width: 56px;
+  font-size: 13px;
+  padding: 2px 5px;
+  border: 1px solid var(--border, #cbd5e0);
+  border-radius: 3px;
+  -moz-appearance: textfield;
+}
+.rpt-right .cfg-ready-train::-webkit-outer-spin-button,
+.rpt-right .cfg-ready-train::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+/* 车次芯片：回车后由输入框翻转而成，右上角红色删除标 */
+.rpt-right .cfg-ready-chip {
+  position: relative;
+  display: none;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 13px;
+  background: var(--accent-soft, #ebf4ff);
+  border: 1px solid var(--accent, #2b6cb0);
+  border-radius: 4px;
+  color: var(--accent-dark, #2c5282);
+  width: fit-content;
+}
+.rpt-right .cfg-ready-chip-del {
+  position: absolute;
+  top: -7px; right: -7px;
+  width: 16px; height: 16px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: #e53e3e;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
 .rpt-right .cfg-btns { display: flex; gap: 8px; padding-top: 10px; }
 .rpt-right .cfg-btns .btn { flex: 1; }
 
@@ -962,6 +1025,107 @@ td.dest span.station-link:hover {
 .settings-modal { width: 460px; }
 .settings-modal .modal-body { min-width: 0; }
 
+/* ================= 生产效率表浮窗 ================= */
+.prod-modal {
+  width: min(960px, 96vw);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(30, 64, 124, .3);
+  box-shadow: 0 18px 48px rgba(15, 28, 60, .22);
+  border-radius: 12px;
+  overflow: hidden;
+  font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, sans-serif;
+  color: #2a3340;
+  -webkit-font-smoothing: antialiased;
+}
+.prod-body { padding: 16px; overflow: auto; min-width: 0; }
+
+/* 标题栏 */
+.prod-modal .modal-head {
+  background: linear-gradient(135deg, #2b5cb0, #1e3f7c);
+  color: #fff;
+  padding: 12px 16px;
+}
+.prod-modal .modal-head h3 { color: #fff; font-weight: 700; letter-spacing: .5px; }
+.prod-modal .modal-head .btn {
+  background: rgba(255, 255, 255, .18);
+  border-color: rgba(255, 255, 255, .4);
+  color: #fff;
+}
+.prod-modal .modal-head .btn:hover { background: rgba(255, 255, 255, .3); }
+
+/* 顶部信息行 */
+.prod-meta { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 14px; }
+.prod-meta label {
+  display: flex; flex-direction: column; gap: 5px;
+  font-size: 12px; font-weight: 600; color: #5a6573; letter-spacing: .3px;
+}
+.prod-meta input {
+  width: 150px; padding: 7px 9px;
+  border: 1px solid #cfd8e3; border-radius: 7px;
+  font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  font-size: 20px; color: #2a3340; background: #fbfcfe;
+  transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.prod-meta input:hover { border-color: #9fb6d4; }
+.prod-meta input:focus { outline: none; background: #fff; border-color: #2b5cb0; box-shadow: 0 0 0 3px rgba(43, 92, 176, .16); }
+
+/* 表格整体 */
+.prod-table-wrap { border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0, 0, 0, .08); }
+.prod-main-table { width: 100%; border-collapse: collapse; font-size: 16px; table-layout: fixed; }
+.prod-main-table tbody tr { font-size: 20px; }
+.prod-main-table tbody tr:nth-child(n+7) td { font-size: 18px; }
+.prod-main-table .prod-sum-label { font-weight: 700; text-align: center; }
+.prod-main-table th, .prod-main-table td { border: 1px solid #d4e0ef; padding: 9px 3px; text-align: center; white-space: nowrap; }
+
+/* 表头：深蓝渐变 + 吸顶 */
+.prod-main-table thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: linear-gradient(180deg, #2b5cb0, #1e3f7c);
+  color: #fff; font-weight: 600; letter-spacing: .5px;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, .15);
+}
+
+/* 班次分组底色：夜班浅蓝、白班浅黄、合计浅灰 */
+.prod-main-table tbody tr:nth-child(-n+3) { background: #f2f7fd; }
+.prod-main-table tbody tr:nth-child(n+4):nth-child(-n+6) { background: #fdfcf2; }
+.prod-main-table tbody tr:nth-child(n+7) { background: #f6f7f9; }
+.prod-main-table tbody tr:hover { background: #e8f0fb; }
+.prod-section-col { width: 72px; }
+.prod-main-table td:nth-child(2), .prod-main-table th:nth-child(2) { width: 168px; }
+.prod-section-label { background: #eef3fb !important; font-weight: 700; color: #1e3f7c; vertical-align: middle; letter-spacing: .5px; }
+
+/* 计算单元格：浅蓝底 + 等宽数字 */
+.prod-calc { background: rgba(43, 92, 176, .05); font-variant-numeric: tabular-nums; color: #1f3d5e; font-feature-settings: "tnum"; }
+
+/* 输入单元格 */
+.prod-in {
+  width: 100%;text-align: center;
+  border: none; border-radius: 6px;
+  font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  font-size: 20px; color: #2a3340; background: transparent;
+  transition: background .15s, box-shadow .15s;
+  -moz-appearance: textfield; appearance: textfield;
+}
+.prod-in:hover { border-color: #9fb6d4; }
+.prod-in:focus { outline: none; background: #fff; border-color: #2b5cb0; box-shadow: 0 0 0 3px rgba(43, 92, 176, .16); }
+.prod-in::-webkit-outer-spin-button, .prod-in::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* 底部记事 */
+.prod-notes-label {
+  display: flex; flex-direction: column; gap: 5px;
+  font-size: 12px; font-weight: 600; color: #5a6573; letter-spacing: .3px; margin-top: 14px;
+}
+.prod-notes-label textarea {
+  width: 100%; min-height: 64px; resize: vertical; padding: 9px;
+  border: 1px solid #cfd8e3; border-radius: 7px;
+  font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; font-size: 13px; color: #2a3340;
+  background: #fbfcfe; transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.prod-notes-label textarea:hover { border-color: #9fb6d4; }
+.prod-notes-label textarea:focus { outline: none; background: #fff; border-color: #2b5cb0; box-shadow: 0 0 0 3px rgba(43, 92, 176, .16); }
+
 .setting-row {
   display: flex;
   flex-direction: column;
@@ -1167,6 +1331,34 @@ td.dest span.station-link:hover {
   align-items: center;
   gap: 4px;
 }
+
+/* 车型高亮配置表格 */
+.cartype-cfg { margin-top: 8px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.cartype-cfg-head, .cartype-cfg-row {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr 0.8fr 0.6fr 0.6fr 1fr 28px;
+  align-items: center;
+  gap: 8px;
+  padding: 3px;
+}
+.cartype-cfg-head { background: #f3f6fb; font-size: 12px; font-weight: 600; color: var(--text-dim); }
+.cartype-cfg-row:nth-child(even) { background: #fafbfc; }
+.cartype-cfg-row input[type="text"] {
+  width: 100%; padding: 4px 6px; font-size: 13px;
+  border: 1px solid var(--border-strong); border-radius: 4px; font-family: inherit;
+}
+.cartype-cfg-row select {
+  width: 100%; padding: 4px 4px; font-size: 13px;
+  border: 1px solid var(--border-strong); border-radius: 4px; background: #fff;
+}
+.cartype-cfg-row input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; margin: 0 auto; display: block; }
+.cartype-cfg-row .ct-del {
+  width: 24px; height: 24px; padding: 0;
+  border: none; border-radius: 50%;
+  background: #e53e3e; color: #fff; font-size: 14px; line-height: 1; cursor: pointer;
+}
+.cartype-cfg-row .ct-del:hover { background: #c53030; }
+.cartype-cfg .add-spot-btn { margin: 10px; }
 
 /* 菜单项中的图标 */
 .menu-icon {

@@ -936,12 +936,14 @@
      * 注册后自动获得「点空白处关闭 + ESC 关栈顶」，新增面板无需再改 ESC 处理。 */
     UI.Modal.register('modal31814');
     UI.Modal.register('modalSettings', { onOpen: refreshFolderPath });
+    UI.Modal.register('modalProductivity');
     UI.Drawer.register('drawer', { maskId: 'drawerMask' });
 
     // 各面板的关闭按钮
     on('btnCloseDrawer', 'click', closeDetail);
     on('rptClose', 'click', function () { UI.Modal.close('modal31814'); });
     on('btnSettingsClose', 'click', function () { UI.Modal.close('modalSettings'); });
+    on('prodClose', 'click', function () { UI.Modal.close('modalProductivity'); });
 
     // 功能下拉菜单（组件负责展开 / 收起 / 点外部关闭）
     UI.Dropdown('btnMenu', 'menuList', {
@@ -950,6 +952,8 @@
           window.Report31814.open(state.rawRows, state.currentFile);
         } else if (action === 'settings') {
           UI.Modal.open('modalSettings');
+        } else if (action === 'productivity' && typeof window.Productivity !== 'undefined') {
+          window.Productivity.open();
         }
       }
     });
@@ -1102,12 +1106,104 @@
       }
     }
 
+    // 车型高亮：基于 Utils.getCarTypeConfig 在设置面板渲染可编辑列表
+    function initCarTypeConfig() {
+      if (!Utils.applyCarTypeStyles) return;
+      Utils.applyCarTypeStyles(); // 首屏即应用已存配置
+
+      var box = $('carTypeCfg');
+      if (!box) return;
+
+      function colorOptions(sel) {
+        return (Utils.CAR_COLORS || []).map(function (c) {
+          return '<option value="' + escapeHtml(c.value) + '"' +
+            (c.value.toLowerCase() === String(sel).toLowerCase() ? ' selected' : '') + '>' +
+            escapeHtml(c.name) + '</option>';
+        }).join('');
+      }
+
+      function persist(cfg) {
+        if (Store && Store.set) Store.set('carTypeStyle', cfg);
+        Utils.applyCarTypeStyles();
+        if (state.detailIdx != null) openDetail(state.detailIdx); // 实时刷新明细高亮
+      }
+
+      function render() {
+        var cfg = Utils.getCarTypeConfig();
+        // 移除旧行（保留新增按钮）
+        Array.prototype.slice.call(box.querySelectorAll('.cartype-cfg-row')).forEach(function (n) { n.remove(); });
+        cfg.forEach(function (e, idx) {
+          var row = document.createElement('div');
+          row.className = 'cartype-cfg-row';
+          row.setAttribute('data-idx', idx);
+          row.innerHTML =
+            '<input type="text" class="ct-prefix" value="' + escapeHtml(e.prefix) + '" placeholder="如 DK">' +
+            '<input type="text" class="ct-note" value="' + escapeHtml(e.note) + '" placeholder="备注">' +
+            '<select class="ct-match">' +
+              '<option value="starts"' + (e.match !== 'contains' ? ' selected' : '') + '>开头</option>' +
+              '<option value="contains"' + (e.match === 'contains' ? ' selected' : '') + '>包含</option>' +
+            '</select>' +
+            '<input type="checkbox" class="ct-on" ' + (e.on ? 'checked' : '') + ' title="启用">' +
+            '<input type="checkbox" class="ct-bold" ' + (e.bold ? 'checked' : '') + ' title="加粗">' +
+            '<select class="ct-color">' + colorOptions(e.color) + '</select>' +
+            '<button type="button" class="ct-del" title="删除">×</button>';
+          box.insertBefore(row, $('btnAddCarType'));
+
+          var prefixEl = row.querySelector('.ct-prefix');
+          var noteEl = row.querySelector('.ct-note');
+          var matchEl = row.querySelector('.ct-match');
+          var onEl = row.querySelector('.ct-on');
+          var boldEl = row.querySelector('.ct-bold');
+          var colorEl = row.querySelector('.ct-color');
+          var delEl = row.querySelector('.ct-del');
+
+          function update() {
+            var cur = Utils.getCarTypeConfig();
+            cur[idx] = {
+              prefix: prefixEl.value.trim(),
+              note: noteEl.value.trim(),
+              match: matchEl.value,
+              on: onEl.checked,
+              bold: boldEl.checked,
+              color: colorEl.value
+            };
+            persist(cur);
+          }
+          [prefixEl, noteEl, matchEl, onEl, boldEl, colorEl].forEach(function (el) {
+            el.addEventListener('input', update);
+            el.addEventListener('change', update);
+          });
+          delEl.addEventListener('click', function () {
+            var cur = Utils.getCarTypeConfig();
+            cur.splice(idx, 1);
+            persist(cur);
+            render();
+          });
+        });
+      }
+
+      render();
+
+      var addBtn = $('btnAddCarType');
+      if (addBtn) {
+        addBtn.addEventListener('click', function () {
+          var cur = Utils.getCarTypeConfig();
+          cur.push({ prefix: '', note: '', match: 'starts', on: true, bold: true, color: '#e53e3e' });
+          persist(cur);
+          render();
+        });
+      }
+    }
+
     // 卸车地点（aggregate 段2 读取，默认 永鑫/货场/天盛/港务局）
     initSpotConfig('unloadSpots', 'btnAddUnloadSpot', 'unloadSpots',
                    ['永鑫', '货场', '天盛', '港务局']);
     // 黑罐识别（aggregate 段1 G7 罐按收货人识别，默认 中粮/外运）
     initSpotConfig('blackTankSpots', 'btnAddBlackTankSpot', 'blackTankSpots',
                    ['中粮', '外运']);
+
+    // 车型高亮配置（对齐 VBA 显示信息.bas）
+    initCarTypeConfig();
 
     // 表头列宽拖动（persistKey 用于本地记忆，刷新/重渲染不丢失）
     ColResize.enable($('grid'), {
@@ -1133,8 +1229,50 @@
     render();
   }
 
+  /* =================== 浮窗拖动 =================== */
+  // 在标题栏(.modal-head)按下可拖动浮窗移动位置；按钮/输入框不触发拖动
+  function initModalDrag() {
+    document.addEventListener('pointerdown', function (e) {
+      var handle = e.target.closest ? e.target.closest('.modal-head') : null;
+      if (!handle) return;
+      if (e.target.closest('button, input, select, a, .col-handle')) return;
+      var modal = handle.closest('.modal');
+      if (!modal || !modal.classList.contains('show')) return;
+      var content = modal.querySelector('.modal-content');
+      if (!content) return;
+
+      var rect = content.getBoundingClientRect();
+      var startX = e.clientX, startY = e.clientY;
+      var origLeft = rect.left, origTop = rect.top;
+      content.style.position = 'fixed';
+      content.style.margin = '0';
+      content.style.left = origLeft + 'px';
+      content.style.top = origTop + 'px';
+      content.style.zIndex = '200';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+
+      function move(ev) {
+        var nx = origLeft + (ev.clientX - startX);
+        var ny = origTop + (ev.clientY - startY);
+        nx = Math.max(0, Math.min(nx, window.innerWidth - content.offsetWidth));
+        ny = Math.max(0, Math.min(ny, window.innerHeight - content.offsetHeight));
+        content.style.left = nx + 'px';
+        content.style.top = ny + 'px';
+      }
+      function up() {
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+        document.body.style.userSelect = '';
+      }
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', up);
+    });
+  }
+
   /* =================== 初始化 =================== */
   function init() {
+    initModalDrag();
     // 方向库（惰性单例：全局只解析一次，报表模块共用同一份实例）
     if (typeof window.DirectionData !== 'string') {
       toast('方向库未加载，到站着色将不可用', 'error');

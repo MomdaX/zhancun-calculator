@@ -291,8 +291,13 @@
     });
 
     // 待发股道合计：按股道顺序升序（数字道在前，X 道在后）
+    // 若该股道设了车次，则把「股道名」替换为「车次」（如 2道/58 → 34102/58）
     var 待发股道合计 = Object.keys(gds).sort(Utils.compareTrackId)
-      .map(function (tr) { return tr + '道/' + gds[tr]; }).join(' ');
+      .map(function (tr) {
+        var train = readyTrains[tr];
+        var prefix = train ? String(train) : (tr + '道');
+        return prefix + '/' + gds[tr];
+      }).join(' ');
 
     // 敞顶箱列表：敞顶箱/总数 + 编号/数量
     var openTotal = Object.keys(openBox).reduce(function (a, k) { return a + openBox[k]; }, 0);
@@ -717,6 +722,18 @@
   /* ========================== 右侧条件面板 ========================== */
   var currentRawRows = [];
   var config = { drr: {}, crr: {} };
+  var readyTrains = {};   // 待发股道 → 车次 映射（如 {"2":"34102"}），用于替换待开中的股道名
+
+  // 根据 readyTrains 更新某股道「车次芯片」的显隐与文案
+  function updateReadyChip(item, id) {
+    if (!item) return;
+    var chip = item.querySelector('.cfg-ready-chip');
+    var text = item.querySelector('.cfg-ready-chip-text');
+    if (!chip) return;
+    var val = readyTrains[id];
+    if (val != null) { text.textContent = val; chip.style.display = 'inline-flex'; }
+    else { chip.style.display = 'none'; }
+  }
 
   function ensureConfigUI() {
     if (Utils.$('cfgPanel').innerHTML.trim()) return;
@@ -907,11 +924,105 @@
     var readyIds = (global.YardConfig ? global.YardConfig.idsOfGroup('td') : [])
       .concat(global.YardConfig ? global.YardConfig.idsOfGroup('x') : []);
     readyIds.forEach(function (id) {
+      var item = document.createElement('div');
+      item.className = 'cfg-ready-item';
+      item.setAttribute('data-ready-id', id);
+
       var label = document.createElement('label');
       label.className = 'cfg-ready-track';
       label.innerHTML = '<input type="checkbox" data-ready="' + Utils.escapeHtml(id) + '"> ' +
-                        Utils.escapeHtml(trackLabel(id));
-      readyWrap.appendChild(label);
+                        '<span class="cfg-ready-name">' + Utils.escapeHtml(trackLabel(id)) + '</span>';
+
+      // 悬浮出现的「+」按钮（SVG 四方块带加号）
+      var addBtn = document.createElement('button');
+      addBtn.type = 'button';
+      addBtn.className = 'cfg-ready-add';
+      addBtn.setAttribute('aria-label', '添加车次');
+      addBtn.title = '添加车次';
+      addBtn.innerHTML = '<svg viewBox="0 0 14 14" width="10" height="10" aria-hidden="true">' +
+        '<line x1="7" y1="2" x2="7" y2="12" stroke="currentColor" stroke-width="2"/>' +
+        '<line x1="2" y1="7" x2="12" y2="7" stroke="currentColor" stroke-width="2"/></svg>';
+
+      // 展开的车次输入/已录入车次芯片（默认隐藏）
+      var holder = document.createElement('div');
+      holder.className = 'cfg-ready-train-holder';
+      holder.innerHTML =
+        '<span class="cfg-ready-chip" data-chip-for="' + Utils.escapeHtml(id) + '">' +
+          '<span class="cfg-ready-chip-text"></span>' +
+          '<button type="button" class="cfg-ready-chip-del" title="删除" aria-label="删除">×</button>' +
+        '</span>' +
+        '<input type="text" class="cfg-ready-train" data-train-for="' +
+        Utils.escapeHtml(id) + '" maxlength="8" placeholder="车次">';
+
+      label.appendChild(addBtn);
+      item.appendChild(label);
+      item.appendChild(holder);
+      readyWrap.appendChild(item);
+    });
+
+    // 展开编辑：显示输入框（预填当前值）、隐藏芯片，焦点落入输入框
+    function openEditor(item, id) {
+      var holder = item.querySelector('.cfg-ready-train-holder');
+      var inp = item.querySelector('.cfg-ready-train');
+      var chip = item.querySelector('.cfg-ready-chip');
+      if (holder) holder.style.display = 'block';
+      if (inp) { inp.value = readyTrains[id] != null ? readyTrains[id] : ''; inp.style.display = 'inline-block'; inp.focus(); }
+      if (chip) chip.style.display = 'none';
+    }
+
+    // 「+」按钮 / 芯片删除标：点击处理
+    readyWrap.addEventListener('click', function (e) {
+      // 芯片右上角红色删除标：点击移除该车次
+      var del = e.target.closest ? e.target.closest('.cfg-ready-chip-del') : null;
+      if (del) {
+        e.preventDefault(); e.stopPropagation();
+        var item = del.closest('.cfg-ready-item');
+        var id = item.getAttribute('data-ready-id');
+        delete readyTrains[id];
+        if (global.Store) global.Store.set('readyTrains', readyTrains);
+        updateReadyChip(item, id);
+        // 删除后收起整个编辑区（含输入框），由「+」按钮重新添加
+        var holder = item.querySelector('.cfg-ready-train-holder');
+        if (holder) holder.style.display = 'none';
+        var inp = item.querySelector('.cfg-ready-train');
+        if (inp) inp.style.display = '';
+        runCalculation();
+        return;
+      }
+      var addBtn = e.target.closest ? e.target.closest('.cfg-ready-add') : null;
+      if (!addBtn) return;
+      // 阻止 label 的默认行为，避免点击"+"时误切换股道复选框
+      e.preventDefault();
+      e.stopPropagation();
+      var item = addBtn.closest('.cfg-ready-item');
+      var holder = item && item.querySelector('.cfg-ready-train-holder');
+      if (!holder) return;
+      if (holder.style.display === 'block') holder.style.display = 'none';
+      else openEditor(item, item.getAttribute('data-ready-id'));
+    });
+    // 车次输入：实时更新映射并持久记忆、重算（回车后翻转成芯片）
+    readyWrap.addEventListener('input', function (e) {
+      var inp = e.target.closest ? e.target.closest('.cfg-ready-train') : null;
+      if (!inp) return;
+      var id = inp.getAttribute('data-train-for');
+      var val = inp.value.trim();
+      if (val) readyTrains[id] = val; else delete readyTrains[id];
+      if (global.Store) global.Store.set('readyTrains', readyTrains);
+      runCalculation();
+    });
+    // 回车确认：把输入框翻转成「车次芯片」，隐藏输入框
+    readyWrap.addEventListener('keydown', function (e) {
+      var inp = e.target.closest ? e.target.closest('.cfg-ready-train') : null;
+      if (!inp || e.key !== 'Enter') return;
+      e.preventDefault();
+      var item = inp.closest('.cfg-ready-item');
+      var id = inp.getAttribute('data-train-for');
+      var val = inp.value.trim();
+      if (val) readyTrains[id] = val; else delete readyTrains[id];
+      if (global.Store) global.Store.set('readyTrains', readyTrains);
+      inp.style.display = 'none';
+      updateReadyChip(item, id);
+      runCalculation();
     });
 
     // 默认待装
@@ -1019,6 +1130,19 @@
     ['corrC', 'corrX', 'corrP', 'corrG'].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.value = (savedCorr[id] != null ? savedCorr[id] : '');
+    });
+    // 打开时恢复车次输入（待发股道 → 车次映射）
+    var savedTrains = (global.Store && global.Store.get) ? global.Store.get('readyTrains', {}) : {};
+    readyTrains = savedTrains || {};
+    document.querySelectorAll('#cfgReady .cfg-ready-item').forEach(function (item) {
+      var id = item.getAttribute('data-ready-id');
+      if (readyTrains[id] != null) {
+        var holder = item.querySelector('.cfg-ready-train-holder');
+        if (holder) holder.style.display = 'block';
+        var inp = item.querySelector('.cfg-ready-train');
+        if (inp) inp.style.display = 'none';
+        updateReadyChip(item, id);
+      }
     });
     // 打开即以「未选择任何股道」的状态计算一次，
     // 之后用户勾选待装/待发股道会自动重算
