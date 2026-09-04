@@ -81,7 +81,7 @@
     detailSel: null,       // 明细多选行集合（存 r.raw 的下标）
     printDate: null,       // 数据源打印日期（作为停时基准）
     fileList: null,       // 文件夹内文件列表（多文件时使用）
-    showVirtual: true     // 是否显示虚拟股道（X 线）
+    showEmptyGroups: true  // 是否显示空线分组（分组内全部股道无车时隐藏）
   };
 
   var $ = Utils.$;
@@ -433,8 +433,27 @@
    */
   function visibleRows() {
     var out = [];
+    // 当需要隐藏空线分组时，先找出哪些分组内全部股道均无车
+    var emptyGroups = {};
+    if (!state.showEmptyGroups) {
+      var groupStat = {}; // groupName -> { total, hasCar }
+      state.rows.forEach(function (r) {
+        var cfg = YardConfig.getTrack(r.track);
+        if (!cfg) return;
+        var gn = cfg.groupName;
+        if (!groupStat[gn]) groupStat[gn] = { total: 0, hasCar: 0 };
+        groupStat[gn].total++;
+        if (r.count > 0) groupStat[gn].hasCar++;
+      });
+      Object.keys(groupStat).forEach(function (gn) {
+        if (groupStat[gn].hasCar === 0) emptyGroups[gn] = true;
+      });
+    }
     state.rows.forEach(function (r, idx) {
-      if (!state.showVirtual && YardConfig.isVirtual(r.track)) return;
+      if (!state.showEmptyGroups) {
+        var cfg = YardConfig.getTrack(r.track);
+        if (cfg && emptyGroups[cfg.groupName]) return;
+      }
       out.push({ r: r, idx: idx });
     });
     return out;
@@ -456,12 +475,12 @@
     if (btn) btn.style.display = show ? '' : 'none';
   }
 
-  /** 同步工具栏「虚拟股道」开关的文案与高亮态 */
+  /** 同步工具栏「空线分组」开关的文案与高亮态 */
   function syncVirtualBtn() {
     var btn = $('btnToggleVirtual');
     if (!btn) return;
-    var on = state.showVirtual;
-    btn.textContent = on ? '隐藏非常用股道' : '显示非常用股道';
+    var on = state.showEmptyGroups;
+    btn.textContent = on ? '隐藏空线分组' : '显示空线分组';
     btn.classList.toggle('active', on);
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
@@ -1018,15 +1037,13 @@
       state.selectedIdx = +tr.getAttribute('data-idx');
     });
 
-    // 虚拟股道显示/隐藏开关
+    // 空线分组显示/隐藏开关
     on('btnToggleVirtual', 'click', function () {
-      var vids = YardConfig.virtualIds || [];
-      if (!vids.length) { toast('配置中没有虚拟股道', 'error'); return; }
-      state.showVirtual = !state.showVirtual;
-      Store.set('showVirtual', state.showVirtual);   // 持久记忆，刷新后保持
+      state.showEmptyGroups = !state.showEmptyGroups;
+      Store.set('showEmptyGroups', state.showEmptyGroups);   // 持久记忆，刷新后保持
       syncVirtualBtn();
       render();
-      toast((state.showVirtual ? '已显示' : '已隐藏') + '不常用股道（共 ' + vids.length + ' 条）', 'ok');
+      toast((state.showEmptyGroups ? '已显示' : '已隐藏') + '空线分组', 'ok');
     });
 
     // 注意事项列：点击表头「注意事项」→ 整表收起/展开（控件为 th 上的 ::after 伪元素）
@@ -1450,9 +1467,9 @@
 
     bind();
 
-    // 恢复「隐藏非常用股道」的持久记忆（设置里切换时写入 Store.showVirtual）
-    var savedVirtual = Store.get('showVirtual', null);
-    if (savedVirtual !== null) state.showVirtual = !!savedVirtual;
+    // 恢复「隐藏空线分组」的持久记忆（设置里切换时写入 Store.showEmptyGroups）
+    var savedEmpty = Store.get('showEmptyGroups', null);
+    if (savedEmpty !== null) state.showEmptyGroups = !!savedEmpty;
 
     // 恢复「注意事项收起」的持久记忆（表头点击切换时写入 Store.notesCollapsed）
     var savedNotes = Store.get('notesCollapsed', null);

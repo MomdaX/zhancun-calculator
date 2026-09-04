@@ -878,7 +878,6 @@ table.detail thead th {
   background: var(--head-bg);
   text-align: center;
 }
-table.detail tbody tr:nth-child(even) td { background: var(--row-alt); }
 table.detail tbody tr:hover td { background: var(--row-hover); }
 table.detail tbody tr { cursor: pointer; }
 /* 选中行（多选）：以背景色高亮为主，去掉外框，保持行内无框线 */
