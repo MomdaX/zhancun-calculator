@@ -188,7 +188,7 @@
 
       var sm = nmm + dmm, sh = nh + dh;
       setText('sHook' + i, sh);
-      setText('sMin' + i, sm);
+      setText('sMin' + i, fmt(sm / 60, 1));
       setText('sScore' + i, sh ? fmt(sm / sh, 1) : '0');
       setText('sUtil' + i, (nm + dm) ? fmt(sm / (nm + dm) * 100, 1) + '%' : '0%');
       setText('sRemark' + i, fmt(sm / 60, 1));

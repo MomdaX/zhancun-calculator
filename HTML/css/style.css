@@ -640,24 +640,26 @@ table.grid td.col-a {
   line-height: 1.45;
   text-align: left;
 }
-table.grid th.col-a { z-index: 6; background: var(--head-bg); cursor: pointer; }
-/* 注意事项表头「收起/展开」控件：鼠标移入表头时浮现的圆形伪元素，
- * 点击穿透到 th 触发整表 .notes-collapsed 切换（pointer-events:none） */
-table.grid th.col-a::after {
-  content: '';
+table.grid th.col-a { z-index: 6; background: var(--head-bg); }
+/* 注意事项列：行内右侧「收起/展开」按钮，鼠标悬停行时浮现 */
+table.grid tbody td.col-a {
+  position: relative;
+}
+table.grid tbody td.col-a::after {
+  content: '收起';
   position: absolute;
-  top: 3px; right: 14px;            /* 避开右缘拖拽手柄 */
-  width: 15px; height: 15px;
-  border-radius: 50%;
+  top: 50%; right: 6px;
+  transform: translateY(-50%);
+  padding: 2px 8px;
+  border-radius: 3px;
   background: #2c7be5; color: #fff;
-  font: 12px/15px system-ui, sans-serif; text-align: center;
+  font-size: 11px; line-height: 1.5;
   opacity: 0; transition: opacity .15s;
   pointer-events: none;
+  white-space: nowrap;
 }
-table.grid th.col-a:hover::after { opacity: .92; }
-/* 展开态显示「−」(点击收起)，收起态显示「+」(点击展开) */
-table.grid:not(.notes-collapsed) th.col-a::after { content: '\2212'; }
-table.grid.notes-collapsed th.col-a::after { content: '\002B'; }
+table.grid tbody td.col-a:hover::after { opacity: .92; }
+table.grid.notes-collapsed tbody td.col-a::after { content: '展开'; }
 
 /* 注意事项正文容器：收起时限制高度并底部淡出，展开时原样逐条换行 */
 table.grid td.col-a .note-body {

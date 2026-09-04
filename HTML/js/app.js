@@ -1046,17 +1046,21 @@
       toast((state.showEmptyGroups ? '已显示' : '已隐藏') + '空线分组', 'ok');
     });
 
-    // 注意事项列：点击表头「注意事项」→ 整表收起/展开（控件为 th 上的 ::after 伪元素）
+    // 注意事项列：点击行内右侧按钮 → 整表收起/展开（捕获阶段，先于行选中）
     var gridEl = $('grid');
     if (gridEl) {
       gridEl.addEventListener('click', function (e) {
-        var th = e.target.closest ? e.target.closest('th.col-a') : null;
-        if (!th) return;                              // 仅表头「注意事项」触发
-        if (e.target.closest('.col-handle')) return;  // 拖拽手柄不触发
+        var td = e.target.closest ? e.target.closest('td.col-a') : null;
+        if (!td) return;
+        // 仅当点击在单元格右侧按钮区域（右 32px）时触发
+        var rect = td.getBoundingClientRect();
+        if (e.clientX - rect.left < rect.width - 32) return;
+        e.stopPropagation();
+        e.preventDefault();
         var collapsed = gridEl.classList.toggle('notes-collapsed');
-        Store.set('notesCollapsed', collapsed);       // 持久记忆，刷新后保持
-        toast(collapsed ? '已收起注意事项（悬停表头「+」可展开）' : '已展开注意事项', 'ok');
-      });
+        Store.set('notesCollapsed', collapsed);
+        toast(collapsed ? '已收起注意事项' : '已展开注意事项', 'ok');
+      }, true);  // true = 捕获阶段，先于 tbody 行选中触发
     }
 
     // 自适应列宽（重置为内容自适应，清除手动拖动记忆）
