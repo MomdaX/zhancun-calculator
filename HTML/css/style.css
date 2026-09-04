@@ -640,16 +640,80 @@ table.grid td.col-a {
   line-height: 1.45;
   text-align: left;
 }
-table.grid th.col-a { z-index: 6; background: var(--head-bg); }
-table.grid td.col-b, table.grid th.col-b {
-  position: sticky; left: var(--col-a-w, 110px); z-index: 3; background: var(--panel);
+table.grid th.col-a { z-index: 6; background: var(--head-bg); cursor: pointer; }
+/* 注意事项表头「收起/展开」控件：鼠标移入表头时浮现的圆形伪元素，
+ * 点击穿透到 th 触发整表 .notes-collapsed 切换（pointer-events:none） */
+table.grid th.col-a::after {
+  content: '';
+  position: absolute;
+  top: 3px; right: 14px;            /* 避开右缘拖拽手柄 */
+  width: 15px; height: 15px;
+  border-radius: 50%;
+  background: #2c7be5; color: #fff;
+  font: 12px/15px system-ui, sans-serif; text-align: center;
+  opacity: 0; transition: opacity .15s;
+  pointer-events: none;
 }
-table.grid th.col-b { z-index: 6; background: var(--head-bg); }
+table.grid th.col-a:hover::after { opacity: .92; }
+/* 展开态显示「−」(点击收起)，收起态显示「+」(点击展开) */
+table.grid:not(.notes-collapsed) th.col-a::after { content: '\2212'; }
+table.grid.notes-collapsed th.col-a::after { content: '\002B'; }
+
+/* 注意事项正文容器：收起时限制高度并底部淡出，展开时原样逐条换行 */
+table.grid td.col-a .note-body {
+  position: relative;
+  line-height: 1.5;
+  max-height: none;
+  overflow: hidden;
+}
+table.grid.notes-collapsed td.col-a .note-body { max-height: 3em; }   /* 约 2 行 */
+table.grid.notes-collapsed td.col-a .note-body::after {
+  content: '';
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 1.1em;
+  background: linear-gradient(to bottom, rgba(255,255,255,0), var(--panel));
+  pointer-events: none;
+}
+/* 分组合并列（股道前）：冻结在注意事项列右侧，分组名竖排显示 */
+table.grid td.col-b-group, table.grid th.col-b-group {
+  position: sticky; left: var(--col-a-w, 110px); z-index: 3; background: var(--panel);
+  font-weight: 600; text-align: center; vertical-align: middle;
+  writing-mode: vertical-rl;        /* 分组名竖排 */
+  text-orientation: upright;        /* 中文/字母均正立，竖排阅读 */
+  letter-spacing: 2px;
+}
+table.grid th.col-b-group { z-index: 6; background: var(--head-bg); }
+/* 表头分组列：本身为空（合并到「股道」标签），不需要竖排；强制横排避免与合并标签产生坐标/堆叠干扰 */
+table.grid thead th.col-b-group { writing-mode: horizontal-tb; text-orientation: mixed; }
+table.grid td.col-b, table.grid th.col-b {
+  position: sticky; left: calc(var(--col-a-w, 110px) + var(--col-b-group-w, 32px)); z-index: 3; background: var(--panel);
+  overflow: visible;                /* 避免 sticky 容器裁掉横跨左边的合并标签 */
+}
+table.grid th.col-b { z-index: 6; background: var(--head-bg); overflow: visible; }
+/* 分组合并列 + 股道列表头合并为「股道」：分组列表头去掉右分隔线并与股道列连成一体；
+ * 「股道」标签挂在股道列表头内，用 left:-group + right:0 锚定横跨 group+track 两列，
+ * flex 居中显示（pointer-events:none 不挡拖拽手柄） */
+table.grid thead th.col-b-group { border-right: none; }
+table.grid thead th.col-b .grp-head-merge {
+  position: absolute;
+  left: calc(-1 * var(--col-b-group-w, 32px));
+  right: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+}
 table.grid tbody tr:hover td.col-a,
+table.grid tbody tr:hover td.col-b-group,
 table.grid tbody tr:hover td.col-b { background: var(--row-hover); }
 
 table.grid tbody tr:nth-child(even) td { background: var(--row-alt); }
 table.grid tbody tr:nth-child(even) td.col-a,
+table.grid tbody tr:nth-child(even) td.col-b-group,
 table.grid tbody tr:nth-child(even) td.col-b { background: var(--row-alt); }
 table.grid tbody tr:hover td { background: var(--row-hover); }
 table.grid tbody tr.selected td {
@@ -667,6 +731,10 @@ table.grid tbody tr.selected {
 table.grid tbody tr.selected td.col-a {
   box-shadow: inset 2px 0 0 #e03131,   /* 左外缘 */
               inset 0 2px 0 #e03131,    /* 上外缘 */
+              inset 0 -2px 0 #e03131;   /* 下外缘 */
+}
+table.grid tbody tr.selected td.col-b-group {
+  box-shadow: inset 0 2px 0 #e03131,   /* 上外缘 */
               inset 0 -2px 0 #e03131;   /* 下外缘 */
 }
 table.grid tbody tr.selected td.col-b {
@@ -709,7 +777,7 @@ table.grid tfoot td {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-table.grid tfoot td.col-a, table.grid tfoot td.col-b {
+table.grid tfoot td.col-a, table.grid tfoot td.col-b-group, table.grid tfoot td.col-b {
   z-index: 7;
   text-align: center;
   background: #eaf1f7;
@@ -832,7 +900,7 @@ table.detail .car-purple { color: #8e44ad; font-weight: 700; }      /* B → 紫
 table.detail .car-blue { color: #2980b9; font-weight: 700; }        /* K → 蓝加粗 */
 table.detail .car-pink { color: #e84393; font-weight: 700; }        /* T → 粉红加粗 */
 table.detail .car-yellow-bg { background: #fff9c4 !important; }          /* P → 黄底 */
-table.detail .car-grey-bg { background: #dfe6e9 !important; }           /* X/自备罐 → 灰底 */
+table.detail .car-grey-bg { background: #bcc6cf !important; }           /* 自备罐 → 灰底（加深） */
 table.detail .car-self-bold { font-weight: 700; }                   /* 中粮罐 → 加粗 */
 
 /* ================= 表头列宽拖拽 =================
@@ -1336,12 +1404,19 @@ td.dest span.station-link:hover {
 .cartype-cfg { margin-top: 8px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .cartype-cfg-head, .cartype-cfg-row {
   display: grid;
-  grid-template-columns: 1fr 1.4fr 0.8fr 0.6fr 0.6fr 1fr 28px;
+  /* 列宽比例，依次对应表头：车型 / 备注 / 匹配 / 启用 / 加粗 / 颜色 / 删除按钮
+     （与 index.html 中 .cartype-cfg-head 的 7 个 <span> 一一对应，改序需同步）
+     fr 之间按比例分配剩余空间，改某个值会连带影响其它列，宜小幅调整。 */
+  grid-template-columns: 0.7fr 0.9fr 1.2fr 0.6fr 0.6fr 0.7fr 28px;
   align-items: center;
   gap: 8px;
   padding: 3px;
 }
-.cartype-cfg-head { background: #f3f6fb; font-size: 12px; font-weight: 600; color: var(--text-dim); }
+/* 表头单独加高，数据行保持紧凑 */
+.cartype-cfg-head {
+  background: #f3f6fb; font-size: 12px; font-weight: 600; color: var(--text-dim);
+  padding: 8px 3px;
+}
 .cartype-cfg-row:nth-child(even) { background: #fafbfc; }
 .cartype-cfg-row input[type="text"] {
   width: 100%; padding: 4px 6px; font-size: 13px;
@@ -1359,6 +1434,11 @@ td.dest span.station-link:hover {
 }
 .cartype-cfg-row .ct-del:hover { background: #c53030; }
 .cartype-cfg .add-spot-btn { margin: 10px; }
+.cartype-cfg-actions {
+  display: flex; gap: 8px; margin: 10px; flex-wrap: wrap;
+}
+.cartype-cfg-actions .btn { padding: 6px 12px; font-size: 13px; }
+#btnResetCarType { color: var(--text-dim); }   /* 与主按钮（新增）区分，强调"次要动作" */
 
 /* 菜单项中的图标 */
 .menu-icon {

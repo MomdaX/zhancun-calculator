@@ -188,8 +188,25 @@
     { name: '灰', value: '#a0aec0' }
   ];
 
-  // 车型高亮默认配置（数组，可自由新增/删除，对齐 VBA 显示信息.bas）
-  // match: 'starts'(前缀开头) / 'contains'(包含)；bold 决定颜色作用于文字(加粗)还是背景
+  /* ==========================================================================
+   * 车型高亮 —— 「设置 → 车型高亮」的可编辑配置，是车型着色的**唯一来源**
+   * --------------------------------------------------------------------------
+   * 覆盖范围（改一处，以下位置同步生效）：
+   *   · 主表 到站列   汇总串中的车型片段（"P5" / "DK2" / "YW3"）
+   *   · 明细 车种列   原始车种（"P64" / "DK"）
+   *   · 明细 车号列   车号非 0 开头时继承车种的类
+   *   · 明细 到站/发站列 经 renderDest 走同一判定
+   *
+   * 不在本配置范围内（各自独立，勿并入）：
+   *   · 主表 车种列 的红/粉底 = 作业区禁入告警（股道×车种的提示，仅主表显示）
+   *   · 车号规则（自备罐灰底 / 中粮罐加粗）按车号判定，且主表本就没有车号列
+   *
+   * 【历史】VBA 显示信息.bas 里这两处各写了一套硬编码（到站方向 Sub 的车型
+   * If-ElseIf 链 / 标记到站方向颜色 Sub 的 Array("YW","D","P")），互不一致，
+   * 改一处另一处不跟随。此处统一由本配置驱动，不要再在渲染处写死颜色。
+   * --------------------------------------------------------------------------
+   * match: 'starts'(前缀开头) / 'contains'(包含)；bold 决定颜色作用于文字(加粗)还是背景
+   * ========================================================================== */
   Utils.defaultCarTypeConfig = [
     { prefix: 'DK', note: '大D车',  match: 'starts',   on: true, bold: true,  color: '#e53e3e' },
     { prefix: 'YW', note: '客车',   match: 'starts',   on: true, bold: true,  color: '#e53e3e' },
@@ -197,8 +214,14 @@
     { prefix: 'B',  note: '机保车', match: 'starts',   on: true, bold: true,  color: '#805ad5' },
     { prefix: 'K',  note: '老K车',  match: 'starts',   on: true, bold: true,  color: '#2b6cb0' },
     { prefix: 'T',  note: '检衡车', match: 'starts',   on: true, bold: true,  color: '#d53f8c' },
-    { prefix: 'P',  note: '盖车',   match: 'starts',   on: true, bold: false, color: '#ecc94b' },
-    { prefix: 'X',  note: '平板车', match: 'contains', on: true, bold: false, color: '#a0aec0' }
+    /* P 之前是黄底 bold:false，但用户要求"其它车型是字体色 + 加粗"，
+     * 改成红字 + 加粗（与 DK/YW/YZ 同色），统一为"字体色"组。 */
+    { prefix: 'P',  note: '盖车',   match: 'starts',   on: true, bold: true,  color: '#e53e3e' },
+    /* 平板车：VBA 显示信息.bas 用「正则 \w+ 匹配第一段 + InStr("X") > 0」判定，
+     * 实际效果是 NX70AF 这种以 NX 开头的也被标灰。
+     * 关键区分：底色**只**作用于明细表车种列；主表到站列、车号列都不挂底色。 */
+    { prefix: 'NX', note: '平板车(NX)', match: 'starts', on: true, bold: false, color: '#a0aec0' },
+    { prefix: 'X',  note: '平板车',     match: 'starts', on: true, bold: false, color: '#a0aec0' }
   ];
 
   Utils.getCarTypeConfig = function () {
@@ -231,6 +254,9 @@
       if (e.bold) css += '.ctc-' + i + '{color:' + e.color + ';font-weight:700;}';
       else css += '.ctc-' + i + '{background-color:' + e.color + ';}';
     }
+    // 兜底：cfg 里 X/NX 两项被删光时，carTypeClass 会返回 __ctc_fallback__，
+    // 这里同步生成对应灰底样式，确保视觉一致。
+    css += '.__ctc_fallback__{background-color:#a0aec0;}';
     var el = document.getElementById('carTypeStyleSheet');
     if (!el) {
       el = document.createElement('style');
@@ -240,28 +266,77 @@
     el.textContent = css;
   };
 
+  /**
+   * 按「设置 → 车型高亮」配置取类名：命中第 i 项 → 'ctc-' + i，未命中返回 ''。
+   *
+   * 抽成独立函数的目的：主表到站列与明细车种列共用**同一套判定**。
+   * 主表到站串是「分类+车数」形式（"P5" / "DK2" / "YW3"），明细车种列是
+   * 原始车种（"P64" / "DK"），两者都交给这里匹配，用户在设置里改了颜色/加粗，
+   * 两个位置同步生效，不会出现「明细变了主表没变」。
+   *
+   * @param {string} type 车种字符串，可带数量后缀
+   * @returns {string} 'ctc-N' 或 ''
+   */
+  /**
+   * 车种匹配：返回 { idx, prefix, isFlatbed }，未命中返回 null。
+   *
+   * 相比 carTypeClass，多返回一个 isFlatbed 标记——用于区分"平板车"（X/NX，
+   * 底色规则）与"其它车型"（DK/YW/YZ/B/K/T/P，字体色规则）。渲染端根据
+   * 上下文决定应用哪一组样式：
+   *   · 主表到站列：仅"其它车型"挂 ctc（颜色=字体色）；"平板车"不上底色
+   *   · 明细车种列：所有车型都挂 ctc（bold=true → 字体色；bold=false → 底色）
+   *   · 明细车号列：不挂 ctc（车号是 7 位数字，盖底色不直观）
+   *
+   * @returns {{idx: number, prefix: string, isFlatbed: boolean}|null}
+   */
+  Utils.carTypeMatch = function (type) {
+    var t = String(type == null ? '' : type).trim();
+    if (!t) return null;
+    var cfg = Utils.getCarTypeConfig();
+    for (var i = 0; i < cfg.length; i++) {
+      var e = cfg[i];
+      if (!e.on || !e.prefix) continue;
+      var hit = e.match === 'contains' ? (t.indexOf(e.prefix) > -1) : (t.indexOf(e.prefix) === 0);
+      if (hit) return { idx: i, prefix: e.prefix, isFlatbed: e.prefix === 'X' || e.prefix === 'NX' };
+    }
+    /* 硬兜底：含 X 的车种一律视为平板车（X 开头 或 NX 开头）。
+     * 不走配置——哪怕用户把 X/NX 两项都关掉/删了/改成不匹配 NX 的 starts，
+     * 这条都保底命中，对齐 VBA「正则匹配第一段含 X」的语义。 */
+    if (t.charAt(0) === 'X' || t.charAt(1) === 'X') {
+      for (var k = 0; k < cfg.length; k++) {
+        if ((cfg[k].prefix === 'X' || cfg[k].prefix === 'NX') && cfg[k].on) {
+          return { idx: k, prefix: cfg[k].prefix, isFlatbed: true };
+        }
+      }
+      // cfg 里 X/NX 都被删/关掉 → 兜底类（applyCarTypeStyles 同步生成灰底）
+      return { idx: -1, prefix: '', isFlatbed: true };
+    }
+    return null;
+  };
+
+  /** 取样式类名（'ctc-N' / '__ctc_fallback__' / ''），carTypeMatch 的便捷封装 */
+  Utils.carTypeClass = function (type) {
+    var m = Utils.carTypeMatch(type);
+    if (!m) return '';
+    return m.idx < 0 ? '__ctc_fallback__' : 'ctc-' + m.idx;
+  };
+
   Utils.carStyle = function (row) {
     var C = (global.Aggregate && global.Aggregate.COL) || null;
     var iType = C ? C.CARTYPE : 2;
     var iNo = C ? C.CARNO : 3;
     var t = String(row[iType] || '');
     var n = String(row[iNo] || '');
-    var cfg = Utils.getCarTypeConfig();
-    var cls = '', bg = '', clsN = '', bgN = '';
+    var cls = Utils.carTypeClass(t);
+    var bg = cls; // 背景与文字用同一类（applyCarTypeStyles 决定颜色/bg）
+    var clsN = '', bgN = '';
 
-    for (var i = 0; i < cfg.length; i++) {
-      var e = cfg[i];
-      if (!e.on || !e.prefix) continue;
-      var hit = e.match === 'contains' ? (t.indexOf(e.prefix) > -1) : (t.indexOf(e.prefix) === 0);
-      if (hit) { cls = 'ctc-' + i; break; }
-    }
-    bg = cls; // 背景与文字用同一类（applyCarTypeStyles 决定颜色/bg）
-
+    // 车号列：按车号首位单独判定（自备罐灰底 / 中粮罐加粗）。
+    // **不**再继承车种列的 ctc——车号是 7 位数字，盖底色既不直观也容易与行内
+    // 斑马纹混，且平板车的灰底规则不应蔓延到车号列。
     if (n.charAt(0) === '0') {
       if (n.charAt(1) === '7') { bgN = 'car-self-bold'; clsN = 'car-self-bold'; }
       else { bgN = 'car-grey-bg'; clsN = 'car-grey-bg'; }
-    } else {
-      clsN = cls;
     }
 
     return { cls: cls, bg: bg, clsN: clsN, bgN: bgN };

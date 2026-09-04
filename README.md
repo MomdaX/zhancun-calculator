@@ -18,8 +18,6 @@
 ├── 站存计算器-(2026.6.6版)/       # VBA 工程源码导出（.bas / .cls / .frm / .frx）
 ├── HTML/                          # 纯前端网页版
 │   ├── index.html                 # 股道存车主页面（含脚本加载顺序）
-│   ├── track.config.js            # 股道分组与配置（含虚拟/不常用股道名单、颜色阈值）
-│   ├── direction.data.js          # 方向库数据（到站→方向 映射源）
 │   ├── css/
 │   │   └── style.css              # 全局样式
 │   ├── js/
@@ -30,7 +28,9 @@
 │   │   ├── utils.js               # 通用工具：vbVal / carStyle / 防抖 等
 │   │   ├── store.js               # localStorage 持久化封装
 │   │   ├── ui.js                  # UI 组件：Modal / Drawer / Dropdown / Toast
-│   │   └── col-resize.js          # 表格列宽拖拽
+│   │   ├── col-resize.js          # 表格列宽拖拽
+│   │   ├── track.config.js        # 股道分组与配置（含虚拟/不常用股道名单、颜色阈值）
+│   │   └── direction.data.js      # 方向库数据（到站→方向 映射源）
 │   ├── tests/
 │   │   └── run.js                 # 纯 Node 回归测试（node HTML/tests/run.js，零依赖）
 │   ├── xlsdata/                   # 示例/导入的 xls 数据（已 gitignore）

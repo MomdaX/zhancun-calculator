@@ -32,6 +32,8 @@
   /* ============================ 列定义 ============================ */
   var COLUMNS = [
     { key: 'note',      title: '注意事项',       width: 112, cls: 'col-a' },
+    // 分组合并列：在股道列前，按分组跨行合并（rowspan），仅每组首行输出单元格；文字竖排
+    { key: 'group',     title: '',               width: 32,  cls: 'col-b-group' },
     { key: 'track',     title: '股道',           width: 66,  cls: 'col-b track' },
     { key: 'direction', title: '方向',           width: 64 },
     { key: 'count',     title: '车数',           width: 48,  num: true, cls: 'mid' },
@@ -56,7 +58,8 @@
   var DETAIL_COLS = [
     { col: Aggregate.COL.TRACK,   t: '股道', w: 54, fmt: 'track' },
     { col: Aggregate.COL.SEQ,     t: '顺', w: 34 },
-    { col: Aggregate.COL.CARTYPE, t: '车种', w: 68 }, { col: Aggregate.COL.CARNO, t: '车号', w: 78 },
+    // 车号在车种之前（现场按车号点车，先找号再看车型）
+    { col: Aggregate.COL.CARNO, t: '车号', w: 78 }, { col: Aggregate.COL.CARTYPE, t: '车种', w: 68 },
     { col: Aggregate.COL.TARE,    t: '自重', w: 52 }, { col: Aggregate.COL.LEN,   t: '换长', w: 50, cls: 'mid' },
     { col: Aggregate.COL.LOAD,    t: '载重', w: 56, cls: 'mid' },
     { col: Aggregate.COL.DEST,    t: '到站', w: 120, fmt: 'dest' },
@@ -349,27 +352,47 @@
     return list.indexOf(name) >= 0;
   }
 
+  /**
+   * 取片段的车型部分：到站串是「分类+车数」，如 "P5" / "DK2" / "YW3"。
+   * 只取前导字母交给车型高亮配置匹配；中文片段（车站名、到卸、黑罐）返回 ''。
+   */
+  function typeKeyOf(p) {
+    var m = /^[A-Za-z]+/.exec(String(p == null ? '' : p));
+    return m ? m[0] : '';
+  }
+
   function renderDest(text, clickable) {
     if (!text) return '';
     var parts = String(text).trim().split(/\s+/).filter(Boolean);
     var map = state.dirIndex.map;
     return parts.map(function (p) {
       var cls = '';
-      // 属性标记优先（对应 VBA 的 Array("YW","D","P","到卸","黑罐")）
-      if (/^(YW|D|P)/.test(p)) cls = 'danger';
-      else if (/^(到卸|黑罐)/.test(p)) cls = 'heavy';
-      // 卸车地点（到卸的细化，如 永鑫/货场/天盛/港务局，或用户在设置里增删的）
-      // 与"到卸"同款黑加粗。列表来自 Store.unloadSpots，与 aggregate 段2 一致。
-      else if (isUnloadSpot(p)) cls = 'heavy';
-      // 黑罐细化子类（G7 罐按收货人识别，如 中粮/外运），与"黑罐"同款加粗
-      else if (isBlackTankSpot(p)) cls = 'heavy';
-      else {
-        var m = /[\u4e00-\u9fa5]+/.exec(p);
-        if (m) {
-          var dir = map[m[0]] || '';
-          if (/沙/.test(dir)) cls = 'shakou';
-          else if (/南/.test(dir)) cls = 'nankou';
-          else if (/管内/.test(dir)) cls = 'guanna';
+      // ① 车型高亮（「设置 → 车型高亮」可编辑的颜色/加粗）。
+      //    主表只挂「非平板车」的 ctc 类（颜色=字体色）；平板车（X/NX）的底色
+      //    规则仅作用于明细车种列，主表到站列不挂底色 —— 见用户对齐 VBA 的约束。
+      var tk = typeKeyOf(p);
+      if (tk) {
+        var m = Utils.carTypeMatch(tk);
+        if (m && !m.isFlatbed) cls = Utils.carTypeClass(tk);
+      }
+      // ② 未命中配置 → 回落 VBA 原有规则（显示信息.bas「标记到站方向颜色」：
+      //    YW/D/P → 红加粗，到卸/黑罐 → 黑加粗）。配置里关掉的项会走到这里。
+      if (!cls) {
+        if (/^(YW|D|P)/.test(p)) cls = 'danger';
+        else if (/^(到卸|黑罐)/.test(p)) cls = 'heavy';
+        // 卸车地点（到卸的细化，如 永鑫/货场/天盛/港务局，或用户在设置里增删的）
+        // 与"到卸"同款黑加粗。列表来自 Store.unloadSpots，与 aggregate 段2 一致。
+        else if (isUnloadSpot(p)) cls = 'heavy';
+        // 黑罐细化子类（G7 罐按收货人识别，如 中粮/外运），与"黑罐"同款加粗
+        else if (isBlackTankSpot(p)) cls = 'heavy';
+        else {
+          var m = /[\u4e00-\u9fa5]+/.exec(p);
+          if (m) {
+            var dir = map[m[0]] || '';
+            if (/沙/.test(dir)) cls = 'shakou';
+            else if (/南/.test(dir)) cls = 'nankou';
+            else if (/管内/.test(dir)) cls = 'guanna';
+          }
         }
       }
       // 车站名标记为可点击（双击查看径路）
@@ -441,10 +464,33 @@
     btn.textContent = on ? '隐藏非常用股道' : '显示非常用股道';
     btn.classList.toggle('active', on);
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    btn.title = (on ? '当前显示' : '当前隐藏') + '不常用股道（X线、YX1、YQX、ZXX、DY、TSY、YH、临时），点击切换';
   }
 
   /* =================== 渲染主表 =================== */
+  /**
+   * 计算分组「合并列」所需的跨行信息。
+   * 返回与 vis 等长的数组：{ group, start, span }
+   *   group 该行的分组名（来自 track.config 的 groupName）
+   *   start 是否为该分组在当前可见行中的首行
+   *   span  该分组连续占据的行数（用于 rowspan）
+   * 注意：隐藏虚拟股道后，虚拟场分组可能整段消失，span 仅统计可见部分。
+   */
+  function computeGroupSpans(vis) {
+    var arr = vis.map(function (item) {
+      var cfg = YardConfig.getTrack(item.r.track);
+      return { group: cfg ? cfg.groupName : '', start: false, span: 1 };
+    });
+    for (var i = 0; i < arr.length; i++) {
+      if (i === 0 || arr[i].group !== arr[i - 1].group) {
+        arr[i].start = true;
+        var j = i + 1;
+        while (j < arr.length && arr[j].group === arr[i].group) j++;
+        arr[i].span = j - i;
+      }
+    }
+    return arr;
+  }
+
   function render() {
     // 表头
     $('headRow').innerHTML = COLUMNS.map(function (c) {
@@ -452,18 +498,41 @@
       // 到站列：加 col-flex 类（仅用于允许换行），仍写内联 width，作为独立可拖拽列
       if (c.key === 'dest') cls += ' col-flex';
       var style = ' style="width:' + c.width + 'px"';
+      // 分组合并列（group）与股道列（track）表头合并为一个「股道」：
+      //  · group 列表头文字留空、去掉右分隔线，并禁止单独拖拽（no-resize）
+      //  · track 列表头用横跨 group+track 两列的标签居中显示「股道」
+      // 两个 <th> 仍独立存在，列宽/拖拽/记忆逻辑不受影响。
+      if (c.key === 'group') {
+        return '<th class="' + cls.trim() + ' no-resize"' + style + '></th>';
+      }
+      if (c.key === 'track') {
+        cls += ' grp-merged';
+        return '<th class="' + cls.trim() + '"' + style +
+               '><span class="grp-head-merge">股道</span></th>';
+      }
       return '<th class="' + cls.trim() + '"' + style + '>' + escapeHtml(c.title) + '</th>';
     }).join('');
 
     // 表头被 innerHTML 重建，需重新挂载列宽拖拽手柄并恢复记忆列宽
     ColResize.safeGet($('grid')).remount();
 
+    // 同步冻结列宽 → 后续 sticky 列的 left 偏移（避免列间露缝；用实测宽度而非 CSS 兜底值）
+    var grid = $('grid');
+    var ath = grid.querySelector('th.col-a');
+    var gth = grid.querySelector('th.col-b-group');
+    if (ath) grid.style.setProperty('--col-a-w', ath.offsetWidth + 'px');
+    if (gth) grid.style.setProperty('--col-b-group-w', gth.offsetWidth + 'px');
+
     var vis = visibleRows();
     var thr = YardConfig.thresholds;
     var tbody = $('tbody');
     var html = [];
 
-    vis.forEach(function (item) {
+    // 分组「合并列」：预先算出每行的所属分组、是否该组首行、跨行数(span)。
+    // 渲染时首行输出带 rowspan 的分组单元格，组内其余行不输出该 td（由 rowspan 覆盖）。
+    var spans = computeGroupSpans(vis);
+
+    vis.forEach(function (item, n) {
       var r = item.r, idx = item.idx;
       var track = r.track;
       var cfg = YardConfig.getTrack(track);
@@ -477,7 +546,10 @@
       // 换长超长
       var overLong = r.length > thr.overlong;
 
-      // 车种列：作业区禁入标记
+      /* 车种列：作业区禁入告警（对齐 VBA 显示信息.bas「盖车不能进鹰岭/栈桥、
+       * 高边不能进中油」）。这是「股道 × 车种」的禁入提示——同一辆车在 5 道
+       * 不告警、在 Y5 就告警，与「这个车型该显示什么颜色」是两件事，
+       * 故独立于「设置 → 车型高亮」配置，且仅在有股道概念的主表显示。 */
       var carTypeCls = '';
       var types = (r.carTypes || '').trim().split(/\s+/);
       if (types.indexOf('P') >= 0) {
@@ -522,7 +594,8 @@
           // 注意事项列：聚合时已用 \n 分隔各关键词（超71.86吨 / 扣修 …），
           // 转成 <br> 才能逐条换行；方向列同理（render 内已处理）。
           if (c.key === 'note') {
-            inner = escapeHtml(rawNote).replace(/\n/g, '<br>');
+            // 包一层 .note-body，供表头「收起/展开」控件按状态裁剪高度
+            inner = '<div class="note-body">' + escapeHtml(rawNote).replace(/\n/g, '<br>') + '</div>';
           } else {
             inner = escapeHtml(rawNote);
             if (!c.cls && !c.num) cls += ' center';
@@ -538,6 +611,20 @@
         if (c.key === 'train' && String(v || '').charAt(0) === '6') cls += ' train-loop';
         if (c.key === 'track' && isBlank) cls += ' empty-track';
         if (c.key === 'direction') inner = escapeHtml(v || '').replace(/\n/g, '<br>');
+
+        // 分组「合并列」：在股道列之前，按分组跨行合并（rowspan）。
+        // 仅每组首行输出带 rowspan 的分组单元格，组内后续行不输出（由 rowspan 覆盖）。
+        if (c.key === 'group') {
+          var sp = spans[n];
+          if (sp.start) {
+            // 用分组自带的 color 做左侧色条 + 文字着色，醒目区分到发线/调车线/虚拟场等
+            var gc = cfg ? cfg.groupColor : '#888';
+            cells.push('<td class="col-b-group grp" rowspan="' + sp.span + '" ' +
+                       'style="border-left:3px solid ' + gc + ';color:' + gc + '">' +
+                       escapeHtml(sp.group) + '</td>');
+          }
+          return;   // 非首行：被上方 rowspan 覆盖，不输出 td
+        }
 
         cells.push('<td class="' + cls + '"' + style + '>' + inner + '</td>');
       });
@@ -564,9 +651,10 @@
     };
     var footCells = [];
     COLUMNS.forEach(function (c, i) {
-      // 前两列（注意事项 / 股道）是冻结列，合计标签横跨这两列
+      // 注意事项(冻结) + 分组合并列(冻结) 合计标签横跨这两列
       if (i === 0) { footCells.push('<td class="col-a" colspan="2">合计</td>'); return; }
-      if (i === 1) return;                       // 已被上面的 colspan=2 覆盖
+      if (i === 1) return;                       // 已被上面的 colspan=2 覆盖（分组合并列）
+      if (c.key === 'track') { footCells.push('<td class="col-b"></td>'); return; }
       if (c.key === 'dest') { footCells.push('<td id="footTank"></td>'); return; }
       if (Object.prototype.hasOwnProperty.call(FOOT_VALUES, c.key)) {
         footCells.push('<td class="num mid">' + FOOT_VALUES[c.key] + '</td>');
@@ -670,7 +758,12 @@
           if (txt) return '<td class="dest">' + renderDest(txt, true) + '</td>';
           var agg = row.__dest == null ? '' : String(row.__dest).trim();
           if (agg) {
-            return '<td class="dest"><span class="derived">' +
+            // 派生到站（聚合串，如「三街3 麻尾2」）：若含车站名，挂 station-link +
+            // data-station，使明细双击事件能打开地图（与 renderDest 的车站名同款行为）。
+            var dStation = stationOf(agg);
+            var dCls = dStation ? 'derived station-link' : 'derived';
+            var dAttr = dStation ? ' data-station="' + escapeHtml(dStation) + '"' : '';
+            return '<td class="dest"><span class="' + dCls + '"' + dAttr + '>' +
                    escapeHtml(agg) + '</span></td>';
           }
           return '<td class="dest"></td>';
@@ -790,6 +883,23 @@
     on('fileInputMulti', 'change', function (e) {
       var f = e.target.files[0];
       if (f) readAndRender(f, f.name, null);
+      e.target.value = '';
+    });
+
+    // 单文件选择：直接打开系统文件对话框，可读取 Program Files 等
+    // 被 showDirectoryPicker 禁止的目录（Chrome 只限制"文件夹"访问路径）
+    on('btnPickFile', 'click', function () {
+      $('fileInputSingle').click();
+    });
+    on('fileInputSingle', 'change', function (e) {
+      var f = e.target.files[0];
+      if (!f) { e.target.value = ''; return; }
+      readAndRender(f, f.name, null).then(function () {
+        // 以文件方式载入时隐藏文件切换器与刷新（无目录可扫描）
+        var sw = $('fileSwitcher');
+        if (sw) sw.style.display = 'none';
+        $('stMsg').textContent = '已载入文件：' + f.name;
+      }).catch(function () { /* 错误已在 readAndRender 内提示 */ });
       e.target.value = '';
     });
 
@@ -918,6 +1028,19 @@
       render();
       toast((state.showVirtual ? '已显示' : '已隐藏') + '不常用股道（共 ' + vids.length + ' 条）', 'ok');
     });
+
+    // 注意事项列：点击表头「注意事项」→ 整表收起/展开（控件为 th 上的 ::after 伪元素）
+    var gridEl = $('grid');
+    if (gridEl) {
+      gridEl.addEventListener('click', function (e) {
+        var th = e.target.closest ? e.target.closest('th.col-a') : null;
+        if (!th) return;                              // 仅表头「注意事项」触发
+        if (e.target.closest('.col-handle')) return;  // 拖拽手柄不触发
+        var collapsed = gridEl.classList.toggle('notes-collapsed');
+        Store.set('notesCollapsed', collapsed);       // 持久记忆，刷新后保持
+        toast(collapsed ? '已收起注意事项（悬停表头「+」可展开）' : '已展开注意事项', 'ok');
+      });
+    }
 
     // 自适应列宽（重置为内容自适应，清除手动拖动记忆）
     on('btnAutoFitCols', 'click', function () {
@@ -1114,6 +1237,12 @@
       var box = $('carTypeCfg');
       if (!box) return;
 
+      /* 关键 —— 下面会再定义一个同名 render() 用于配置列表自身，
+       * JS 作用域会就近解析到内层那个，导致「车型高亮变更后重渲染主表」
+       * 静默失效。这里先在外层把主表 render 捕获成别名，persist / 重置
+       * 按钮里用这个别名调主表渲染。 */
+      var renderGrid = render;
+
       function colorOptions(sel) {
         return (Utils.CAR_COLORS || []).map(function (c) {
           return '<option value="' + escapeHtml(c.value) + '"' +
@@ -1126,12 +1255,21 @@
         if (Store && Store.set) Store.set('carTypeStyle', cfg);
         Utils.applyCarTypeStyles();
         if (state.detailIdx != null) openDetail(state.detailIdx); // 实时刷新明细高亮
+        // 主表到站列的车型标记同样受该配置控制，否则会「明细变了主表没变」。
+        // 必须用外层捕获的 renderGrid：闭包内的 render 是配置列表自身渲染。
+        if (state.rows && state.rows.length) renderGrid();
       }
 
       function render() {
         var cfg = Utils.getCarTypeConfig();
-        // 移除旧行（保留新增按钮）
-        Array.prototype.slice.call(box.querySelectorAll('.cartype-cfg-row')).forEach(function (n) { n.remove(); });
+        /* 行一律塞进独立容器 #carTypeRows。
+         * 早先写法是 box.insertBefore(row, $('btnAddCarType'))，隐含假设
+         * 「新增按钮是 .cartype-cfg 的直接子元素」。一旦给按钮加了包裹层
+         * （如 .cartype-cfg-actions），insertBefore 会抛 NotFoundError，
+         * 中断整个 render → 后续按钮事件绑定全部跳过 → 按钮点击无反应。
+         * 改用独立容器后，按钮怎么摆都不影响渲染。 */
+        var rowsBox = $('carTypeRows') || box;   // 找不到容器时退回 box，保证不崩
+        rowsBox.innerHTML = '';                  // 清空旧行（按钮在容器外，不受影响）
         cfg.forEach(function (e, idx) {
           var row = document.createElement('div');
           row.className = 'cartype-cfg-row';
@@ -1147,7 +1285,7 @@
             '<input type="checkbox" class="ct-bold" ' + (e.bold ? 'checked' : '') + ' title="加粗">' +
             '<select class="ct-color">' + colorOptions(e.color) + '</select>' +
             '<button type="button" class="ct-del" title="删除">×</button>';
-          box.insertBefore(row, $('btnAddCarType'));
+          rowsBox.appendChild(row);
 
           var prefixEl = row.querySelector('.ct-prefix');
           var noteEl = row.querySelector('.ct-note');
@@ -1193,6 +1331,33 @@
           render();
         });
       }
+
+      /* 「恢复默认」按钮：清掉用户之前保存的自定义车型高亮配置，
+       * 回到 defaultCarTypeConfig（包含 NX/X 双 starts 项，平板车全部命中）。
+       * 浏览器里的 Store 是独立的，改默认配置对老用户无效——此按钮是面向
+       * 「设置被改乱了想一键还原」场景的快捷入口。
+       *
+       * 选用 location.reload() 而不是即时重渲染的原因：闭包内的 render / 外部
+       * renderGrid 在初始化时序差异下可能踩到作用域陷阱（之前 persist 那段
+       * 就静默失败了），reload 走整个 IIFE 重新初始化，所有路径都按 default
+       * 走，最简单可靠。 */
+      var resetBtn = $('btnResetCarType');
+      if (resetBtn) {
+        resetBtn.addEventListener('click', function () {
+          try {
+            if (Store && Store.remove) Store.remove('carTypeStyle');
+            toast('已恢复默认车型高亮配置');
+          } catch (e) {
+            console.error('[btnResetCarType] 清', e);
+            toast('恢复默认失败：' + (e && e.message || e), 'error');
+            return;
+          }
+          // 给 toast 一点可见时间再刷新
+          setTimeout(function () { location.reload(); }, 250);
+        });
+      } else {
+        console.warn('[btnResetCarType] #btnResetCarType 在 DOM 中未找到，按钮事件未绑定');
+      }
     }
 
     // 卸车地点（aggregate 段2 读取，默认 永鑫/货场/天盛/港务局）
@@ -1207,13 +1372,17 @@
 
     // 表头列宽拖动（persistKey 用于本地记忆，刷新/重渲染不丢失）
     ColResize.enable($('grid'), {
-      persistKey: 'zhancun.grid.cols',
+      persistKey: 'zhancun.grid.cols.v2',
       onResize: function (th, w) {
-        // 首列宽变化 → 同步「股道」列的冻结偏移，避免两列之间露缝
+        // 首列 / 分组合并列宽变化 → 同步后续冻结列的偏移，避免列间露缝
         if (th.classList.contains('col-a')) $('grid').style.setProperty('--col-a-w', w + 'px');
+        if (th.classList.contains('col-b-group')) $('grid').style.setProperty('--col-b-group-w', w + 'px');
       }
     });
-    ColResize.enable($('detailTable'), { persistKey: 'zhancun.detail.cols' });
+    /* 列宽按「列序索引」记忆，因此调整 DETAIL_COLS 的顺序或增删列后，
+     * 旧记忆会整体错位（宽度套到了别的列上）。键名带版本号即可让旧记忆失效、
+     * 首次打开重新按内容自适应——改动列序时，把 v1 递增即可。 */
+    ColResize.enable($('detailTable'), { persistKey: 'zhancun.detail.cols.v2' });
   }
 
   /* =================== 空框架 =================== */
@@ -1284,6 +1453,10 @@
     // 恢复「隐藏非常用股道」的持久记忆（设置里切换时写入 Store.showVirtual）
     var savedVirtual = Store.get('showVirtual', null);
     if (savedVirtual !== null) state.showVirtual = !!savedVirtual;
+
+    // 恢复「注意事项收起」的持久记忆（表头点击切换时写入 Store.notesCollapsed）
+    var savedNotes = Store.get('notesCollapsed', null);
+    if (savedNotes === true && $('grid')) $('grid').classList.add('notes-collapsed');
 
     syncVirtualBtn();
 

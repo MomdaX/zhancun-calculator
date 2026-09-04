@@ -1,7 +1,7 @@
 /**
  * 股道存车 - 股道配置文件
  * ============================================================================
- * 加载方式： <script src="track.config.js" charset="utf-8"></script>
+ * 加载方式： <script src="js/track.config.js" charset="utf-8"></script>
  * 暴露全局： window.YardConfig
  *
  * 【如何增删股道】见文件底部「快速修改指引」
@@ -20,28 +20,30 @@
    * occupancy 是否参与「股道占用情况」统计（换长合计 / 容量标色）
    * virtual   是否虚拟股道。虚拟股道可由工具栏「虚拟股道」开关一键显示/隐藏
    * ========================================================================== */
+  // color：主表「股道」列左缘的分组竖带颜色（分组列视觉标识，纯展示用）
   var GROUPS = [
-    { id: 'td',  name: '到发线', suffix: '道', occupancy: true  },
-    { id: 'b',   name: 'B线',    suffix: '',  occupancy: true  },
-    { id: 'x',   name: 'X线',    suffix: '',  occupancy: true, virtual: true },
-    { id: 'h',   name: 'H线',    suffix: '',  occupancy: false },
-    { id: 'l',   name: 'L线',    suffix: '',  occupancy: false },
-    { id: 'zl',  name: 'ZL线',   suffix: '',  occupancy: false },
-    { id: 'lz',  name: 'LZ线',   suffix: '',  occupancy: false },
-    { id: 'g',   name: 'G线',    suffix: '',  occupancy: false },
-    { id: 'yx',  name: 'YX线',   suffix: '',  occupancy: false },
-    { id: 'ts',  name: 'TS线',   suffix: '',  occupancy: false },
-    { id: 'sh',  name: 'SH线',   suffix: '',  occupancy: false },
-    { id: 'cz',  name: 'CZ线',   suffix: '',  occupancy: false },
-    { id: 'gt',  name: 'GT线',   suffix: '',  occupancy: false },
-    { id: 'gm',  name: 'GM线',   suffix: '',  occupancy: false },
-    { id: 'dy',  name: 'DY线',   suffix: '',  occupancy: false, virtual: true },
-    { id: 'tsy', name: 'TSY线',  suffix: '',  occupancy: false, virtual: true },
-    { id: 'yh',  name: 'YH线',   suffix: '',  occupancy: false, virtual: true },
-    { id: 'y',   name: 'Y线',    suffix: '',  occupancy: false },
-    { id: 'yqx', name: 'YQX线',  suffix: '',  occupancy: false },
-    { id: 'zxx', name: 'ZXX线',  suffix: '',  occupancy: false },
-    { id: 'tmp', name: '临时',   suffix: '',  occupancy: false, virtual: true }
+    { id: 'td',  name: '到发线', suffix: '道', occupancy: true,  color: '#2c7be5' },
+    { id: 'dc',  name: '调车线', suffix: '道', occupancy: true,  color: '#e8833a' },
+    { id: 'b',   name: '边修线', suffix: '',  occupancy: true,  color: '#8854d0' },
+    { id: 'x',   name: '虚拟场', suffix: '',  occupancy: true, virtual: true, color: '#95a5a6' },
+    { id: 'h',   name: '货场',   suffix: '',  occupancy: false, color: '#16a085' },
+    { id: 'l',   name: '勒沟',   suffix: '',  occupancy: false, color: '#27ae60' },
+    { id: 'zl',  name: '中粮',   suffix: '',  occupancy: false, color: '#2ecc71' },
+    { id: 'lz',  name: '大洋',   suffix: '',  occupancy: false, color: '#f39c12' },
+    { id: 'g',   name: '港务局',    suffix: '',  occupancy: false, color: '#d35400' },
+    { id: 'yx',  name: '永鑫',   suffix: '',  occupancy: false, color: '#c0392b' },
+    { id: 'ts',  name: '天盛煤',   suffix: '',  occupancy: false, color: '#e74c3c' },
+    { id: 'sh',  name: '石化',   suffix: '',  occupancy: false, color: '#9b59b6' },
+    { id: 'gt',  name: '国投',   suffix: '',  occupancy: false, color: '#34495e' },
+    { id: 'cz',  name: '超智',   suffix: '',  occupancy: false, color: '#8e44ad' },
+    { id: 'gm',  name: '广明',   suffix: '',  occupancy: false, virtual: true, color: '#2980b9' },
+    { id: 'dy',  name: '东油',   suffix: '',  occupancy: false, virtual: true, color: '#7f8c8d' },
+    { id: 'tsy', name: '天盛油',  suffix: '',  occupancy: false, virtual: true, color: '#16a085' },
+    { id: 'yh',  name: '中油专用线', suffix: '', occupancy: false, virtual: true, color: '#c0392b' },
+    { id: 'y',   name: '中油专用线', suffix: '', occupancy: false, color: '#c0392b' },
+    { id: 'yqx', name: '中油专用线', suffix: '', occupancy: false, color: '#c0392b' },
+    { id: 'zxx', name: '走行线',  suffix: '',  occupancy: false, color: '#e17055' },
+    { id: 'tmp', name: '机车线',   suffix: '',  occupancy: false, virtual: true, color: '#b2bec3' }
   ];
 
   /* ==========================================================================
@@ -56,7 +58,8 @@
    * id 必须与 SMIS 导出 xls 中「股道」列的取值完全一致
    * ========================================================================== */
   var TRACK_DEFS = [
-    { group: 'td',  ids: '1-15'      },
+    { group: 'td',  ids: '1-10'      },
+    { group: 'dc',  ids: '11-15'     },
     { group: 'b',   ids: ['B1', 'B2'] },
     { group: 'x',   ids: 'X1-X15'    },
     { group: 'h',   ids: 'H1-H5'     },
@@ -67,8 +70,8 @@
     { group: 'yx',  ids: 'YX1-YX3'   },
     { group: 'ts',  ids: ['TS1', 'TS2'] },
     { group: 'sh',  ids: 'SH1-SH3'   },
-    { group: 'cz',  ids: ['CZ3', 'CZ4'] },
     { group: 'gt',  ids: ['GT1', 'GT2'] },
+    { group: 'cz',  ids: ['CZ3', 'CZ4'] },
     { group: 'gm',  ids: 'GM1-GM4'   },
     { group: 'dy',  ids: 'DY1-DY4'   },
     { group: 'tsy', ids: 'TSY1-TSY4' },
@@ -165,13 +168,13 @@
    * --------------------------------------------------------------------------
    * 与「分组 virtual」互补：分组 virtual 整组隐藏（如 X1-X15、DY1-4、TSY1-4、
    * YH1-2、##1-#7）；此处列出仅需单独隐藏的个别股道。
-   *   · YX1  ：YX 线只需隐藏 YX1（YX2/YX3 仍常显）
    *   · YQX  ：YQX 线（单条）
    *   · ZXX  ：ZXX 线（单条，表格原无，本次新增）
+   *   · 注：YX1 已不再作为不常用股道（常显），故已从名单移除。
    * 加入此名单即与分组虚拟股道共用工具栏「隐藏非常用股道」开关。
    * ========================================================================== */
   var VIRTUAL_IDS = [
-    'YX1', 'YQX', 'ZXX'
+    'YQX', 'ZXX'
   ];
 
   /* ==========================================================================
@@ -226,6 +229,7 @@
         name: id + (g.suffix || ''),   // 显示名，如 "1G"
         group: g.id,
         groupName: g.name,
+        groupColor: g.color || '#888',  // 分组竖带颜色
         occupancy: !!g.occupancy,
         virtual: virtual
       });

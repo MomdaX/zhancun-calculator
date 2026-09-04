@@ -21,6 +21,7 @@
   <span class="title">站存车统计</span>
 
   <button class="btn" id="btnPickFolder" title="选择数据文件夹" style="display:none">选择数据文件夹</button>
+  <button class="btn" id="btnPickFile" title="直接选择 xls 文件（不受系统目录限制）">选择文件</button>
   <button class="btn" id="btnReload" title="刷新数据">刷新</button>
 
   <span class="spacer"></span>
@@ -192,14 +193,21 @@
             <span>颜色</span>
             <span></span>
           </div>
-          <!-- 列表项由 app.js 渲染，新增按钮也置于此容器内（作为最后一项） -->
-          <button class="btn add-spot-btn" id="btnAddCarType" title="新增车型高亮">
-            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
-              <line x1="8" y1="3" x2="8" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              <line x1="3" y1="8" x2="13" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-            <span>新增车型</span>
-          </button>
+          <!-- 配置行容器：app.js 往这里塞 .cartype-cfg-row。
+               独立成容器是关键——渲染不再依赖按钮在 DOM 中的位置，
+               以后调整按钮布局（加包裹层、换位）都不会破坏行插入。 -->
+          <div id="carTypeRows"></div>
+          <!-- 按钮组放在容器底部 -->
+          <div class="cartype-cfg-actions">
+            <button class="btn" id="btnAddCarType" title="新增车型高亮">
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+                <line x1="8" y1="3" x2="8" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <line x1="3" y1="8" x2="13" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+              <span>新增车型</span>
+            </button>
+            <button class="btn" id="btnResetCarType" title="清除已保存的自定义车型高亮配置，恢复默认（NX/X 双 starts 项）">恢复默认</button>
+          </div>
         </div>
       </div>
     </div>
@@ -291,14 +299,16 @@
 
 <!-- 兜底：普通文件选择（任何浏览器都可用） -->
 <input type="file" id="fileInputMulti" accept=".xls,.xlsx" multiple style="display:none">
+<!-- 单文件选择：直接选 xls，可打开 Program Files 等系统目录（文件夹选择被浏览器禁止时使用） -->
+<input type="file" id="fileInputSingle" accept=".xls,.xlsx" style="display:none">
 
 <!-- ================= 依赖 ================= -->
 <script src="js/utils.js" charset="utf-8"></script>
 <script src="js/store.js" charset="utf-8"></script>
 <script src="js/ui.js" charset="utf-8"></script>
 <script src="js/col-resize.js" charset="utf-8"></script>
-<script src="track.config.js" charset="utf-8"></script>
-<script src="direction.data.js" charset="utf-8"></script>
+<script src="js/track.config.js" charset="utf-8"></script>
+<script src="js/direction.data.js" charset="utf-8"></script>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="js/aggregate.js" charset="utf-8"></script>
 <script src="js/map-bridge.js" charset="utf-8"></script>

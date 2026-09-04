@@ -1,0 +1,10 @@
+args=['e:\\桌面\\站存计算器HTML\\HTML\\serve_debug.py', '5500', 'e:\\桌面\\站存计算器HTML\\HTML"']
+cwd=e:\桌面\站存计算器HTML\HTML\python\amd64
+sys.path=['e:\\桌面\\站存计算器HTML\\HTML\\python\\amd64\\python313.zip', 'e:\\桌面\\站存计算器HTML\\HTML\\python\\amd64']
+import ok
+serve failed: Traceback (most recent call last):
+  File "e:\桌面\站存计算器HTML\HTML\serve_debug.py", line 17, in <module>
+    os.chdir(directory)
+    ~~~~~~~~^^^^^^^^^^^
+OSError: [WinError 123] 文件名、目录名或卷标语法不正确。: 'e:\\桌面\\站存计算器HTML\\HTML"'
+

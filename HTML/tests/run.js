@@ -27,7 +27,7 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');      // HTML/
 const SRC = ['js/utils.js', 'js/store.js', 'js/ui.js', 'js/aggregate.js',
-             'direction.data.js', 'track.config.js'];
+             'js/direction.data.js', 'js/track.config.js'];
 
 const memStore = {};
 const sandbox = {
@@ -145,14 +145,110 @@ suite('VBA 函数模拟', () => {
 /* ==========================================================================
  * 2. carStyle —— 列索引必须来自 Aggregate.COL，不得硬编码
  *    （回归 A4：原为 row[2]/row[3]，列序一变就静默错色）
+ *
+ *    carStyle 现为**配置驱动**：命中 Utils.defaultCarTypeConfig 第 i 项 → 'ctc-' + i，
+ *    该类名的具体颜色由 applyCarTypeStyles 动态生成（见 utils.js）。
+ *    因此这里不写死 'ctc-6'，改从默认配置推导，配置增删/调序时不会误报。
  * ========================================================================== */
+function ctcOf(type) {
+  const cfg = Utils.defaultCarTypeConfig;
+  for (let i = 0; i < cfg.length; i++) {
+    const e = cfg[i];
+    if (!e.on || !e.prefix) continue;
+    const hit = e.match === 'contains'
+      ? String(type).indexOf(e.prefix) > -1
+      : String(type).indexOf(e.prefix) === 0;
+    if (hit) return 'ctc-' + i;
+  }
+  return '';   // 未命中任何配置项 → 无高亮类
+}
+
 suite('carStyle 列索引解耦', () => {
-  t('P 车 → 黄底', () => {
-    eq(Utils.carStyle(mkRow({ CARTYPE: 'P64', CARNO: '1234567' })).bg, 'car-yellow-bg');
+  t('P 车 → 命中盖车配置（字体色+加粗，非背景高亮）', () => {
+    const s = Utils.carStyle(mkRow({ CARTYPE: 'P64', CARNO: '1234567' }));
+    eq(s.bg, ctcOf('P64'));
+    eq(s.cls, s.bg);                              // 背景与文字同类，颜色由 applyCarTypeStyles 决定
+    const cfg = Utils.defaultCarTypeConfig.filter(e => e.prefix === 'P')[0];
+    ok(cfg && cfg.bold === true, 'P 按用户需求走字体色+加粗，非背景高亮');
   });
   t('车号 07 开头 → 中粮罐加粗', () => {
     const s = Utils.carStyle(mkRow({ CARTYPE: 'G70', CARNO: '0712345' }));
     eq([s.clsN, s.bgN], ['car-self-bold', 'car-self-bold']);
+  });
+  t('carTypeClass：主表到站串的「车型+车数」片段同样命中配置', () => {
+    eq(Utils.carTypeClass('P5'), ctcOf('P'));     // 主表到站串形如 "德保44 P5 到卸23"
+    eq(Utils.carTypeClass('DK2'), ctcOf('DK'));
+    eq(Utils.carTypeClass('P64'), ctcOf('P'));    // 明细车种列是原始车种
+  });
+  t('carTypeClass：NX70AF 等 NX 开头被平板车配置命中（NX starts 双保险）', () => {
+    eq(Utils.carTypeClass('NX70AF'), ctcOf('NX')); // NX 项 starts 模式
+    eq(Utils.carTypeClass('X70'),    ctcOf('X'));  // X 项 contains 模式
+    // 即使把 X 项在设置里改成 starts，NX 项仍能罩住 NX 开头
+    const saved = sandbox.Store;
+    sandbox.Store = { get: () => [
+      { prefix: 'NX', match: 'starts',   on: true, bold: false, color: '#a0aec0' },
+      { prefix: 'X',  match: 'starts',   on: true, bold: false, color: '#a0aec0' }   // 用户改成了 starts
+    ]};
+    eq(Utils.carTypeClass('NX70AF'), 'ctc-0');
+    eq(Utils.carTypeClass('X70'),    'ctc-1');
+    sandbox.Store = saved;
+  });
+  t('carTypeClass：硬兜底——配置里 X/NX 被删光，X/NX 开头仍命中灰底', () => {
+    // 模拟用户在设置里把 X/NX 两项都删了（或者都 on:false 跳过）
+    const saved = sandbox.Store;
+    sandbox.Store = { get: () => [
+      { prefix: 'P', match: 'starts', on: true, bold: false, color: '#ecc94b' }
+      // 没有 X，没有 NX
+    ]};
+    try {
+      eq(Utils.carTypeClass('X70'),    '__ctc_fallback__');
+      eq(Utils.carTypeClass('NX70AF'), '__ctc_fallback__');
+      eq(Utils.carTypeClass('X6K'),    '__ctc_fallback__');
+      // 不含 X 的车型不受影响（P 在 mock 配置里是唯一项，索引 0）
+      eq(Utils.carTypeClass('P64'),    'ctc-0');
+      eq(Utils.carTypeClass('C70'),    '');
+    } finally { sandbox.Store = saved; }
+  });
+  t('carTypeClass：硬兜底——X/NX 被关掉（on:false）时仍生效', () => {
+    const saved = sandbox.Store;
+    sandbox.Store = { get: () => [
+      { prefix: 'NX', match: 'starts', on: false, bold: false, color: '#a0aec0' },
+      { prefix: 'X',  match: 'starts', on: false, bold: false, color: '#a0aec0' }
+    ]};
+    try {
+      eq(Utils.carTypeClass('X70'),    '__ctc_fallback__');
+      eq(Utils.carTypeClass('NX70AF'), '__ctc_fallback__');
+    } finally { sandbox.Store = saved; }
+  });
+  t('carTypeMatch：X/NX 标记 isFlatbed=true，其它车型=false（主表据此排除平板车底色）', () => {
+    const x = Utils.carTypeMatch('X70');
+    const nx = Utils.carTypeMatch('NX70AF');
+    const p = Utils.carTypeMatch('P64');
+    const dk = Utils.carTypeMatch('DK');
+    ok(x && x.isFlatbed === true,  'X70 应标记 isFlatbed');
+    ok(nx && nx.isFlatbed === true, 'NX70AF 应标记 isFlatbed');
+    ok(p && p.isFlatbed === false,  'P 不应标记 isFlatbed');
+    ok(dk && dk.isFlatbed === false,'DK 不应标记 isFlatbed');
+  });
+  t('carTypeMatch：硬兜底 X 也带 isFlatbed=true（主表不挂底色）', () => {
+    const saved = sandbox.Store;
+    sandbox.Store = { get: () => [{ prefix: 'P', match: 'starts', on: true, bold: false, color: '#ecc94b' }] };
+    try {
+      const m = Utils.carTypeMatch('X70');
+      ok(m && m.isFlatbed === true, '未被配置命中的 X 兜底为平板车');
+    } finally { sandbox.Store = saved; }
+  });
+  t('carTypeClass：未登记车型 / 空值 → 不高亮', () => {
+    eq(Utils.carTypeClass('N5'), '');             // 默认配置无 N
+    ['', null, undefined].forEach(v => eq(Utils.carTypeClass(v), ''));
+  });
+  t('carTypeClass：以 Store 中的自定义配置为准', () => {
+    const saved = sandbox.Store;
+    sandbox.Store = { get: () => [{ prefix: 'P', match: 'starts', on: false, bold: true, color: '#e53e3e' }] };
+    eq(Utils.carTypeClass('P5'), '');             // 关掉的项不生效
+    sandbox.Store = { get: () => [{ prefix: 'P', match: 'starts', on: true, bold: true, color: '#e53e3e' }] };
+    eq(Utils.carTypeClass('P5'), 'ctc-0');        // 自定义配置的下标从 0 起算
+    sandbox.Store = saved;
   });
   t('改 COL.CARTYPE 后 carStyle 跟随（证明未硬编码索引）', () => {
     const origType = COL.CARTYPE, origNo = COL.CARNO;
@@ -160,7 +256,7 @@ suite('carStyle 列索引解耦', () => {
       COL.CARTYPE = 9; COL.CARNO = 10;
       const row = []; for (let i = 0; i < 16; i++) row[i] = '';
       row[9] = 'P64'; row[10] = '1234567';       // 车种/车号挪到新位置
-      eq(Utils.carStyle(row).bg, 'car-yellow-bg', '应读到新位置的车种');
+      eq(Utils.carStyle(row).bg, ctcOf('P64'), '应读到新位置的车种');
     } finally {
       COL.CARTYPE = origType; COL.CARNO = origNo;   // 必须还原，否则污染后续用例
     }
@@ -375,18 +471,24 @@ suite('端到端聚合', () => {
  * ========================================================================== */
 suite('股道配置', () => {
   t('股道总数 97', () => { eq(YardConfig.tracks.length, 97); });
-  t('虚拟股道 35 条（分组 ∪ 个别名单）', () => { eq(YardConfig.virtualIds.length, 35); });
-  t('到发线 15 条、临时 7 条', () => {
-    eq(YardConfig.idsOfGroup('td').length, 15);
+  t('虚拟股道 38 条（分组 ∪ 个别名单；含广明 GM1-GM4）', () => { eq(YardConfig.virtualIds.length, 38); });
+  t('到发线 1-10（10 条）、调车线 11-15（5 条）、临时 7 条', () => {
+    eq(YardConfig.idsOfGroup('td').length, 10);
+    eq(YardConfig.idsOfGroup('dc').length, 5);
     eq(YardConfig.idsOfGroup('tmp').length, 7);
+  });
+  t('X 线分组改名为「虚拟场」，且带分组颜色', () => {
+    var x = YardConfig.getTrack('X1');
+    eq(x.groupName, '虚拟场');
+    ok(/^#/.test(x.groupColor), 'groupColor 应为十六进制色值');
   });
   t('到发线显示名带「道」，未登记股道原样返回', () => {
     eq(YardConfig.trackName(1), '1道');
     eq(YardConfig.trackName(999), '999');
   });
-  t('个别虚拟股道：YX1 隐藏、YX2 保留', () => {
-    ok(YardConfig.isVirtual('YX1'));
-    ok(!YardConfig.isVirtual('YX2'));
+  t('个别虚拟股道：YQX 隐藏、YX1 常显', () => {
+    ok(YardConfig.isVirtual('YQX'));
+    ok(!YardConfig.isVirtual('YX1'));
   });
   t('作业区允许重叠：Y5 同时属栈桥与中油', () => {
     eq(YardConfig.getZones('Y5').map(z => z.name), ['栈桥', '中油']);

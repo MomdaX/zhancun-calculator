@@ -1,0 +1,211 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<!-- saved from url=(0054)http://10.190.136.28:6060/WebReport/ReportServer?op=fs -->
+<html xmlns="http://www.w3.org/1999/xhtml"><head><meta http-equiv="Content-Type" content="text/html; charset=GBK">
+    <title>钦州车务段接发车作业全流程追踪</title>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    
+    <meta name="author" content="FineReport">
+    <meta name="Copyright" content="FineReport">
+    <meta name="description" content="FineReport--Web Reporting Tool">
+    <meta name="keywords" content="FineReport,Web Reporting Tool">
+    <link rel="stylesheet" type="text/css" href="./钦州车务段接发车作业全流程追踪_files/ReportServer">
+    <link rel="stylesheet" type="text/css" href="./钦州车务段接发车作业全流程追踪_files/ReportServer(1)">
+    <link rel="stylesheet" type="text/css" href="./钦州车务段接发车作业全流程追踪_files/ReportServer(2)">
+    <link rel="stylesheet" type="text/css" href="./钦州车务段接发车作业全流程追踪_files/ReportServer(3)">
+    <link rel="stylesheet" type="text/css" href="./钦州车务段接发车作业全流程追踪_files/ReportServer(4)">
+
+    <!--[if lte IE 8]>
+    <link rel="stylesheet" type="text/css"
+          href="/WebReport/ReportServer?op=resource&resource=/com/fr/fs/web/css/fs.ie8.css"/>
+    <![endif]-->
+
+    <!--[if IE 6]>
+    <link rel="stylesheet" type="text/css"
+          href="/WebReport/ReportServer?op=resource&resource=/com/fr/fs/web/css/fs.ie6.css"/>
+    <![endif]-->
+    <style name="theme" type="text/css">.fui-seb{background-color: rgb(41,90,148);}.fui-fbc{color: rgb(255,255,255);}.fui-fbt{text-shadow: 0 0 1px rgb(255,255,255);}.fui-fhc{color: rgb(111,211,255);}.fui-fht{text-shadow: 0 0 3px rgb(111,211,255);}.fui-bsb{background-color: rgb(0,176,244);}.fui-bsc{color: rgb(0,176,244);}.fui-bsd{border-color: rgb(0,176,244);}</style>
+    <script type="text/javascript" src="./钦州车务段接发车作业全流程追踪_files/ReportServer(5)"></script>
+    <script type="text/javascript" src="./钦州车务段接发车作业全流程追踪_files/ReportServer(6)"></script>
+    <script type="text/javascript">
+        FS.config = {
+            'supportModules': FR.jsonDecode('["schedule","bakrestore","pluginoperate","FS-Plugin_updateOnline","customstyle","mobile","sms","preventsqlinject","systemmessage","monitor","h5","reportprocess"]')
+        }
+    </script>
+    
+    <script type="text/javascript">
+        $(function () {
+            var config = {
+                'company': '钦州车务段接发车作业全流程追踪',
+                'position': '{"jobTitle":"钦州港站调","departments":"钦州车务段,钦州港"},{"jobTitle":"钦州港站调","departments":"所有部门"},{"jobTitle":"所有职务","departments":"所有部门"},{"jobTitle":"所有职务","departments":"钦州车务段"},{"jobTitle":"所有职务","departments":"钦州车务段,钦州港"}',
+                'srole': '',
+                'loginImageID4FS': '',
+                'logoImageID4FS': '',
+                'backgroundImageID': '',
+                'homePageUrl': 'ReportServer?formlet=demo/homepage/finereport.frm&fr_check_url=Tue Sep 01 07:43:12 CST 2026',
+                'roots': FR.jsonDecode('{"modules":[]}'),
+                'hasRegistePrivilege': 'false',
+                'isTableDataUser': 'false',
+                'hasbi': '',
+                'isRegiste': FR.jsonDecode('true'),
+                'registerMail': 'business@finereport.com',
+                'registerUrl': 'http://www.finereporthelp.com/help/resources/regist.html',
+                'pluginRegisterUrl' : '',
+                'isLicExist': 'true',
+                'isSMSEnabled': 'false',
+                'username': '钦州港站调',
+                'isAdmin': FR.jsonDecode('false'),
+                'forceMessage': FR.jsonDecode('true'),
+                'ismobilebinddev': 'false',
+                'gradeAuthority': FR.jsonDecode('false'),
+                'templatePrivilegeType': '-1',
+                'dataConnectionAuthority': FR.jsonDecode('false'),
+                'hasGradeAuthority': FR.jsonDecode('true'),
+                'editReportAuthority': FR.jsonDecode('false'),
+                'departmentAllID': '30',
+                'postAllID': '47',
+                'userLimit': FR.jsonDecode('9999'),
+                'mobileUserAuthLimit': FR.jsonDecode('0'),
+                'ssLoginHeartbeat': FR.jsonDecode('true'),
+                'isBackgroundImg': FR.jsonDecode('true'),
+                'backgroundColor': 'rgb(38,77,132)',
+                'bannerType': FR.jsonDecode('2'),
+                'theme': FR.jsonDecode('{"isCustom":false,"name":"default"}'),
+                'folderIcons': FR.jsonDecode('{"112":"e642","113":"e642","114":"e642","99":"e642","108":"e642","110":"e642","111":"e642"}'),
+                'serverID': '',
+                'serverAttr': FR.jsonDecode('{"envVersion":"9.0","isPack":false,"isJetty":false}')
+            };
+            FS._init(config);
+
+            var numFormat = function (n) {
+                if (n < 10) {
+                    return '0' + n;
+                } else {
+                    return n;
+                }
+            };
+            var dateFormat = function (date) {
+                var o = {
+                    year: date.getFullYear(), //年
+                    month: numFormat(date.getMonth() + 1), //月份
+                    day: numFormat(date.getDate()), //日
+                    hours: numFormat(date.getHours()), //小时
+                    minutes: numFormat(date.getMinutes()), //分
+                    seconds: numFormat(date.getSeconds()) //秒
+                };
+
+                return o.year + '-' + o.month + '-' + o.day + ' ' + o.hours + ':' + o.minutes + ':' + o.seconds;
+            };
+
+            $(document).ready(function () {
+                var at, ip, city, systemMsg, isShow;
+                if (FR.CookieInfor.getCookieByName('lastLoginedAt')) {
+                    at = new Date(+FR.CookieInfor.getCookieByName('lastLoginedAt'));
+                    ip = FR.CookieInfor.getCookieByName('lastLoginedIp');
+                    city = FR.CookieInfor.getCookieByName('lastLoginedCity');
+                    if (city && city.indexOf("%") === -1) {
+                        city = escape(city)
+                    }
+                    city = decodeURI(city);
+                    isShow = FR.CookieInfor.getCookieByName('lastLoginedShow');
+                    FR.CookieInfor.removeCookie('lastLoginedAt');
+                    FR.CookieInfor.removeCookie('lastLoginedIp');
+                    FR.CookieInfor.removeCookie('lastLoginedCity');
+                    FR.CookieInfor.removeCookie('lastLoginedShow');
+                    if (ip === '0:0:0:0:0:0:0:1') {
+                        ip = 'localhost';
+                    }
+                }
+                if (FR.CookieInfor.getCookieByName('systemMsg')) {
+                    systemMsg = FR.CookieInfor.getCookieByName('systemMsg');
+                    FR.CookieInfor.removeCookie('systemMsg');
+                }
+                if (at && ip && isShow === "true") {
+                    $("body").append($(
+                        '<div id="pop_div"\n' +
+                        '     style="position:absolute;z-index: 999;width: 400px;height: 190px;right: 10px;bottom: 10px;background: white;border: 1px solid #DDDDDD;">\n' +
+                        '    <div style="width: 385px;height: 20px;background: #048BED;font-size: 14px;padding: 5px;padding-left: 10px;color: white;"> ' + FR.i18nText('FS-Msg-New_Message') + '\n' +
+                        '        <div id="lastloginclose" style="float:right; margin-right:5px; width:20px; height:20px; "></div>\n' +
+                        '    </div>\n' +
+                        '    <div class="last-login-info-icon" style="position: absolute;left: 50px;top: 50px;width: 34px;height: 34px;"></div>\n' +
+                        '    <div style="font-size: 20px;left: 100px;top: 52px;position: absolute;color: #666666;">' + FR.i18nText('FS-System-Last_Logined_Info_Popup') + '</div>\n' +
+                        '    <div style="font-size: 15px;left: 100px;top: 90px;position: absolute;color: #999999;">' + FR.i18nText('FS-System-Time') + '：</div>\n' +
+                        '    <div style="font-size: 15px;left: 200px;top: 90px;position: absolute;color: #999999;">' + dateFormat(at) + '</div>\n' +
+                        '    <div style="font-size: 15px;left: 100px;top: 111px;position: absolute;color: #999999;">' + FR.i18nText('FS-System-IP_Address') + '：</div>\n' +
+                        '    <div style="font-size: 15px;left: 200px;top: 111px;position: absolute;color: #999999;">' + ip + '</div>\n' +
+                        '    <div style="font-size: 15px;left: 100px;top: 132px;position: absolute;color: #999999;">' + FR.i18nText('FS-System-Last_Login_Location') + '：</div>\n' +
+                        '    <div style="font-size: 15px;left: 200px;top: 132px;position: absolute;color: #999999;">' + city + '</div>\n' +
+                        '</div>'
+                    ));
+                    $('#lastloginclose').css(
+                        'background', "url('/WebReport/ReportServer?op=resource&resource=/com/fr/web/core/widget/images/close.png') no-repeat center"
+                    );
+                    $('.last-login-info-icon').css(
+                        'background', "url('/WebReport/ReportServer?op=resource&resource=/com/fr/fs/resources/images/time.png') no-repeat"
+                    );
+                    $('#pop_div').fadeIn(400);
+                    setTimeout("$('#pop_div').fadeOut(400);", 3000);
+                    $('#lastloginclose').click(function () {
+                        $('#pop_div').fadeOut(400);
+                    });
+                }
+                if (systemMsg === 'true') {
+                    var message = {
+                        "user": FR.CookieInfor.getCookieByName('fr_username'),
+                        "message": FR.i18nText('FS-System-First_Login_Info'),
+                        "messagetype": "system_message",
+                        "terminal": 1,
+                        url: 'email_setting'
+
+                    };
+                    var target = this;
+                    var messageType = message.messagetype;
+                    var form = target.options ? target.options.form : null;
+                    var formParameters = form ? form.collectionValue() : {};
+                    var postData = {
+                        op: "fs_main",
+                        cmd: "save_message",
+                        message: message
+                    };
+                    if (FR.SessionMgr.getSessionID()) {
+                        $.extend(postData, {
+                            sessionID: FR.SessionMgr.getSessionID(),
+                            __parameters__: formParameters
+                        });
+                    }
+                    FR.ajax({
+                        url: FR.servletURL,
+                        async: true,
+                        type: 'POST',
+                        data: postData
+                    });
+                }
+                FS.Plugin.SystemMsgActionProvider.items.push({
+                    version:1.0,
+                    url: 'email_setting',
+                    action: function() {
+                        // id: 5， 系统设置
+                        var systemManagerModule = {
+                            text: FR.i18nText("FS-Module-Server_Setting"),
+                            id: 5,
+                            isModule: true
+                        };
+                        FS.Design.showDesign(systemManagerModule);
+                        // tabindex: 4 邮箱设置
+                        $('[tabindex=4]').click();
+                    }
+                })
+            });
+        });
+    </script>
+<link rel="stylesheet" type="text/css" href="./钦州车务段接发车作业全流程追踪_files/ReportServer(7)"></head>
+<body class="fui-fbc" style="background-image: url(&quot;/WebReport/ReportServer?op=resource&amp;resource=/com/fr/fs/resources/images/fsbg.jpg&quot;);">
+<div id="fs-frame-body" style="height: 821px; top: 60px;">
+    <div id="fs-frame-menu" style="width: 230px;"><div class="slimScrollDiv" style="position: relative; overflow: hidden; width: 100%; height: 100%;"><div class="fs-frame-scroll" style="overflow: hidden; width: 100%; height: 100%;"><div class="fs-menutree ui-state-enabled"><ul><li><a class="menutree-node fs-menu-item" title="发车作业全流程追踪"><span class="fs-menu-icon"><i class="icon-e642-a icon-menu-a"></i><i class="icon-e642-b icon-menu-b fui-fhc"></i></span><span>发车作业全流程追踪</span></a><ul style="display: block;"><li><a class="menutree-node fs-menu-item menutree-child fui-seb fui-fht select" title="发车作业全流程追踪" style="padding-left: 26px;"><i class="tree-icon icon-tree-leaf icon-tree-cpt"></i><span class="menutree-text">发车作业全流程追踪</span></a></li><li><a class="menutree-node fs-menu-item menutree-child" title="发车作业全流程追踪查询" style="padding-left: 26px;"><i class="tree-icon icon-tree-leaf icon-tree-cpt"></i><span class="menutree-text">发车作业全流程追踪查询</span></a></li></ul></li><li><a class="menutree-node fs-menu-item" title="到达作业全流程追踪"><span class="fs-menu-icon"><i class="icon-e642-a icon-menu-a"></i><i class="icon-e642-b icon-menu-b fui-fhc"></i></span><span>到达作业全流程追踪</span></a></li></ul></div></div><div class="slimScrollBar " style="border-radius: 7px; background: rgb(0, 0, 0); width: 7px; position: absolute; top: 0px; opacity: 0.4; display: none; z-index: 99; right: 0px; height: 877px;"></div><div style="width: 10px; height: 100%; position: absolute; top: 0px; right: 0px;"></div></div><div id="fs-frame-menu-south"></div><div class="fs-menu-hide"></div></div>
+    <div id="fs-frame-content" style="left: 230px; width: 1690px;"><div class="fs-tab ui-state-enabled bravo" style="top: 0px;"><div class="fs-tab-float" style="z-index: 8000;"><div class="fs-tab-menu-wrapper fui-bcb lower" style="top: 30px; display: none;"><div class="fs-tab-menu-options"><div class="fs-tab-menu-item nav-btn"><span>全屏</span></div><div class="fs-tab-menu-item nav-btn"><span>关闭全部</span></div><div class="fs-tab-menu-item nav-btn"><span>关闭其他标签</span></div></div><div class="fs-tab-menu-items"></div></div></div><div class="fs-tag-pane" style="width: 100%;height:30px;position: absolute;z-index: 2;"><div class="fs-tab-btns fui-seb"><div class="fs-tab-homepage fui-seb nav-btn"><i class="icon-tab-home"></i></div><ul class="fs-tab-names" style="width: 1590px;"><li class="fs-tab-item nav-btn select fui-bsb" style="width: 149px;"><div class="fs-tab-item-label" style="width: 130px;"><span title="发车作业全流程追踪">发车作业全流程追踪</span><i class="icon-tab-close" style="display: none;"></i></div></li><li class="fs-tab-item nav-btn" style="width: 149px;"><div class="fs-tab-item-label" style="width: 130px;"><span title="发车作业全流程追踪查询">发车作业全流程追踪查询</span><i class="icon-tab-close" style="display: none;"></i></div></li></ul><div class="fs-tab-more nav-btn"><i class="icon-tab-menu"></i></div></div></div><div class="fs-tab-content-mask" style="z-index: 8001; display: none; top: 0px;"></div><div class="fs-tab-content" style="width: 1690px; height: 791px;"><iframe class="fs-tab-content-item" src="./钦州车务段接发车作业全流程追踪_files/ReportServer.html" style="display: none;"></iframe><iframe class="fs-tab-content-item fs-tab-content-toolbar" name="fs_tab_1788220171098" id="fs_tab_1788220171098" src="./钦州车务段接发车作业全流程追踪_files/ReportServer(20).html" style="display: block;"></iframe><iframe class="fs-tab-content-item fs-tab-content-toolbar" name="fs_tab_1788381237763" id="fs_tab_1788381237763" src="./钦州车务段接发车作业全流程追踪_files/ReportServer(21).html" style="display: none;"></iframe></div></div></div>
+</div>
+<div id="fs-frame-header" style="height: 60px;">
+    <div id="fs-frame-banner"><img class="fs-banner-logo" src="./钦州车务段接发车作业全流程追踪_files/ReportServer(8)"><span class="fs-banner-title">钦州车务段接发车作业全流程追踪</span></div>
+<ul id="fs-frame-navi"><li id="fs-navi-message" class="fs-navibar-item"><i class="icon-navi-message"></i><span class="fs-navi-msgnum fui-bsc">0</span></li><li id="fs-navi-admin" class="fs-navibar-item"><i class="icon-navi-admin"></i><span>钦州港站调</span></li><li id="fs-navi-favorite" class="fs-navibar-item"><i class="icon-navi-favorite"></i></li></ul><div id="fs-frame-search"><i class="icon-navi-search"></i><div class="search-result-wrapper" style="display: none;"></div><input placeholder="输入文字以检索模版"></div></div>
+<div id="fs-frame-footer" style="display: none; top: 881px;">钦州车务段接发车作业全流程追踪</div>
+
+</body></html>

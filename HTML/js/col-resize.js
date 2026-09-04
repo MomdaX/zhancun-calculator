@@ -230,6 +230,7 @@
       var cells = headRow.cells;
       for (var i = 0; i < cells.length; i++) {
         var th = cells[i];
+        if (th.classList.contains('no-resize')) continue;          // 禁止单独拖拽的列（如合并表头的左半）
         if (th.querySelector(':scope > .col-handle')) continue;   // 去重
         var h = document.createElement('div');
         h.className = 'col-handle' + (i === cells.length - 1 ? ' last' : '');

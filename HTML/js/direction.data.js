@@ -1,7 +1,7 @@
 /**
  * 方向数据库 - 到站/发站 → 方向 映射
  * ============================================================================
- * 加载方式： <script src="direction.data.js" charset="utf-8"></script>
+ * 加载方式： <script src="js/direction.data.js" charset="utf-8"></script>
  * 暴露全局： window.DirectionData （CSV 文本，供解析器使用）
  *
  * 【为什么是 .js 而不是 .csv】
