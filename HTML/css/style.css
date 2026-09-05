@@ -903,6 +903,8 @@ table.detail tbody tr.selected td:first-child {
   box-shadow: inset 3px 0 0 #1864ab;
 }
 table.detail td.mid { text-align: center; font-variant-numeric: tabular-nums; }
+/* 车号列：鼠标形态提示「可双击复制」 */
+table.detail tbody td[data-col="carno"] { cursor: copy; }
 
 /* 车种/车号颜色规则（对齐 VBA 显示信息.bas） */
 table.detail .car-red { color: #e74c3c; font-weight: 700; }        /* DK/YW/YZ → 红加粗 */

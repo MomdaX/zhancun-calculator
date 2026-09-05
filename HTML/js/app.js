@@ -793,10 +793,10 @@
           return '<td' + (clsA ? ' class="' + clsA + '"' : '') + '>' +
                  escapeHtml(raw == null ? '' : raw) + '</td>';
         }
-        // 车号列
+        // 车号列：标记 data-col，供「双击复制车号」识别；title 提示该交互
         if (c.col === COL.CARNO) {
           var clsB = [c.cls, cs.clsN, cs.bgN].filter(Boolean).join(' ');
-          return '<td' + (clsB ? ' class="' + clsB + '"' : '') + '>' +
+          return '<td data-col="carno" title="双击复制车号"' + (clsB ? ' class="' + clsB + '"' : '') + '>' +
                  escapeHtml(raw == null ? '' : raw) + '</td>';
         }
         // 品名列：汽油/航煤标黄底（对齐 VBA 显示信息.bas）
@@ -946,6 +946,19 @@
       if (!sp) return;
       e.stopPropagation();
       openStationMap(sp);
+    });
+
+    // 明细中双击车号 → 复制车号到剪贴板（现场常需把车号粘到别的系统）
+    on('detailBody', 'dblclick', function (e) {
+      var td = e.target.closest ? e.target.closest('td[data-col="carno"]') : null;
+      if (!td) return;
+      var txt = (td.textContent || '').trim();
+      if (!txt) return;
+      Utils.copyText(txt).then(function () {
+        toast('已复制车号：' + txt);
+      }).catch(function (err) {
+        toast('复制失败：' + (err && err.message ? err.message : err), 'error');
+      });
     });
 
     // 明细中：按下行 → 拖动多选（拖动中实时调整范围，松开确定）；单击 → 切换选中

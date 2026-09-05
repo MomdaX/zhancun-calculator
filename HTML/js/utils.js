@@ -386,5 +386,39 @@
     };
   };
 
+  /* ==================== 复制文本到剪贴板 ==================== */
+  /** 降级方案：临时 textarea + execCommand（file:// 打开或浏览器拒绝剪贴板权限时使用） */
+  function fallbackCopy(text) {
+    return new Promise(function (resolve, reject) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, ta.value.length);
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+      document.body.removeChild(ta);
+      if (ok) resolve();
+      else reject(new Error('浏览器拒绝了复制操作'));
+    });
+  }
+
+  /**
+   * 复制文本到剪贴板
+   * @param {string} text 待复制内容
+   * @returns {Promise<void>} 成功 resolve；失败 reject(Error)
+   */
+  Utils.copyText = function (text) {
+    text = text == null ? '' : String(text);
+    if (!text) return Promise.reject(new Error('内容为空'));
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).catch(function () { return fallbackCopy(text); });
+    }
+    return fallbackCopy(text);
+  };
+
   global.Utils = Utils;
 })(window);
