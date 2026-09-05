@@ -33,12 +33,11 @@
     if (Store && Store.get) {
       var s = Store.get(STORE_KEY, null);
       if (s && typeof s === 'object') {
-        if (s.date != null) d.date = s.date;
+        // 日期、安全天数为实时值：不读回也不保存，仅保留安全起始日等持久项
         if (s.safeStart != null) d.safeStart = s.safeStart;
         if (s.dayH != null) d.dayH = s.dayH;
         if (Array.isArray(s.night)) d.night = s.night;
         if (Array.isArray(s.day)) d.day = s.day;
-        if (s.safety != null) d.safety = s.safety;
         if (s.notes != null) d.notes = s.notes;
       }
     }
@@ -46,7 +45,13 @@
   }
 
   function save(d) {
-    if (Store && Store.set) Store.set(STORE_KEY, d);
+    if (Store && Store.set) {
+      var o = {};
+      for (var k in d) {
+        if (d.hasOwnProperty(k) && k !== 'date' && k !== 'safety') o[k] = d[k];
+      }
+      Store.set(STORE_KEY, o);
+    }
   }
 
   function fmt(n, d) {
@@ -139,6 +144,7 @@
 
   function render() {
     var d = load();
+    d.date = todayStr();   // 打开浮窗时日期始终刷新为当前日期（安全天数随之按 今天 − 安全起始日 计算）
     setVal('prodDate', d.date);
     setVal('prodSafeStart', d.safeStart);
     setVal('prodNightH', d.nightH);

@@ -194,6 +194,17 @@ body {
   min-width: 520px;
 }
 
+/* 站存计算器 = 无遮罩浮窗：背景透明、容器点击穿透，主表保持可操作。
+ * 区别于其它 modal 的半透明全屏遮罩；面板内容自身仍可交互，
+ * 标题栏拖动/内部按钮/勾选均不受影响。 */
+#modal31814.show {
+  background: transparent;
+  pointer-events: none;
+}
+#modal31814.show .modal-content {
+  pointer-events: auto;
+}
+
 /* 31814 报表 */
 .rpt31814 { width: 1020px; }
 .rpt31814-body {
@@ -339,8 +350,8 @@ body {
   gap: 10px;
   align-items: stretch;
   height: 62vh;
-  min-height: 320px;
-  max-height: 700px;
+  min-height: 360px;
+  max-height: 720px;
 }
 .rpt-right .cfg-tracks-zone { min-width: 0; display: flex; flex-direction: column; }
 .rpt-right .cfg-ready-zone { min-width: 0; display: flex; flex-direction: column; }
@@ -575,8 +586,6 @@ body {
   line-height: 1;
   cursor: pointer;
 }
-.rpt-right .cfg-btns { display: flex; gap: 8px; padding-top: 10px; }
-.rpt-right .cfg-btns .btn { flex: 1; }
 
 /* ================= 表格区 ================= */
 .table-wrap {
@@ -1148,25 +1157,29 @@ td.dest span.station-link:hover {
 .prod-main-table .prod-sum-label { font-weight: 700; text-align: center; }
 .prod-main-table th, .prod-main-table td { border: 1px solid #d4e0ef; padding: 9px 3px; text-align: center; white-space: nowrap; }
 
-/* 表头：深蓝渐变 + 吸顶 */
+/* 表头：深绿渐变 + 吸顶 */
 .prod-main-table thead th {
   position: sticky; top: 0; z-index: 2;
-  background: linear-gradient(180deg, #2b5cb0, #1e3f7c);
+  background: linear-gradient(180deg, #2ba06b, #17643f);
   color: #fff; font-weight: 600; letter-spacing: .5px;
   text-shadow: 0 1px 1px rgba(0, 0, 0, .15);
 }
 
-/* 班次分组底色：夜班浅蓝、白班浅黄、合计浅灰 */
-.prod-main-table tbody tr:nth-child(-n+3) { background: #f2f7fd; }
-.prod-main-table tbody tr:nth-child(n+4):nth-child(-n+6) { background: #fdfcf2; }
-.prod-main-table tbody tr:nth-child(n+7) { background: #f6f7f9; }
-.prod-main-table tbody tr:hover { background: #e8f0fb; }
+/* 班次分组底色：夜班浅蓝、白班浅杏、合计浅灰（行底色避开表头绿色便于区分） */
+.prod-main-table tbody tr:nth-child(-n+3) { background: #e2edfa; }
+.prod-main-table tbody tr:nth-child(n+4):nth-child(-n+6) { background: #fcf2dc; }
+.prod-main-table tbody tr:nth-child(n+7) { background: #f5f6f8; }
+.prod-main-table tbody tr:hover { background: rgba(30, 60, 100, .07); }
 .prod-section-col { width: 72px; }
 .prod-main-table td:nth-child(2), .prod-main-table th:nth-child(2) { width: 168px; }
-.prod-section-label { background: #eef3fb !important; font-weight: 700; color: #1e3f7c; vertical-align: middle; letter-spacing: .5px; }
+.prod-section-label { font-weight: 700; vertical-align: middle; letter-spacing: .5px; }
+/* 班次标签分色：夜班蓝 / 白班杏 / 合计灰（标签底色与所属班次同色系） */
+.prod-main-table tbody tr:nth-child(-n+3) td.prod-section-label { background: #c2d9f3; color: #1e3f7c; }
+.prod-main-table tbody tr:nth-child(n+4):nth-child(-n+6) td.prod-section-label { background: #f0ddb0; color: #7a5b12; }
+.prod-main-table tbody tr:nth-child(n+7) td.prod-section-label { background: #e2e6ea; color: #4a5560; }
 
 /* 计算单元格：浅蓝底 + 等宽数字 */
-.prod-calc { background: rgba(43, 92, 176, .05); font-variant-numeric: tabular-nums; color: #1f3d5e; font-feature-settings: "tnum"; }
+.prod-calc { background: rgba(63, 118, 179, .06); font-variant-numeric: tabular-nums; color: #2a4a6e; font-feature-settings: "tnum"; }
 
 /* 输入单元格 */
 .prod-in {

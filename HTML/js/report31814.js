@@ -75,6 +75,49 @@
     });
   }
 
+  /** 把当前勾选的待装股道写入本地持久记忆（cfg-section 各复选框状态），
+   *  下次打开 31814 面板时恢复，key 与其余持久项（readyTrains/corrInputs）并列 */
+  function saveDzChecked() {
+    var checked = [];
+    document.querySelectorAll('#cfgTracks input:checked').forEach(function (cb) {
+      if (cb && cb.dataset && cb.dataset.track) checked.push(cb.dataset.track);
+    });
+    if (global.Store) global.Store.set('cfgDzChecked', checked);
+  }
+
+  /** 依据实际勾选同步「全选」「默认待装」按钮态（恢复勾选后调用，避免指示与实际不符） */
+  function syncDzToggleButtons() {
+    var cbs = document.querySelectorAll('#cfgTracks input');
+    var n = 0;
+    cbs.forEach(function (cb) { if (cb.checked) n++; });
+    var allBox = Utils.$('cfgAllDz');
+    if (allBox) allBox.checked = cbs.length > 0 && n === cbs.length;
+    var dzBtn = Utils.$('cfgDefaultDz');
+    if (!dzBtn) return;
+    // 「默认待装」亮起 ⇔ 勾选集恰好等于 DEFAULT_AREAS 中存在于 DOM 的股道
+    var defaultIds = {};
+    Object.keys(DEFAULT_AREAS).forEach(function (name) {
+      DEFAULT_AREAS[name].forEach(function (id) {
+        if (Utils.$('cfgTrack_' + id)) defaultIds[id] = true;
+      });
+    });
+    var on = true;
+    cbs.forEach(function (cb) {
+      if (cb.checked !== !!defaultIds[cb.dataset.track]) on = false;
+    });
+    dzBtn.classList.toggle('active', on);
+  }
+
+  /** 打开 31814 时恢复上次勾选的待装股道 */
+  function restoreDzChecked() {
+    var saved = (global.Store && global.Store.get) ? global.Store.get('cfgDzChecked', []) : [];
+    if (!saved) return;
+    saved.forEach(function (id) {
+      var cb = Utils.$('cfgTrack_' + id);
+      if (cb) cb.checked = true;
+    });
+  }
+
   /** 整组切换（全选 / 取消） */
   function toggleGroup(key) {
     var g = DZ_GROUP_MAP[key];
@@ -747,6 +790,7 @@
     html += '<span class="cfg-title-text">待装股道</span>';
     html += '<span class="cfg-toggle-row">';
     html += '<button class="btn" id="cfgDefaultDz">默认待装</button>';
+    html += '<button class="btn" id="cfgResetDz" title="取消全部待装勾选">重置</button>';
     html += '<label class="cfg-all"><input type="checkbox" id="cfgAllDz"> 全选</label>';
     html += '</span>';
     html += '</div>';
@@ -756,12 +800,6 @@
     html += '<div class="cfg-section-title">待发股道</div>';
     html += '<div class="cfg-ready-tracks" id="cfgReady"></div>';
     html += '</div>';
-    html += '</div>';
-
-    html += '<div class="cfg-btns">';
-    html += '<button class="btn primary" id="btnStart31814">开始计算</button>';
-    html += '<button class="btn" id="btnClear31814">清空数据区域</button>';
-    html += '<button class="btn" id="btnCloseCfg31814">关闭</button>';
     html += '</div>';
 
     Utils.$('cfgPanel').innerHTML = html;
@@ -867,6 +905,8 @@
             });
           });
           syncGroupState();
+          saveDzChecked();          // 整段选择变化即持久记忆
+          syncDzToggleButtons();
           runCalculation();
         });
       });
@@ -912,8 +952,8 @@
     Utils.$('cfgAllDz').addEventListener('change', function () {
       var on = this.checked;
       document.querySelectorAll('#cfgTracks input').forEach(function (cb) { cb.checked = on; });
-      var dz = Utils.$('cfgDefaultDz');
-      if (dz && !on) dz.classList.remove('active');
+      saveDzChecked();
+      syncDzToggleButtons();
       syncGroupState();
       runCalculation();
     });
@@ -1039,6 +1079,8 @@
         });
       }
       syncGroupState();
+      saveDzChecked();          // 默认待装切换后持久记忆
+      syncDzToggleButtons();
       runCalculation();
     });
 
@@ -1046,23 +1088,32 @@
     tb.addEventListener('change', function (e) {
       if (!e.target || e.target.type !== 'checkbox') return;
       syncGroupState();
+      saveDzChecked();          // 单个勾选变化即持久记忆
+      syncDzToggleButtons();
       runCalculation();
     });
     tb.addEventListener('click', function (e) {
       var btn = e.target && e.target.closest ? e.target.closest('.cfg-group-btn') : null;
       if (!btn) return;
       toggleGroup(btn.dataset.group);
+      saveDzChecked();          // 整组切换后持久记忆
+      syncDzToggleButtons();
       runCalculation();   // 整组选择变化即重算
     });
     Utils.$('cfgReady').addEventListener('change', runCalculation);
 
-    // 按钮
-    Utils.$('btnStart31814').addEventListener('click', runCalculation);
-    Utils.$('btnClear31814').addEventListener('click', function () {
-      clearConfig();
+    // 「重置」：待装股道复选框全部恢复为不选中（原底部「清空数据区域」按钮的位置调整）
+    Utils.$('cfgResetDz').addEventListener('click', function () {
+      document.querySelectorAll('#cfgTracks input').forEach(function (cb) { cb.checked = false; });
+      var dz = Utils.$('cfgDefaultDz');
+      if (dz) dz.classList.remove('active');
+      var all = Utils.$('cfgAllDz');
+      if (all) all.checked = false;
+      syncGroupState();
+      saveDzChecked();    // 清空后的空勾选集同样持久化，下次打开保持一致
+      syncDzToggleButtons();
       runCalculation();   // 清空后按"未选择"再算一次
     });
-    Utils.$('btnCloseCfg31814').addEventListener('click', function () { UI.Modal.close('modal31814'); });
 
     // 结果区截图（按钮在弹窗头部，此处绑定一次）
     var copyBtn = Utils.$('rptCopyImg');
@@ -1124,6 +1175,10 @@
     UI.Modal.open('modal31814');
     ensureConfigUI();
     clearConfig();
+    // 打开时恢复 cfg-section 勾选的待装股道（本地持久记忆，与纠正输入/车次芯片一致）
+    restoreDzChecked();
+    syncGroupState();
+    syncDzToggleButtons();
     // 打开时恢复上次本地持久记忆的纠正输入
     var savedCorr = (global.Store && global.Store.get) ? global.Store.get('corrInputs', {}) : {};
     savedCorr = savedCorr || {};
@@ -1144,7 +1199,7 @@
         updateReadyChip(item, id);
       }
     });
-    // 打开即以「未选择任何股道」的状态计算一次，
+    // 打开即按恢复后的勾选（无记忆时即「未选择任何股道」）计算一次，
     // 之后用户勾选待装/待发股道会自动重算
     runCalculation();
   }
