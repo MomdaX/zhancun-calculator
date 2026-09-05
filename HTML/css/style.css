@@ -651,8 +651,11 @@ table.grid td.col-a {
 }
 table.grid th.col-a { z-index: 6; background: var(--head-bg); }
 /* 注意事项列：行内右侧「收起/展开」按钮，鼠标悬停行时浮现 */
+/* 注意事项列：作为最左 sticky 固定列，同时充当 ::after「收起/展开」浮按钮的
+ * 定位包含块（sticky 属于 positioned，可作 absolute 子元素的包含块，
+ * 切勿改回 position: relative，否则会覆盖上方 sticky 导致横向滚动时列冻结丢失）。 */
 table.grid tbody td.col-a {
-  position: relative;
+  position: sticky;
 }
 table.grid tbody td.col-a::after {
   content: '收起';
@@ -895,6 +898,17 @@ td.train-loop { background: #ffe0b2 !important; font-weight: 600; }
 .search-count { font-size: 12px; color: var(--text-dim); white-space: nowrap; min-width: 66px; flex: none; }
 .search-modes { display: inline-flex; gap: 4px; }
 .search-modes .mode-btn { padding: 3px 10px; }
+/* 车号模式匹配方式：开头 / 包含（上下布局，仅车号模式可用，视觉为复选框、行为单选互斥） */
+.search-modes .carno-opts {
+  display: inline-flex; flex-direction: column; justify-content: center;
+  margin-left: 8px; gap: 2px;
+}
+.search-modes .carno-opt {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 12px; color: #555; cursor: pointer; user-select: none; white-space: nowrap;
+}
+.search-modes .carno-opt input { margin: 0; cursor: pointer; vertical-align: middle; }
+.search-modes .carno-opt.disabled { opacity: .4; pointer-events: none; }
 .search-modes .mode-btn.active {
   background: var(--accent); color: #fff; border-color: var(--accent-dark);
 }

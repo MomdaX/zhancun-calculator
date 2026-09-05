@@ -224,10 +224,18 @@
     { prefix: 'X',  note: '平板车',     match: 'starts', on: true, bold: false, color: '#a0aec0' }
   ];
 
+  // 高频渲染（每行 carStyle → carTypeMatch → 此处）调用，缓存 map 结果。
+  // 失效依赖 Store.get 返回同一引用：配置未变时 Store 内存缓存命中、返回同一数组引用，
+  // s === _ctcRaw 成立即直接返回缓存；Store.set/remove 后引用改变，自动重算。
+  var _ctcCache = null, _ctcRaw = undefined;
+
   Utils.getCarTypeConfig = function () {
     var s = (global.Store && global.Store.get) ? global.Store.get('carTypeStyle', null) : null;
+    if (s === _ctcRaw && _ctcCache) return _ctcCache;
+    _ctcRaw = s;
+    var result;
     if (Array.isArray(s) && s.length) {
-      return s.map(function (e) {
+      result = s.map(function (e) {
         return {
           prefix: e.prefix || '',
           note: e.note || '',
@@ -237,11 +245,14 @@
           color: e.color || '#e53e3e'
         };
       });
+    } else {
+      // 深拷贝默认，避免污染
+      result = Utils.defaultCarTypeConfig.map(function (e) {
+        return { prefix: e.prefix, note: e.note, match: e.match, on: e.on, bold: e.bold, color: e.color };
+      });
     }
-    // 深拷贝默认，避免污染
-    return Utils.defaultCarTypeConfig.map(function (e) {
-      return { prefix: e.prefix, note: e.note, match: e.match, on: e.on, bold: e.bold, color: e.color };
-    });
+    _ctcCache = result;
+    return result;
   };
 
   // 按当前配置生成动态样式表（车型高亮）

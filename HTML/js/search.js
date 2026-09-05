@@ -26,6 +26,8 @@
   var COL = global.Aggregate ? global.Aggregate.COL : null;
 
   var mode = 'carno';     // 'carno' | 'text'
+  var carnoMatch = 'contain';   // 'start'（开头） | 'contain'（包含），仅车号模式生效
+  var carnoStartEl = null, carnoContainEl = null;
 
   /* ==================== 取数 / 匹配 ==================== */
 
@@ -46,11 +48,18 @@
            .join(' ').toLowerCase();
   }
 
-  /** 命中判定：多关键词 OR（任一命中即算匹配） */
+  /** 命中判定：多关键词 OR（任一命中即算匹配）。车号模式支持「开头 / 包含」两种匹配方式 */
   function matched(row, keys) {
-    var hay = (mode === 'carno' ? cell(row, COL.CARNO) : haystack(row)).toLowerCase();
+    var hay, isCarno = (mode === 'carno');
+    if (isCarno) hay = cell(row, COL.CARNO).toLowerCase();
+    else hay = haystack(row);
     for (var i = 0; i < keys.length; i++) {
-      if (hay.indexOf(keys[i]) >= 0) return true;
+      var k = keys[i];
+      if (isCarno && carnoMatch === 'start') {
+        if (hay.indexOf(k) === 0) return true;          // 车号以关键词开头
+      } else {
+        if (hay.indexOf(k) >= 0) return true;            // 包含（车号 / 内容通用）
+      }
     }
     return false;
   }
@@ -138,6 +147,14 @@
     $('searchInput').placeholder = (m === 'carno')
       ? '输入车号（完整车号可展开整条股道并定位）'
       : '输入 车种 / 到站 / 品名 / 记事 / 收货人 / 车次';
+    // 开头 / 包含 仅对车号模式有意义，内容模式禁用
+    var carno = (m === 'carno');
+    if (carnoStartEl) {
+      carnoStartEl.disabled = !carno;
+      carnoContainEl.disabled = !carno;
+      carnoStartEl.closest('.carno-opt').classList.toggle('disabled', !carno);
+      carnoContainEl.closest('.carno-opt').classList.toggle('disabled', !carno);
+    }
     run();
   }
 
@@ -160,6 +177,22 @@
       var btn = e.target.closest ? e.target.closest('.mode-btn') : null;
       if (btn) setMode(btn.getAttribute('data-mode'));
     });
+
+    // 车号匹配方式：开头 / 包含（视觉为复选框，行为互斥且必选其一）
+    carnoStartEl = $('carnoOptStart');
+    carnoContainEl = $('carnoOptContain');
+    function onCarnoOptChange(e) {
+      if (e.target === carnoStartEl && carnoStartEl.checked) carnoContainEl.checked = false;
+      if (e.target === carnoContainEl && carnoContainEl.checked) carnoStartEl.checked = false;
+      // 不允许两者都不勾：取消其中一个时自动保留另一个
+      if (!carnoStartEl.checked && !carnoContainEl.checked) {
+        (e.target === carnoStartEl ? carnoStartEl : carnoContainEl).checked = true;
+      }
+      carnoMatch = carnoStartEl.checked ? 'start' : 'contain';
+      run();
+    }
+    on('carnoOptStart', 'change', onCarnoOptChange);
+    on('carnoOptContain', 'change', onCarnoOptChange);
     on('searchInput', 'input', Utils.debounce(run, 150));
     on('btnSearchClear', 'click', function () {
       $('searchInput').value = '';
@@ -172,12 +205,21 @@
     on('searchBody', 'click', function (e) {
       var tr = e.target.closest ? e.target.closest('tr') : null;
       if (!tr) return;
+      // 车号 / 车站单元格的交互走双击（复制 / 开地图），单击不打开明细，避免与双击冲突
+      if (e.target.closest('td[data-col="carno"]') || e.target.closest('span.station-link')) return;
       var ti = tr.getAttribute('data-track-idx');
       if (ti == null) return;
       global.YardApp.openDetailAt(+ti, +tr.getAttribute('data-car-i'));
     });
 
     setMode('carno');
+
+    // 数据刷新（重新加载/切换 xls）后，若搜索抽屉打开且已输入条件，自动重跑保持结果最新
+    if (global.YardApp && global.YardApp.onDataChange) {
+      global.YardApp.onDataChange(function () {
+        if (UI.Drawer.isOpen('searchDrawer') && $('searchInput').value.trim()) run();
+      });
+    }
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

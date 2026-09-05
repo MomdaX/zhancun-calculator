@@ -245,6 +245,9 @@
       row.__dest = resolveDest(work, dirStations, now, _dirIndexForResolve && _dirIndexForResolve.firstCharIndex);
       row.__carType = extractCarType(r[COL.CARTYPE]);
       row.__track = track;
+      // 派生：到达时间解析一次缓存到行，聚合循环与明细/搜索渲染复用（见 app.js renderRows），
+      // 避免同一字段在多阶段被反复正则解析。
+      row.__arrTime = parseArriveTime(r[COL.ARRTIME]);
       pre.push(row);
     }
 
@@ -293,7 +296,8 @@
         typeMap[ct] = (typeMap[ct] || 0) + 1;
 
         // 老牌车：停时 > 47h 且车号首位不为 0
-        var arrTime = parseArriveTime(row2[COL.ARRTIME]);
+        // 复用预处理阶段缓存的 __arrTime，不再重复解析同一到达时间
+        var arrTime = row2.__arrTime;
         var carNoStr = String(row2[COL.CARNO] == null ? '' : row2[COL.CARNO]);
         if (hoursDiff(arrTime, now) > oldCarHours && vbLeft(carNoStr, 1) !== '0') {
           oldCar += 1;

@@ -27,6 +27,12 @@
   var DB_NAME = 'YardStorageDB';
   var DB_STORE = 'handles';
 
+  /** 内存缓存：与 localStorage 同步（set/remove 同时更新）。
+   *  作用：渲染每行（carTypeStyle）/ 聚合每行（blackTankSpots、unloadSpots）都会高频调用
+   *  Store.get，原实现每次都走 localStorage 读取 + JSON.parse。缓存后命中只需对象属性查找。
+   *  单页应用，无多标签页同步需求，内存态与 localStorage 始终一致（所有读写均经 Store）。 */
+  var _mem = {};
+
   /** 补全前缀；已带前缀的键原样返回（历史键如 zhancun.grid.cols 可直接沿用，不丢记忆） */
   function keyOf(key) {
     return (String(key).indexOf(PREFIX) === 0) ? key : PREFIX + key;
@@ -40,14 +46,23 @@
    * @param {*} [def]    不存在或解析失败时的默认值
    */
   function get(key, def) {
+    var k = keyOf(key);
+    if (Object.prototype.hasOwnProperty.call(_mem, k)) return _mem[k];
     try {
-      var s = localStorage.getItem(keyOf(key));
-      if (s == null) return def;
+      var s = localStorage.getItem(k);
+      if (s == null) {
+        // 原始类型 / null 的默认值可安全缓存；对象 / 数组默认不缓存，避免共享引用被误改。
+        if (def === null || typeof def !== 'object') _mem[k] = def;
+        return def;
+      }
       try {
-        return JSON.parse(s);
+        var v = JSON.parse(s);
+        _mem[k] = v;
+        return v;
       } catch (e) {
         // 兼容升级前直接存原始字符串的旧数据（如 '文件夹名' 无引号）：
-        // JSON 解析失败时返回原始字符串，避免老用户升级后显示丢失。
+        // JSON 解析失败时返回原始字符串并缓存，避免老用户升级后显示丢失。
+        _mem[k] = s;
         return s;
       }
     } catch (e) {
@@ -57,8 +72,10 @@
 
   /** 写入设置项（内部 JSON 序列化，读取时自动还原） */
   function set(key, val) {
+    var k = keyOf(key);
     try {
-      localStorage.setItem(keyOf(key), JSON.stringify(val));
+      localStorage.setItem(k, JSON.stringify(val));
+      _mem[k] = val;   // 与 localStorage 同步；setItem 抛错（配额/隐私）则不缓存
       return true;
     } catch (e) {
       return false;   // 隐私模式 / 配额满：静默失败，不影响主流程
@@ -66,7 +83,9 @@
   }
 
   function remove(key) {
-    try { localStorage.removeItem(keyOf(key)); } catch (e) {}
+    var k = keyOf(key);
+    try { localStorage.removeItem(k); } catch (e) {}
+    delete _mem[k];   // 同步失效内存缓存
   }
 
   /* ==================== 异步：IndexedDB（可存句柄等不可序列化的值） ==================== */
@@ -122,7 +141,25 @@
     }).catch(function () {});
   }
 
+  /** 持久化键集中管理：所有键名在此一处定义，调用处统一用 Store.KEYS.xxx，
+   *  避免散写字符串导致拼写错位、静默失败（keyOf 仍统一加前缀）。 */
+  var KEYS = {
+    folderName: 'folderName',
+    gridFontSize: 'gridFontSize',
+    showEmptyGroups: 'showEmptyGroups',
+    notesCollapsed: 'notesCollapsed',
+    unloadSpots: 'unloadSpots',
+    blackTankSpots: 'blackTankSpots',
+    carTypeStyle: 'carTypeStyle',
+    xlsDir: 'xlsDir',
+    detailCols: 'zhancun.detail.cols.v2',   // 历史列宽记忆键（已带前缀，keyOf 原样返回）
+    cfgDzChecked: 'cfgDzChecked',
+    corrInputs: 'corrInputs',
+    readyTrains: 'readyTrains'
+  };
+
   global.Store = {
+    KEYS: KEYS,
     get: get,
     set: set,
     remove: remove,

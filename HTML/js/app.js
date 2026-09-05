@@ -64,9 +64,9 @@
     { col: Aggregate.COL.CARNO, t: '车号', w: 78 }, { col: Aggregate.COL.CARTYPE, t: '车种', w: 68 },
     { col: Aggregate.COL.TARE,    t: '自重', w: 52 }, { col: Aggregate.COL.LEN,   t: '换长', w: 50, cls: 'mid' },
     { col: Aggregate.COL.LOAD,    t: '载重', w: 56, cls: 'mid' },
-    { col: Aggregate.COL.DEST,    t: '到站', w: 120, fmt: 'dest' },
+    { col: Aggregate.COL.DEST,    t: '到站', w: 120, disp: 'processed' },
     { col: Aggregate.COL.DIR,     t: '方向', w: 42 }, { col: Aggregate.COL.GOODS, t: '品名', w: 90 },
-    { col: Aggregate.COL.FROM,    t: '发站', w: 110, fmt: 'dest' },
+    { col: Aggregate.COL.FROM,    t: '发站', w: 110, disp: 'raw' },
     { col: Aggregate.COL.NOTE,    t: '记事', w: 170 },
     { col: Aggregate.COL.TRAIN,   t: '车次', w: 62 }, { col: Aggregate.COL.CONSIGNEE, t: '收货人', w: 100 }, { col: Aggregate.COL.ARRTIME, t: '到达时间', w: 128 }
   ];
@@ -832,17 +832,16 @@
           return '<td class="center">' +
                  escapeHtml(t ? t.name : (raw == null ? '' : raw)) + '</td>';
         }
-        if (c.fmt === 'dest') {
-          // 搜索结果按需求取「处理后的到站」；明细保持原样（优先原始到站）
-          // 到站列可按 destProcessed 取处理后值；发站列始终显示原始发站，避免误用到站聚合值。
-          var txt = (opts.destProcessed && c.col === COL.DEST)
-            ? (row.__dest == null ? '' : String(row.__dest).trim())
-            : (raw == null ? '' : String(raw).trim());
-          if (txt) return '<td class="dest">' + renderDest(txt, true) + '</td>';
+        if (c.disp) {
+          // 到站(disp:'processed')默认显示原始站名，仅当 opts.destProcessed 为真才用处理后的 __dest；
+          // 发站(disp:'raw')永远用原始发站，从根上杜绝被聚合到站（如「货场」）误填。
+          var useProcessed = c.disp === 'processed' && opts.destProcessed;
+          var val = useProcessed && row.__dest != null ? String(row.__dest).trim()
+                  : (raw == null ? '' : String(raw).trim());
+          if (val) return '<td class="dest">' + renderDest(val, true) + '</td>';
+          // 原始站名为空 → 回退派生到站（聚合串，如「三街3 麻尾2」），挂 station-link 供双击开地图
           var agg = row.__dest == null ? '' : String(row.__dest).trim();
           if (agg) {
-            // 派生到站（聚合串，如「三街3 麻尾2」）：若含车站名，挂 station-link +
-            // data-station，使明细双击事件能打开地图（与 renderDest 的车站名同款行为）。
             var dStation = stationOf(agg);
             var dCls = dStation ? 'derived station-link' : 'derived';
             var dAttr = dStation ? ' data-station="' + escapeHtml(dStation) + '"' : '';
@@ -883,7 +882,8 @@
     // 复用 Utils.parseArriveTime：兼容 Date 实例、"2026/9/2T08:30:00"、"2026年9月2日" 等写法
     var body = els.body.querySelectorAll('tr');
     list.forEach(function (row, i) {
-      var d = Utils.parseArriveTime(row[COL.ARRTIME]);
+      // 优先复用 aggregate 预处理已缓存的 __arrTime；缺省时回退解析（兼容非聚合来源的行）
+      var d = (row.__arrTime != null) ? row.__arrTime : Utils.parseArriveTime(row[COL.ARRTIME]);
       var hrs = d ? Math.floor((base - d) / 3600000) : '';
       var td = body[i] && body[i].querySelector('td.stay');
       if (td) {
@@ -988,6 +988,35 @@
   }
 
   /* =================== 事件绑定 =================== */
+
+  /**
+   * 给「车辆行容器」绑定通用双击交互：
+   *   · 双击车站名(span.station-link) → 打开地图径路
+   *   · 双击车号(td[data-col="carno"]) → 复制车号到剪贴板
+   * 明细抽屉(detailBody)与搜索抽屉(searchBody)共用，保证两处交互一致。
+   * 注：行点击/拖拽多选语义不同（明细=多选，搜索=打开并定位），不在此统一。
+   * @param {string} elId 容器元素 id
+   */
+  function bindCarRowEvents(elId) {
+    on(elId, 'dblclick', function (e) {
+      var sp = e.target.closest('span.station-link');
+      if (sp) {
+        e.stopPropagation();
+        openStationMap(sp);
+        return;
+      }
+      var td = e.target.closest('td[data-col="carno"]');
+      if (!td) return;
+      var txt = (td.textContent || '').trim();
+      if (!txt) return;
+      Utils.copyText(txt).then(function () {
+        toast('已复制车号：' + txt);
+      }).catch(function (err) {
+        toast('复制失败：' + (err && err.message ? err.message : err), 'error');
+      });
+    });
+  }
+
   function bind() {
     on('fileInputMulti', 'change', function (e) {
       var f = e.target.files[0];
@@ -1036,26 +1065,10 @@
       openDetail(+tr.getAttribute('data-idx'));
     });
 
-    // 明细中双击车站名 → 打开地图生成径路（起点固定钦州港）
-    on('detailBody', 'dblclick', function (e) {
-      var sp = e.target.closest('span.station-link');
-      if (!sp) return;
-      e.stopPropagation();
-      openStationMap(sp);
-    });
-
-    // 明细中双击车号 → 复制车号到剪贴板（现场常需把车号粘到别的系统）
-    on('detailBody', 'dblclick', function (e) {
-      var td = e.target.closest ? e.target.closest('td[data-col="carno"]') : null;
-      if (!td) return;
-      var txt = (td.textContent || '').trim();
-      if (!txt) return;
-      Utils.copyText(txt).then(function () {
-        toast('已复制车号：' + txt);
-      }).catch(function (err) {
-        toast('复制失败：' + (err && err.message ? err.message : err), 'error');
-      });
-    });
+    // 明细表：双击车站名→地图、双击车号→复制车号（通用交互，见 bindCarRowEvents）
+    bindCarRowEvents('detailBody');
+    // 搜索表：复用同一套双击交互（之前缺失，导致搜索结果里车号无法复制 / 车站无法开地图）
+    bindCarRowEvents('searchBody');
 
     // 明细中：按下行 → 拖动多选（拖动中实时调整范围，松开确定）；单击 → 切换选中
     var dragSel = { active: false, moved: false, anchor: -1, snap: null, mode: 'add' };
@@ -1203,7 +1216,7 @@
     UI.Dropdown('btnMenu', 'menuList', {
       onSelect: function (item, action) {
         if (action === '31814' && typeof window.Report31814 !== 'undefined') {
-          window.Report31814.open(state.rawRows, state.currentFile);
+          window.Report31814.open(global.YardApp.getRawRows(), state.currentFile);
         } else if (action === 'settings') {
           UI.Modal.open('modalSettings');
         } else if (action === 'productivity' && typeof window.Productivity !== 'undefined') {
@@ -1513,10 +1526,10 @@
     /* 列宽按「列序索引」记忆，因此调整 DETAIL_COLS 的顺序或增删列后，
      * 旧记忆会整体错位（宽度套到了别的列上）。键名带版本号即可让旧记忆失效、
      * 首次打开重新按内容自适应——改动列序时，把 v1 递增即可。 */
-    ColResize.enable($('detailTable'), { persistKey: 'zhancun.detail.cols.v2' });
+    ColResize.enable($('detailTable'), { persistKey: Store.KEYS.detailCols });
     /* 搜索结果表与明细表列数、列序完全一致（同一份 DETAIL_COLS + 停时列），
      * 故共用同一个记忆键：在任一表中拖好的列宽，另一个表打开时自动沿用。 */
-    ColResize.enable($('searchTable'), { persistKey: 'zhancun.detail.cols.v2' });
+    ColResize.enable($('searchTable'), { persistKey: Store.KEYS.detailCols });
   }
 
   /* =================== 空框架 =================== */
