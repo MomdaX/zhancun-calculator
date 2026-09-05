@@ -164,6 +164,25 @@
   ];
 
   /* ==========================================================================
+   * 主表作业区横幅（主表分段展示用）
+   * --------------------------------------------------------------------------
+   * 与上方 DZ_SECTIONS 区分：DZ_SECTIONS 只覆盖「可装车股道」、服务于 31814
+   * 待装面板；此处是主表的分段横幅，覆盖全部股道（含 L1-L3、YX1、DY1-4、
+   * YH1-2、Y1-Y4、YQX 等不参与装车的线），用于把主表按作业区断开。
+   *   ids   支持范围写法（'H1-H5'、'Y1-Y16'），股道须在 TRACK_DEFS 中存在
+   *   color 横幅底色（各作业区取不同色，便于一眼分区）
+   * 顺序即表格自上而下的分段顺序。
+   * ========================================================================== */
+  var MAIN_AREAS = [
+    { name: '货场作业区', color: '#16a085', ids: 'H1-H5' },
+    { name: '勒沟作业区', color: '#d35400', ids: ['L1-L3', 'ZL1-ZL3', 'LZ', 'G1', 'G2'] },
+    { name: '鹰岭作业区', color: '#c0392b', ids: ['YX1-YX3', 'TS1', 'TS2', 'SH1-SH3',
+                                                  'GT1', 'GT2', 'CZ3', 'CZ4', 'GM1-GM4',
+                                                  'DY1-DY4', 'TSY1-TSY4'] },
+    { name: '中油作业区', color: '#8e44ad', ids: ['YH1', 'YH2', 'Y1-Y16', 'YQX'] }
+  ];
+
+  /* ==========================================================================
    * 七、个别虚拟股道名单（股道级隐藏）
    * --------------------------------------------------------------------------
    * 与「分组 virtual」互补：分组 virtual 整组隐藏（如 X1-X15、DY1-4、TSY1-4、
@@ -265,6 +284,22 @@
     });
   });
 
+  // 展开主表作业区横幅：股道 id 列表 → 配置序位区间 [from, to]。
+  // 主表行顺序取自数据中股道的出现顺序（aggregate 按数据分组），未必等于配置顺序，
+  // 故按「序位区间」定位每个作业区的首个可见行，保证分段顺序与此处配置一致。
+  var mainAreas = [];
+  MAIN_AREAS.forEach(function (a) {
+    var ids = expandIds(a.ids).filter(function (id) { return !!trackMap[id]; });
+    if (!ids.length) return;                 // 空区：不产生横幅
+    var from = Infinity, to = -Infinity;
+    ids.forEach(function (id) {
+      var t = trackMap[id];
+      if (t.index < from) from = t.index;
+      if (t.index > to) to = t.index;
+    });
+    mainAreas.push({ name: a.name, color: a.color || '#2b5cb0', ids: ids, from: from, to: to });
+  });
+
   global.YardConfig = {
     version: '1.0',
     tracks: tracks,
@@ -277,6 +312,8 @@
     defaultAreas: DEFAULT_AREAS,
     /** 待装股道大组（作业区）划分，用于 31814 报表分组展示 */
     areaSections: DZ_SECTIONS,
+    /** 主表作业区横幅：按股道序位区间把主表分段（仅展示，不影响统计/选中） */
+    mainAreas: mainAreas,
 
     /** 按 id 取股道定义 */
     getTrack: function (id) { return trackMap[String(id)] || null; },

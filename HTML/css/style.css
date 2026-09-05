@@ -797,6 +797,28 @@ table.grid tfoot td.num.mid { text-align: center; }
 
 /* 空车股道整行淡化 */
 tr.blank td { color: #b2bec3; }
+
+/* 主表作业区横幅行：通栏单行，按作业区把表格分段（底色由配置内联指定） */
+table.grid tbody tr.area-banner td {
+  position: relative;
+  padding: 2px;
+  color: #fff;
+  font-weight: 700;                                  /* 作业区名：加粗醒目 */
+  font-size: 14px;
+  letter-spacing: 16px;                               /* 字距拉开，便于远看 */
+  text-align: center;
+  white-space: nowrap;
+  cursor: default;
+  border-top: 2px solid #fff;                        /* 与上一作业区之间的断口 */
+  border-bottom: 1px solid rgba(255, 255, 255, .35);
+}
+/* 横向滚动时把横幅文字钉在冻结列右侧，避免随表格滚出视野 */
+table.grid tbody tr.area-banner .area-banner-text {
+  position: sticky;
+  left: calc(var(--col-a-w, 110px) + var(--col-b-group-w, 32px) + 10px);
+  /* letter-spacing 会在末字后也留一份间距，致居中偏左；负 margin 抵消，保持真正居中 */
+  margin-right: -8px;
+}
 tr.blank td.track { color: #8395a7; }
 
 /* 循环车（车次 6 开头）标色 */
@@ -847,6 +869,7 @@ td.train-loop { background: #ffe0b2 !important; font-weight: 600; }
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   background: #f8fafb;
 }
@@ -859,6 +882,39 @@ td.train-loop { background: #ffe0b2 !important; font-weight: 600; }
 .drawer-head h3 .dt-total.warn { color: #fff !important; background: #e03131 !important; border-color: #e03131 !important; }
 .drawer-head .spacer { flex: 1; }
 .drawer-body { flex: 1; overflow: auto; padding: 0; }
+
+/* ============ 搜索查询抽屉 ============ */
+/* 层级关系：明细抽屉（60/61）压在搜索抽屉（52/53）之上。
+ * 搜索里点结果行会打开明细，此时明细是焦点，必须盖在搜索之上；
+ * 关掉明细后自动回到搜索结果。两者可并存，ESC 按栈依次关闭。 */
+#searchMask { z-index: 52; }
+#searchDrawer { z-index: 53; }
+#drawerMask { z-index: 60; }
+#drawer { z-index: 61; }
+
+.search-count { font-size: 12px; color: var(--text-dim); white-space: nowrap; min-width: 66px; flex: none; }
+.search-modes { display: inline-flex; gap: 4px; }
+.search-modes .mode-btn { padding: 3px 10px; }
+.search-modes .mode-btn.active {
+  background: var(--accent); color: #fff; border-color: var(--accent-dark);
+}
+.search-input {
+  flex: 1; min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid #cfd8e3; border-radius: 6px;
+  font-size: 14px;
+  font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+}
+.search-input:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(43, 92, 176, .14);
+}
+.search-hint { padding: 14px; font-size: 13px; color: var(--text-dim); line-height: 1.9; }
+.search-hint b { color: var(--text); }
+.search-hint.hide { display: none; }
+/* 命中行：搜索结果中被匹配的车；也用于明细抽屉里被定位的那辆 */
+table.detail tbody tr.hit td { background: #fff3bf !important; }
+table.detail tbody tr.hit td:first-child { box-shadow: inset 3px 0 0 #f08c00; }
 
 table.detail {
   border-collapse: separate;

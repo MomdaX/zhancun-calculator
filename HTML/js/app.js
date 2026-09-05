@@ -21,12 +21,14 @@
  *                        —— 明细行拖拽范围选 + 单击切换（bind 内联，未抽组件）
  *   [事件绑定]      L729  bind —— 全部 DOM 事件绑定
  *   [入口]          L969  init —— 启动编排
+ *   [对外接口]      文件末尾  window.YardApp —— 数据 / 配置 / 渲染 / 交互的统一出口，
+ *                        新增模块一律通过它复用主表能力（详见该区块注释）
  *
  * 说明：state 为 IIFE 内私有对象（约 51 处引用），故未做文件拆分；
  *       如需拆分，数据源区块（L77-301）耦合最弱，最优先。
  * =====================================================================
  */
-(function () {
+(function (global) {
   'use strict';
 
   /* ============================ 列定义 ============================ */
@@ -39,7 +41,7 @@
     { key: 'count',     title: '车数',           width: 48,  num: true, cls: 'mid' },
     { key: 'carTypes',  title: '车种',           width: 124 },
     { key: 'length',    title: '换长',           width: 58,  num: true, cls: 'mid' },
-    { key: 'dest',      title: '到站',           width: 340, dest: true },
+    { key: 'dest',      title: '车辆信息',       width: 340, dest: true },
     { key: 'empty',     title: '空箱/空车',      width: 78,  num: true },
     { key: 'heavy',     title: '重车',           width: 52,  num: true },
     { key: 'train',     title: '到达车次',       width: 76 },
@@ -510,11 +512,43 @@
     return arr;
   }
 
+  /**
+   * 计算各作业区横幅的插入位置。
+   * 主表行顺序取自数据中股道的出现顺序（aggregate 按数据分组），未必等于配置顺序，
+   * 故按股道在配置中的序位区间判定：每个作业区取其区间内「第一个出现的可见行」。
+   * 该区股道被整段隐藏（空线分组开关）或数据中不存在时，不会产生横幅。
+   * @param {Array} vis visibleRows() 的结果
+   * @returns {Object} 行号 → 作业区配置（{ name, color, from, to, ids }）
+   */
+  function computeBannerSlots(vis) {
+    var slots = {};
+    var areas = (YardConfig && YardConfig.mainAreas) || [];
+    areas.forEach(function (a) {
+      for (var n = 0; n < vis.length; n++) {
+        var t = YardConfig.getTrack(vis[n].r.track);
+        if (t && t.index >= a.from && t.index <= a.to) {
+          if (!slots[n]) slots[n] = a;   // 区间互不重叠，理论上不会冲突
+          break;
+        }
+      }
+    });
+    return slots;
+  }
+
+  /** 作业区横幅行：通栏单行，仅作分段标识，不参与选中 / 明细 / 合计 */
+  function bannerRow(a) {
+    return '<tr class="area-banner" data-area="' + escapeHtml(a.name) + '">' +
+           '<td colspan="' + COLUMNS.length + '" style="background:' + (a.color || '#2b5cb0') + '">' +
+           '<span class="area-banner-text">' + escapeHtml(a.name) + '</span>' +
+           '</td></tr>';
+  }
+
   function render() {
     // 表头
     $('headRow').innerHTML = COLUMNS.map(function (c) {
       var cls = c.cls || '';
-      // 到站列：加 col-flex 类（仅用于允许换行），仍写内联 width，作为独立可拖拽列
+      // 到站列（表头显示为「车辆信息」）：加 col-flex 类（仅用于允许换行），
+      // 仍写内联 width，作为独立可拖拽列
       if (c.key === 'dest') cls += ' col-flex';
       var style = ' style="width:' + c.width + 'px"';
       // 分组合并列（group）与股道列（track）表头合并为一个「股道」：
@@ -551,9 +585,15 @@
     // 渲染时首行输出带 rowspan 的分组单元格，组内其余行不输出该 td（由 rowspan 覆盖）。
     var spans = computeGroupSpans(vis);
 
+    // 作业区横幅：定位每个作业区在可见行中的首行（该区无可见行时自动不显示）
+    var bannerAt = computeBannerSlots(vis);
+
     vis.forEach(function (item, n) {
       var r = item.r, idx = item.idx;
       var track = r.track;
+
+      // 作业区横幅行：通栏单行，把主表按作业区断开
+      if (bannerAt[n]) html.push(bannerRow(bannerAt[n]));
       var cfg = YardConfig.getTrack(track);
       var zones = YardConfig.getZones(track);
 
@@ -606,7 +646,12 @@
           inner = renderDest(v);
           cls += ' dest';
         } else if (c.num) {
-          inner = (v === 0 || v === '' || v == null) ? '' : escapeHtml(String(v));
+          // 换长保留 1 位小数（如 0.0）；其余数值列维持原样
+          if (c.key === 'length') {
+            inner = (v === 0 || v === '' || v == null) ? '' : Number(v).toFixed(1);
+          } else {
+            inner = (v === 0 || v === '' || v == null) ? '' : escapeHtml(String(v));
+          }
           cls += ' num';
         } else {
           var rawNote = (v == null ? '' : String(v));
@@ -664,7 +709,7 @@
     // 不再需要手工数着补 <td>（原写死 colspan + 固定个数的空 td，加一列就整体错位）。
     var FOOT_VALUES = {
       count: tc,
-      length: Math.round(tl * 10) / 10,
+      length: (Math.round(tl * 10) / 10).toFixed(1),
       load: Math.round(tw * 10) / 10,
       oldCar: told
     };
@@ -700,6 +745,9 @@
     $('stLen').textContent = Math.round(tl * 10) / 10;
     $('stLoad').textContent = Math.round(tw * 10) / 10;
     $('stOld').textContent = told;
+
+    // 主表重绘即代表「数据或视图已更新」，统一通知订阅者（供外部模块联动）
+    notifyDataChange();
   }
 
   /* =================== 明细抽屉 =================== */
@@ -743,27 +791,39 @@
   /** 车种/车号颜色规则（对齐 VBA 显示信息.bas） */
   var carStyle = Utils.carStyle;
 
-  function openDetail(idx) {
-    var r = state.rows[idx];
-    if (!r) return;
-    state.detailIdx = idx;
-    state.detailSel = new Set();   // 重置多选（每次打开明细都清空选中）
-    updateDetailTitle();           // 初始：按全部行求和（无选中）
+  /**
+   * 把一批车辆行渲染为「明细表」结构（表头 + 表体 + 停时列）。
+   * 明细抽屉与「搜索查询」抽屉共用同一份实现，保证两处的列序、着色、格式完全一致。
+   *
+   * @param {Array}  list 车辆行数组（Aggregate 产出的行，含 __dest / __carType 等派生字段）
+   * @param {Object} els  { head, body, table } 三个目标元素
+   * @param {Object} [opts]
+   * @param {boolean}  [opts.destProcessed] 到站列优先显示「处理后的到站」__dest。
+   *        明细抽屉传 false（沿用原行为：优先原始到站，为空才回退 __dest）；
+   *        搜索抽屉按需求传 true（统一显示处理后的到站）。
+   * @param {Function} [opts.rowAttr] (row, i) → 字符串，追加到 <tr> 上
+   *        （明细挂 data-i 供多选/复制定位；搜索挂 hit 高亮与股道/行下标）
+   */
+  function renderDetailRows(list, els, opts) {
+    opts = opts || {};
+    list = list || [];
 
     // 列定义是常量（DETAIL_COLS），表头与每一行共用同一份
-    $('detailHead').innerHTML = DETAIL_COLS.map(function (c) {
+    els.head.innerHTML = DETAIL_COLS.map(function (c) {
       // 记事列：加 col-flex 类（仅用于允许换行），仍写内联 width，作为独立可拖拽列
       var cls = (c.t === '记事') ? ' col-flex' : '';
       return '<th class="' + cls.trim() + '" style="width:' + c.w + 'px">' + escapeHtml(c.t) + '</th>';
     }).join('') + '<th style="width:60px">停时h</th>';
 
-    // 表头被 innerHTML 重建，需重新挂载列宽拖拽手柄并恢复记忆列宽
-    var dt = $('detailTable');
-    ColResize.safeGet(dt).remount();
+    // 表头被 innerHTML 重建，需重新挂载列宽拖拽手柄并恢复记忆列宽。
+    // 注意：此处【不】调用 ColResize.reset()——reset 会清掉记忆并重新自适应，
+    // 导致用户拖好的列宽在「关闭再打开抽屉」或「切换股道」后失效。
+    // 记忆的恢复已由下面的 remount() 完成（有记忆→恢复，无记忆→首次内容自适应）。
+    // 如需强制重置为自适应，用设置里的「列宽自适应」按钮（btnAutoFitCols）。
+    ColResize.safeGet(els.table).remount();
 
-    var list = r.raw || [];
     var base = state.printDate || new Date();
-    $('detailBody').innerHTML = list.map(function (row, i) {
+    els.body.innerHTML = list.map(function (row, i) {
       var cs = carStyle(row);
       var tds = DETAIL_COLS.map(function (c) {
         var raw = row[c.col];
@@ -773,7 +833,11 @@
                  escapeHtml(t ? t.name : (raw == null ? '' : raw)) + '</td>';
         }
         if (c.fmt === 'dest') {
-          var txt = raw == null ? '' : String(raw).trim();
+          // 搜索结果按需求取「处理后的到站」；明细保持原样（优先原始到站）
+          // 到站列可按 destProcessed 取处理后值；发站列始终显示原始发站，避免误用到站聚合值。
+          var txt = (opts.destProcessed && c.col === COL.DEST)
+            ? (row.__dest == null ? '' : String(row.__dest).trim())
+            : (raw == null ? '' : String(raw).trim());
           if (txt) return '<td class="dest">' + renderDest(txt, true) + '</td>';
           var agg = row.__dest == null ? '' : String(row.__dest).trim();
           if (agg) {
@@ -811,12 +875,13 @@
         return '<td' + (c.cls ? ' class="' + c.cls + '"' : '') + '>' +
                escapeHtml(raw == null ? '' : raw) + '</td>';
       }).join('');
-      return '<tr data-i="' + i + '">' + tds + '<td class="stay"></td></tr>';
+      var attr = opts.rowAttr ? (opts.rowAttr(row, i) || '') : '';
+      return '<tr' + attr + '>' + tds + '<td class="stay"></td></tr>';
     }).join('');
 
     // 停时列：需单独计算
     // 复用 Utils.parseArriveTime：兼容 Date 实例、"2026/9/2T08:30:00"、"2026年9月2日" 等写法
-    var body = $('detailBody').querySelectorAll('tr');
+    var body = els.body.querySelectorAll('tr');
     list.forEach(function (row, i) {
       var d = Utils.parseArriveTime(row[COL.ARRTIME]);
       var hrs = d ? Math.floor((base - d) / 3600000) : '';
@@ -829,14 +894,39 @@
         }
       }
     });
+  }
 
-    // 注意：此处【不再】调用 ColResize.reset()——reset 会清掉记忆并重新自适应，
-    // 导致用户拖好的列宽在「关闭再打开抽屉」或「切换股道」后失效。
-    // 记忆的恢复已由 openDetail 顶部的 ColResize.safeGet(dt).remount() 完成
-    // （remount 内部：有记忆→恢复记忆宽度，无记忆→首次内容自适应）。
-    // 如需强制重置为自适应，用设置里的「列宽自适应」按钮（btnAutoFitCols）。
+  function openDetail(idx) {
+    var r = state.rows[idx];
+    if (!r) return;
+    state.detailIdx = idx;
+    state.detailSel = new Set();   // 重置多选（每次打开明细都清空选中）
+    updateDetailTitle();           // 初始：按全部行求和（无选中）
+
+    renderDetailRows(r.raw || [], {
+      head: $('detailHead'),
+      body: $('detailBody'),
+      table: $('detailTable')
+    }, {
+      rowAttr: function (row, i) { return ' data-i="' + i + '"'; }
+    });
 
     UI.Drawer.open('drawer');
+  }
+
+  /**
+   * 打开某股道的明细抽屉，并高亮 + 滚动定位到指定车辆行。
+   * 供「搜索查询」结果点击时调用（搜索抽屉不关闭，关掉明细后仍在原处）。
+   * @param {number} trackIdx 股道在 state.rows 中的下标
+   * @param {number} [carIdx] 车辆在该股道 raw 中的下标；缺省则只打开不定位
+   */
+  function openDetailAt(trackIdx, carIdx) {
+    openDetail(trackIdx);
+    if (carIdx == null) return;
+    var tr = $('detailBody').querySelector('tr[data-i="' + carIdx + '"]');
+    if (!tr) return;
+    tr.classList.add('hit');
+    if (tr.scrollIntoView) tr.scrollIntoView({ block: 'center' });
   }
 
   function closeDetail() {
@@ -933,10 +1023,16 @@
       } else toast('请先选择文件夹或文件');
     });
 
-    // 双击行 → 明细
+    // 搜索查询：打开独立的搜索抽屉（实现在 search.js，通过 window.Search 调用）
+    on('btnSearch', 'click', function () {
+      if (window.Search && window.Search.open) window.Search.open();
+      else toast('搜索模块未加载', 'error');
+    });
+
+    // 双击行 → 明细（作业区横幅行不是数据行，跳过）
     on('tbody', 'dblclick', function (e) {
       var tr = e.target.closest('tr');
-      if (!tr) return;
+      if (!tr || tr.classList.contains('area-banner')) return;
       openDetail(+tr.getAttribute('data-idx'));
     });
 
@@ -1040,10 +1136,10 @@
       if (dt && !dt.contains(e.target)) clearDetailSel();
     });
 
-    // 单击选中
+    // 单击选中（作业区横幅行不参与选中，否则会被高亮且 selectedIdx 变为 NaN）
     on('tbody', 'click', function (e) {
       var tr = e.target.closest('tr');
-      if (!tr) return;
+      if (!tr || tr.classList.contains('area-banner')) return;
       var old = $('tbody').querySelector('tr.selected');
       if (old) old.classList.remove('selected');
       tr.classList.add('selected');
@@ -1095,6 +1191,7 @@
     UI.Modal.register('modalSettings', { onOpen: refreshFolderPath });
     UI.Modal.register('modalProductivity');
     UI.Drawer.register('drawer', { maskId: 'drawerMask' });
+    UI.Drawer.register('searchDrawer', { maskId: 'searchMask' });
 
     // 各面板的关闭按钮
     on('btnCloseDrawer', 'click', closeDetail);
@@ -1417,6 +1514,9 @@
      * 旧记忆会整体错位（宽度套到了别的列上）。键名带版本号即可让旧记忆失效、
      * 首次打开重新按内容自适应——改动列序时，把 v1 递增即可。 */
     ColResize.enable($('detailTable'), { persistKey: 'zhancun.detail.cols.v2' });
+    /* 搜索结果表与明细表列数、列序完全一致（同一份 DETAIL_COLS + 停时列），
+     * 故共用同一个记忆键：在任一表中拖好的列宽，另一个表打开时自动沿用。 */
+    ColResize.enable($('searchTable'), { persistKey: 'zhancun.detail.cols.v2' });
   }
 
   /* =================== 空框架 =================== */
@@ -1527,7 +1627,97 @@
     });
   }
 
+  /* =================== 对外接口（window.YardApp） ===================
+   * 统一出口：后续新增模块（如 search.js）都从这里取数 / 复用渲染 / 触发交互，
+   * 不必各自再实现一套遍历或表格渲染，避免重复造轮子和格式漂移。
+   *
+   * 约定：
+   *   · 只暴露「只读数据 + 受控操作」，不把 state 整个开放出去；
+   *   · 需要新增能力时在此追加，调用方一律通过 YardApp 访问，不直接碰内部函数。
+   * ===================================================================== */
+
+  /** 数据变化订阅者：主表每次重绘后统一回调（加载 / 刷新 / 切换空线分组都会触发） */
+  var dataListeners = [];
+
+  /** 注册数据变化回调，返回反注册函数 */
+  function onDataChange(fn) {
+    if (typeof fn !== 'function') return function () {};
+    dataListeners.push(fn);
+    return function () {
+      var i = dataListeners.indexOf(fn);
+      if (i >= 0) dataListeners.splice(i, 1);
+    };
+  }
+
+  function notifyDataChange() {
+    if (!dataListeners) return;          // 理论上不会发生（init 在本文件最后调用）
+    for (var i = 0; i < dataListeners.length; i++) {
+      // 单个订阅者出错不能拖垮主流程与其它模块
+      try { dataListeners[i](); } catch (e) { if (global.console) console.error(e); }
+    }
+  }
+
+  /** 合计快照（口径与主表状态栏一致） */
+  function getSummary() {
+    var s = { track: 0, count: 0, length: 0, load: 0, oldCar: 0 };
+    (state.rows || []).forEach(function (r) {
+      s.track++;
+      s.count += r.count || 0;
+      s.length += r.length || 0;
+      s.load += r.load || 0;
+      s.oldCar += r.oldCar || 0;
+    });
+    return s;
+  }
+
+  global.YardApp = {
+    /* ---------- 数据 ---------- */
+    /** 全部股道聚合数据：每项 { track, count, length, load, oldCar, raw:[车辆行...], ... } */
+    getRows: function () { return state.rows || []; },
+    /** 原始 xls 数据行（未经聚合） */
+    getRawRows: function () { return state.rawRows || []; },
+    /** 是否已加载数据 */
+    hasData: function () { return !!(state.rows && state.rows.length); },
+    /** 合计快照 { track, count, length, load, oldCar } */
+    getSummary: getSummary,
+    /** 订阅数据变化：fn()，返回反注册函数 */
+    onDataChange: onDataChange,
+
+    /* ---------- 配置 ---------- */
+    /** 主表列定义 */
+    getColumns: function () { return COLUMNS; },
+    /** 明细表列定义（明细抽屉与搜索抽屉共用） */
+    getDetailCols: function () { return DETAIL_COLS; },
+    /** 股道显示名（到发线显示为「1道」等） */
+    trackName: function (id) { return YardConfig.trackName(id); },
+    /** 股道完整配置（含分组名、颜色、是否虚拟） */
+    getTrack: function (id) { return YardConfig.getTrack(id); },
+
+    /* ---------- 渲染 ---------- */
+    /**
+     * 渲染车辆行为明细表（与明细抽屉完全同款：列序、着色、停时列）
+     * @param {Array} list 车辆行
+     * @param {Object} els { head, body, table }
+     * @param {Object} [opts] { destProcessed, rowAttr } 见 renderDetailRows
+     */
+    renderRows: function (list, els, opts) { renderDetailRows(list, els, opts); },
+    /** 到站着色富文本（主表 / 明细 / 搜索共用同一套着色规则） */
+    renderDest: function (text, clickable) { return renderDest(text, clickable); },
+    /** 重绘主表 */
+    renderGrid: function () { render(); },
+
+    /* ---------- 交互 ---------- */
+    /** 打开某股道明细（idx 为 state.rows 下标） */
+    openDetail: function (idx) { openDetail(idx); },
+    /** 打开某股道明细并高亮定位到指定车辆行 */
+    openDetailAt: function (trackIdx, carIdx) { openDetailAt(trackIdx, carIdx); },
+    /** 关闭明细抽屉 */
+    closeDetail: function () { closeDetail(); },
+    /** 右下角提示 */
+    toast: function (msg, type) { toast(msg, type); }
+  };
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else init();
-})();
+})(window);

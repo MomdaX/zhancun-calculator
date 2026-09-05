@@ -23,6 +23,7 @@
   <button class="btn" id="btnPickFolder" title="选择数据文件夹" style="display:none">选择数据文件夹</button>
   <button class="btn" id="btnPickFile" title="直接选择 xls 文件（不受系统目录限制）">选择文件</button>
   <button class="btn" id="btnReload" title="刷新数据">刷新</button>
+  <button class="btn" id="btnSearch" title="按车号或内容搜索全站车辆">搜索查询</button>
 
   <span class="spacer"></span>
 
@@ -270,6 +271,35 @@
   </div>
 </div>
 
+<!-- ================= 搜索查询抽屉 ================= -->
+<div class="drawer-mask" id="searchMask"></div>
+<div class="drawer" id="searchDrawer">
+  <div class="drawer-head">
+    <h3>搜索查询</h3>
+    <span class="search-modes" id="searchModes">
+      <button class="btn mode-btn active" data-mode="carno">车号</button>
+      <button class="btn mode-btn" data-mode="text">内容</button>
+    </span>
+    <input type="text" id="searchInput" class="search-input" autocomplete="off"
+           placeholder="输入车号（完整车号可展开整条股道并定位）">
+    <span class="search-count" id="searchCount">共 0 条</span>
+    <button class="btn" id="btnSearchClear" title="清空搜索条件">清空</button>
+    <button class="btn" id="btnCloseSearch">关闭</button>
+  </div>
+  <div class="drawer-body">
+    <div class="search-hint" id="searchHint">
+      <b>使用方法</b>：顶部「车号 / 内容」切换模式，输入框实时搜索（无需回车）；多关键词空格分隔，任一命中即列出。<br>
+      <b>车号模式</b>：只匹配车号。输入<b>完整车号</b>且全站唯一命中时，自动展开该车所在整条股道并定位到该行，便于查看其前后邻车。<br>
+      <b>内容模式</b>：匹配 车种 / 到站(处理后) / 品名 / 记事 / 收货人 / 车次 任一字段。<br>
+      <b>结果操作</b>：点击某行 → 打开该股道明细并高亮定位这辆车（搜索抽屉保留在后方，关掉明细即回到结果）；点「清空」重置条件。
+    </div>
+    <table class="detail" id="searchTable">
+      <thead><tr id="searchHead"></tr></thead>
+      <tbody id="searchBody"></tbody>
+    </table>
+  </div>
+</div>
+
 <!-- ================= 地图（iframe 嵌入 Map/chinamap.html） ================= -->
 <div class="map-mask" id="mapMask">
   <div class="map-panel">
@@ -315,6 +345,7 @@
 <script src="js/report31814.js" charset="utf-8"></script>
 <script src="js/productivity.js" charset="utf-8"></script>
 <script src="js/app.js" charset="utf-8"></script>
+<script src="js/search.js" charset="utf-8"></script>
 
 </body>
 </html>
