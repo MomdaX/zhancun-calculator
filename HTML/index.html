@@ -27,6 +27,11 @@
 
   <span class="spacer"></span>
 
+  <label class="eye-slider" title="拖动调节护眼背景色浓度">
+    <svg class="eye-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 4C4.5 4 1.5 6.5 0 8c1.5 1.5 4.5 4 8 4s6.5-2.5 8-4c-1.5-1.5-4.5-4-8-4zm0 6.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5zM8 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" fill="currentColor"/></svg>
+    <input type="range" id="eyeProtectSlider" min="0" max="100" value="0" step="1">
+  </label>
+
   <button class="btn toggle active" id="btnToggleVirtual" aria-pressed="true">隐藏空线分组</button>
 
   <button class="btn" id="btnAutoFitCols">自适应列宽</button>
@@ -192,7 +197,7 @@
             <span>启用</span>
             <span>加粗</span>
             <span>颜色</span>
-            <span></span>
+            <button type="button" class="ct-toggle" id="btnCarTypeToggle" title="收起配置表" aria-expanded="true">收起</button>
           </div>
           <!-- 配置行容器：app.js 往这里塞 .cartype-cfg-row。
                独立成容器是关键——渲染不再依赖按钮在 DOM 中的位置，
@@ -250,6 +255,42 @@
       </div>
       <label class="prod-notes-label">记事<textarea id="prodNotes"></textarea></label>
     </div>
+  </div>
+</div>
+
+<!-- ================= 发车作业全流程浮窗 ================= -->
+<div class="modal" id="modalDeparture">
+  <div class="modal-content dep-modal">
+    <div class="modal-head">
+      <h3>发车作业全流程</h3>
+      <label class="dep-checi-label">编好车次：<input type="text" id="depCheci" class="dep-checi-input" placeholder="输入车次" maxlength="10"></label>
+      <!-- 警示标：车次重复 / 列车超长 / 列车超重 任一命中即显示，悬停在其后方列出全部提示 -->
+      <span class="dep-checi-warn" id="depCheciWarn" tabindex="0">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+          <path d="M12 2.6 L22.6 21.2 L1.4 21.2 Z" fill="#e03131" stroke="#b02020" stroke-width="1.1" stroke-linejoin="round"></path>
+          <rect x="11.05" y="8.4" width="1.9" height="6.1" rx="0.95" fill="#fff"></rect>
+          <circle cx="12" cy="17.7" r="1.05" fill="#fff"></circle>
+        </svg>
+        <span class="dep-warn-tip" id="depWarnTip"></span>
+      </span>
+      <span class="spacer"></span>
+      <button class="btn" id="depClose">关闭</button>
+    </div>
+    <div class="modal-body dep-body">
+      <!-- 正式上线时，把下面 src 换成网站真实 URL（取消注释并替换 src）：
+           <iframe id="depFrame" class="dep-frame" src="http://10.190.136.28:6060/WebReport/ReportServer?op=fs_main&cmd=entry_report&id=2932" title="发车作业全流程追踪"></iframe>
+           填表 / 车次查重都要读写 iframe 内容，必须与本页面【同源】
+           （把本页放到报表服务器同一站点下、src 用相对路径 /WebReport/... 即可）。
+           跨域（本页 file:// 打开、报表在 http 站点）时的可行方案：
+             ① 同源广播：BroadcastChannel + localStorage（要求同源）；
+             ② 浏览器扩展中转：dep-bridge-extension（跨域可用、不刷新页面，推荐）。
+           （曾用过的「window.open 带 URL 参数打开标签页」方案已移除：真实报表网站不接收参数。） -->
+      <!-- 原「window.open 带参打开标签页」方案已停用（真实报表网站不接收 URL 参数），
+           改为由浏览器扩展 dep-bridge-extension 中转填表，跨域可用、无需刷新页面。
+           扩展未安装时，仅走同源 iframe 直写 + BroadcastChannel/localStorage。 -->
+      <iframe id="depFrame" class="dep-frame" src="doc/departure_flow.html" title="发车作业全流程追踪"></iframe>
+    </div>
+    <div class="dep-resize-handle" id="depResizeHandle"></div>
   </div>
 </div>
 
@@ -335,6 +376,9 @@
 <input type="file" id="fileInputMulti" accept=".xls,.xlsx" multiple style="display:none">
 <!-- 单文件选择：直接选 xls，可打开 Program Files 等系统目录（文件夹选择被浏览器禁止时使用） -->
 <input type="file" id="fileInputSingle" accept=".xls,.xlsx" style="display:none">
+
+<!-- 护眼背景层 -->
+<div id="eyeOverlay" style="display:none;"></div>
 
 <!-- ================= 依赖 ================= -->
 <script src="js/utils.js" charset="utf-8"></script>

@@ -49,10 +49,32 @@
     <link href="./css/cljl.css" rel="stylesheet">
 
     <script>
-        // 统一将相对路径的后端接口请求指向 http://localhost:3000
+        /* 后端基地址：页面右上角下拉框可切换
+         *   测试环境：http://localhost:3000
+         *   生产环境：http://10.208.2.72:8080
+         *   本地数据集：不走网络请求，全部使用本地兜底数据
+         * 值存在 localStorage（键 mapApiBase），刷新后保持；没设过则默认测试环境。 */
+        function getApiBase() {
+            try {
+                var v = localStorage.getItem('mapApiBase');
+                if (v) return String(v).replace(/\/+$/, '');
+            } catch (e) {}
+            var el = document.getElementById('apiBaseInput');
+            if (el && el.value.trim()) return el.value.trim().replace(/\/+$/, '');
+            return 'http://localhost:3000';
+        }
+        function isLocalMode() {
+            return getApiBase() === '__local__';
+        }
+
+        // 统一将相对路径的后端接口请求指向当前选定的后端地址
         $.ajaxPrefilter(function (options, originalOptions, jqXHR) {
+            if (isLocalMode()) {
+                jqXHR.abort();                       // 本地模式：中断所有网络请求
+                return;
+            }
             if (options.url && options.url.charAt(0) === '/') {
-                options.url = 'http://localhost:3000' + options.url;
+                options.url = getApiBase() + options.url;
             }
         });
     </script>
@@ -93,6 +115,94 @@
         var getToken;
 
         $(document).ready(function () {
+            // 后端地址输入框（自定义下拉 + 自由输入）
+            var apiBaseInput = document.getElementById('apiBaseInput');
+            var apiBaseArrow = document.getElementById('apiBaseArrow');
+            var apiBaseDropdown = document.getElementById('apiBaseDropdown');
+            var apiBaseItems = apiBaseDropdown ? apiBaseDropdown.querySelectorAll('li') : [];
+
+            if (apiBaseInput) {
+                try {
+                    apiBaseInput.value = localStorage.getItem('mapApiBase') || 'http://localhost:3000';
+                } catch (e) { apiBaseInput.value = 'http://localhost:3000'; }
+
+                function openDropdown() {
+                    apiBaseDropdown.style.display = 'block';
+                    showAllItems();
+                }
+                function closeDropdown() {
+                    apiBaseDropdown.style.display = 'none';
+                }
+                function showAllItems() {
+                    apiBaseItems.forEach(function (li) { li.style.display = ''; });
+                }
+                function filterItems(filter) {
+                    var f = (filter || '').toLowerCase();
+                    apiBaseItems.forEach(function (li) {
+                        li.style.display = f ? (li.textContent.toLowerCase().indexOf(f) >= 0 ? '' : 'none') : '';
+                    });
+                }
+                function selectItem(val) {
+                    apiBaseInput.value = val;
+                    closeDropdown();
+                    apiBaseInput.dispatchEvent(new Event('change'));
+                }
+
+                apiBaseInput.addEventListener('focus', function () { openDropdown(); });
+                apiBaseInput.addEventListener('input', function () { filterItems(this.value); });
+                apiBaseInput.addEventListener('change', function () {
+                    var v = (this.value || '').trim().replace(/\/+$/, '');
+                    if (!v) { alert('后端地址不能为空'); this.value = getApiBase(); return; }
+                    try { localStorage.setItem('mapApiBase', v); } catch (e2) {}
+                    location.reload();
+                });
+                apiBaseInput.addEventListener('keydown', function (e) {
+                    if (e.key === 'Escape') { closeDropdown(); this.blur(); }
+                });
+                apiBaseInput.addEventListener('blur', function () {
+                    setTimeout(closeDropdown, 150);
+                });
+
+                if (apiBaseArrow) {
+                    apiBaseArrow.addEventListener('mousedown', function (e) {
+                        e.preventDefault();
+                        apiBaseDropdown.style.display === 'block' ? closeDropdown() : (apiBaseInput.focus(), openDropdown());
+                    });
+                }
+
+                apiBaseItems.forEach(function (li) {
+                    li.addEventListener('mousedown', function (e) {
+                        e.preventDefault();
+                        selectItem(this.getAttribute('data-val'));
+                    });
+                    li.addEventListener('mouseenter', function () {
+                        this.style.background = '#e8f0fe';
+                        this.style.color = '#1e3f7c';
+                    });
+                    li.addEventListener('mouseleave', function () {
+                        this.style.background = '';
+                        this.style.color = '#333';
+                    });
+                });
+
+                document.addEventListener('click', function (e) {
+                    if (!apiBaseInput.contains(e.target) && !apiBaseDropdown.contains(e.target) && e.target !== apiBaseArrow) {
+                        closeDropdown();
+                    }
+                });
+            }
+
+            // 本地数据集模式：跳过 Token 请求，直接使用本地兜底数据
+            if (isLocalMode()) {
+                apiAvailable = false;
+                window.sessionStorage.token = '3231212';
+                var item = document.getElementById('item_token');
+                if (item) { item.title = '3231212'; }
+                map_version = 'C260702';
+                $('.right_version').text(map_version);
+                initMap();
+            }
+
             getToken = new GetToken();
 
             //设置DIV_SVG宽度（无左侧菜单，占满窗口）
@@ -286,6 +396,19 @@
                                 style="height: 26px;width: 26px" class="iconfont icon-xian toolbar_icon"
                                 onclick="jl.clearJl()" title="清除径路"></span></div>
                     </div>
+                    <span style="position:relative;display:inline-block;float:right;margin-right:6px;">
+                        <input type="text" id="apiBaseInput" title="后端地址（下拉选择或直接输入）"
+                               placeholder="后端地址" value=""
+                               style="padding:0 28px 0 6px;border:1px solid #c7cfda;border-radius:4px;font-size:12px;color:#333;background:#fff;box-sizing:border-box;outline:none;">
+                        <span id="apiBaseArrow" title="展开地址列表"
+                              style="position:absolute;right:0;top:0;bottom:0;width:24px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#555;font-size:10px;border-left:1px solid #c7cfda;border-radius:0 4px 4px 0;background:#f0f1f3;user-select:none;">▾</span>
+                        <ul id="apiBaseDropdown"
+                            style="display:none;position:absolute;top:100%;left:0;right:0;z-index:9999;margin:0;padding:0;list-style:none;background:#fff;border:1px solid #c7cfda;border-top:0;border-radius:0 0 4px 4px;box-shadow:0 4px 8px rgba(0,0,0,.15);max-height:160px;overflow-y:auto;">
+                            <li data-val="http://localhost:3000" style="padding:6px 10px;font-size:12px;color:#333;cursor:pointer;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">http://localhost:3000</li>
+                            <li data-val="http://10.208.2.72:8080" style="padding:6px 10px;font-size:12px;color:#333;cursor:pointer;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">http://10.208.2.72:8080</li>
+                            <li data-val="__local__" style="padding:6px 10px;font-size:12px;color:#333;cursor:pointer;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">本地数据集</li>
+                        </ul>
+                    </span>
                     <div id="cx1" class="right_version" style="width: 60px;text-align: center;float: right">C260702
                     </div>
                 </div>
@@ -307,7 +430,7 @@
                 <div class="right_svg_statusbar">
                     <div class="right_svg_prompt">路局显示-&gt;</div>
                     <div class="right_svg_status">
-                        <span class="status_item"><span class="dot" id="status_token"></span>Token</span>
+                        <span class="status_item" id="item_token"><span class="dot" id="status_token"></span>Token</span>
                         <span class="status_item"><span class="dot" id="status_font"></span>站名F</span>
                         <span class="status_item"><span class="dot" id="status_line"></span>线路L</span>
                         <span class="status_item"><span class="dot" id="status_node"></span>节点N</span>

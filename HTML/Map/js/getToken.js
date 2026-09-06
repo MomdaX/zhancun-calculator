@@ -53,6 +53,26 @@ function GetToken()
     //接收token
     var token = "";
     var ip = "10.208.2.72";
+
+    // 优先使用浏览器扩展预置进来的 token（扩展存在 chrome.storage，打开页面时写入 sessionStorage）。
+    // 有就直接采用，不再请求 /getToken；没有（扩展未装 / 未刷新过 token）才回退到原服务器请求，
+    // 保证扩展不可用时地图行为与原来一致。
+    try {
+        var injected = window.sessionStorage && window.sessionStorage.getItem("token");
+        if (injected && injected !== "3231212") {
+            token = injected;
+            window.sessionStorage.token = token;
+            apiAvailable = true;                 //有 token，后续走 API
+            var dot = document.getElementById("status_token");
+            if (dot) { dot.className = "dot ok"; }
+            var item = document.getElementById("item_token");
+            if (item) { item.title = token; }
+            getVersion();                        //Token 已就绪，获取发布版本号（带真实 token）
+            firePendingMapLoad();
+            return;
+        }
+    } catch (e) {}
+
     getTokenFromServer();
 
     function getTokenFromServer( )
@@ -71,6 +91,8 @@ function GetToken()
                 //正常获取到 Token，点亮状态栏 Token 指示灯（绿色）
                 var dot = document.getElementById("status_token");
                 if (dot) { dot.className = "dot ok"; }
+                var item = document.getElementById("item_token");
+                if (item) { item.title = token; }
                 getVersion();                        //Token 已就绪，获取发布版本号（带真实 token）
                 firePendingMapLoad();                //Token 已判定，触发挂起的地图数据加载
             },
@@ -83,6 +105,8 @@ function GetToken()
                 //后端不可达，使用本地兜底 Token，指示灯置黄色
                 var dot = document.getElementById("status_token");
                 if (dot) { dot.className = "dot local"; }
+                var item = document.getElementById("item_token");
+                if (item) { item.title = token; }
                 getVersion();                        //用兜底 token 仍尝试获取版本号（失败则兜底 C260702）
                 firePendingMapLoad();                //Token 已判定，触发挂起的地图数据加载
             }

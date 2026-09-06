@@ -86,6 +86,23 @@ body {
 
 .toolbar .spacer { flex: 1 1 auto; }
 
+/* 护眼色滑块 */
+.eye-slider { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.eye-slider .eye-icon { flex: none; color: var(--text-dim); }
+.eye-slider input[type="range"] { -webkit-appearance: none; appearance: none;
+  width: 60px; height: 4px; background: #d5dbdf; border-radius: 2px; outline: none; cursor: pointer; }
+.eye-slider input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; border-radius: 50%; background: var(--accent); cursor: pointer; border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+.eye-slider input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent); cursor: pointer; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+
+#eyeOverlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+  background:
+    linear-gradient(rgba(255, 220, 175, .10), rgba(255, 220, 175, .10)),
+    linear-gradient(rgba(24, 28, 26, .36), rgba(24, 28, 26, .36));
+  pointer-events: none; z-index: 9; }
+
 .btn {
   padding: 5px 12px;
   border: 1px solid var(--border-strong);
@@ -673,6 +690,25 @@ table.grid tbody td.col-a::after {
 table.grid tbody td.col-a:hover::after { opacity: .92; }
 table.grid.notes-collapsed tbody td.col-a::after { content: '展开'; }
 
+/* 空箱/空车列（表头 th[9]）：单元格选中后，行内右侧浮现「编好」伪元素按钮，
+ * 点击打开「发车作业全流程」浮窗（取代原工具栏「发车流程」按钮）。
+ * 与上方 col-a 的「收起/展开」同一套实现：::after 显示 + 右侧命中区判定点击。
+ * 注意：伪元素不是事件目标，故不能靠 e.target 判断，只能用坐标命中（见 app.js）。 */
+table.grid tbody td[data-col="empty"] { position: relative; }
+table.grid tbody td[data-col="empty"].bianhao-on::after {
+  content: '编好';
+  position: absolute;
+  top: 50%; left: 6px;
+  transform: translateY(-50%);
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: #2c7be5; color: #fff;
+  font-size: 11px; line-height: 1.5;
+  white-space: nowrap;
+  pointer-events: none;   /* 不拦截单元格本身的点击，命中由坐标判定 */
+  z-index: 4;
+}
+
 /* 注意事项正文容器：收起时限制高度并底部淡出，展开时原样逐条换行 */
 table.grid td.col-a .note-body {
   position: relative;
@@ -1205,6 +1241,149 @@ td.dest span.station-link:hover {
 }
 .prod-modal .modal-head .btn:hover { background: rgba(255, 255, 255, .3); }
 
+/* ================= 发车作业全流程浮窗 ================= */
+/* 无遮罩浮窗：背景透明、容器点击穿透，主表保持可操作。
+ * 点击「编好」按钮后，浮窗浮在主表上方但不遮挡主表内容。 */
+#modalDeparture.show {
+  background: transparent;
+  pointer-events: none;
+}
+#modalDeparture.show .modal-content {
+  pointer-events: auto;
+}
+/* 默认尺寸 = 用户确认过的大小；JS 拖拽后会改写内联 width/height 并记忆 */
+.dep-modal {
+  width: 500px;
+  height: 50vh;
+  max-width: 96vw;
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+  min-width: 320px;
+  min-height: 200px;
+}
+/* 右下角拖拽调整大小手柄 */
+.dep-resize-handle {
+  position: absolute;
+  right: 0; bottom: 0;
+  width: 18px; height: 18px;
+  cursor: nwse-resize;
+  z-index: 10;
+  background: linear-gradient(135deg, transparent 50%, rgba(0,0,0,.15) 50%,
+                              transparent 52%, rgba(0,0,0,.15) 52%,
+                              transparent 67%, rgba(0,0,0,.15) 67%,
+                              transparent 69%, rgba(0,0,0,.15) 69%);
+  border-radius: 0 0 10px 0;
+}
+.dep-resize-handle:hover {
+  background: linear-gradient(135deg, transparent 50%, rgba(43,92,176,.3) 50%,
+                              transparent 52%, rgba(43,92,176,.3) 52%,
+                              transparent 67%, rgba(43,92,176,.3) 67%,
+                              transparent 69%, rgba(43,92,176,.3) 69%);
+}
+.dep-checi-label {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600; color: #1e3f7c;
+  background: linear-gradient(135deg, #e8f0fe, #f0f4ff);
+  border: 1px solid #c5d5f0;
+  border-radius: 4px;
+  padding: 3px 8px;
+  white-space: nowrap;
+  transition: border-color .2s, box-shadow .2s;
+}
+.dep-checi-label:focus-within {
+  border-color: #4a90d9;
+  box-shadow: 0 0 0 3px rgba(74,144,217,.15);
+}
+.dep-checi-input {
+  width: 68px; height: 26px; padding: 0 6px;
+  font-size: 14px; font-weight: 700; color: #1e3f7c;
+  text-align: center; letter-spacing: 1px;
+  background: #fff;
+  border: 1px solid #c5d5f0;
+  border-radius: 3px;
+  outline: none;
+  transition: border-color .2s, box-shadow .2s;
+}
+.dep-checi-input.dup {
+  border-color: #e03131;
+  box-shadow: 0 0 0 2px rgba(224, 49, 49, .18);
+}
+/* 车次重复警示：红色三角 + 感叹号（SVG），默认隐藏 */
+.dep-checi-warn { display: none; align-items: center; }
+.dep-checi-warn.show {
+  display: inline-flex;
+  position: relative;
+  cursor: help;
+  animation: dep-warn-in .18s ease-out;
+}
+.dep-checi-warn svg { display: block; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .18)); }
+@keyframes dep-warn-in { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+/* 悬停提示气泡：显示在警示标「后方」（右侧），内容为编号提示列表 */
+.dep-warn-tip {
+  display: none;
+  position: absolute;
+  top: 50%; left: 100%;
+  transform: translateY(-50%);
+  margin-left: 10px;
+  z-index: 300;
+  pointer-events: none;
+  padding: 6px 10px 6px 8px;
+  background: rgba(176, 32, 32, .96);
+  color: #fff;
+  border-radius: 5px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, .24);
+  font-size: 12px; font-weight: 600; line-height: 1.7;
+  white-space: nowrap;
+  text-align: left;
+}
+/* 编号由 JS 输出（保证连续），故去掉 <ol> 自带序号与缩进 */
+.dep-warn-tip ol { margin: 0; padding: 0; list-style: none; }
+.dep-warn-tip li { list-style: none; }
+/* 左侧小箭头 */
+.dep-warn-tip::before {
+  content: "";
+  position: absolute;
+  top: 50%; left: -5px;
+  transform: translateY(-50%);
+  border: 5px solid transparent;
+  border-right-color: rgba(176, 32, 32, .96);
+}
+.dep-checi-warn.show:hover .dep-warn-tip,
+.dep-checi-warn.show:focus .dep-warn-tip,
+.dep-checi-warn.show:focus-within .dep-warn-tip { display: block; }
+.dep-checi-input::placeholder {
+  font-weight: 400; font-size: 11px; color: #b0b8c8; letter-spacing: 0;
+}
+.dep-checi-input:focus {
+  border-color: #2b5cb0;
+  box-shadow: 0 0 0 2px rgba(43,92,176,.2);
+}
+/* 内容区随窗口高度伸缩；滚动条隐藏但保留滚动（滚轮 / 触控板仍可滚） */
+.dep-body {
+  padding: 0;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  overflow: auto;
+  scrollbar-width: none;        /* Firefox */
+  -ms-overflow-style: none;     /* IE / 旧版 Edge */
+}
+.dep-body::-webkit-scrollbar { width: 0; height: 0; display: none; }
+.dep-frame {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: block;
+  border: 0;
+  background: #fff;
+}
+
 /* 顶部信息行 */
 .prod-meta { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 14px; }
 .prod-meta label {
@@ -1493,7 +1672,9 @@ td.dest span.station-link:hover {
   /* 列宽比例，依次对应表头：车型 / 备注 / 匹配 / 启用 / 加粗 / 颜色 / 删除按钮
      （与 index.html 中 .cartype-cfg-head 的 7 个 <span> 一一对应，改序需同步）
      fr 之间按比例分配剩余空间，改某个值会连带影响其它列，宜小幅调整。 */
-  grid-template-columns: 0.7fr 0.9fr 1.2fr 0.6fr 0.6fr 0.7fr 28px;
+  /* 末列需容下数据行的删除按钮(24px)与表头的「收起/展开」按钮，故留 46px；
+     表头与数据行共用这份模板，宽度必须一致，否则列会错位。 */
+  grid-template-columns: 0.7fr 0.9fr 1.2fr 0.6fr 0.6fr 0.7fr 46px;
   align-items: center;
   gap: 8px;
   padding: 3px;
@@ -1503,7 +1684,24 @@ td.dest span.station-link:hover {
   background: #f3f6fb; font-size: 12px; font-weight: 600; color: var(--text-dim);
   padding: 8px 3px;
 }
-.cartype-cfg-row:nth-child(even) { background: #fafbfc; }
+/* 表头末列的「收起 / 展开」按钮：占满该列，与下方删除按钮同列对齐 */
+.ct-toggle {
+  width: 100%;
+  height: 20px; padding: 0 2px;
+  font-size: 11px; line-height: 1;
+  font-family: inherit;
+  color: var(--text-dim);
+  background: #fff;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.ct-toggle:hover { color: var(--accent-dark); border-color: var(--accent); background: #f2f7ff; }
+/* 收起状态：只藏数据行，表头（含按钮）保留 */
+.cartype-cfg.collapsed #carTypeRows { display: none; }
+.cartype-cfg.collapsed { border-bottom: 0; }
 .cartype-cfg-row input[type="text"] {
   width: 100%; padding: 4px 6px; font-size: 13px;
   border: 1px solid var(--border-strong); border-radius: 4px; font-family: inherit;
@@ -1514,7 +1712,7 @@ td.dest span.station-link:hover {
 }
 .cartype-cfg-row input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; margin: 0 auto; display: block; }
 .cartype-cfg-row .ct-del {
-  width: 24px; height: 24px; padding: 0;
+  width: 24px; height: 24px; padding: 0; margin: 0 auto;   /* 末列加宽后在格内居中 */
   border: none; border-radius: 50%;
   background: #e53e3e; color: #fff; font-size: 14px; line-height: 1; cursor: pointer;
 }

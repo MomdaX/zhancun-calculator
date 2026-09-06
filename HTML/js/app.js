@@ -49,6 +49,17 @@
     { key: 'oldCar',    title: '老牌车',         width: 60,  num: true, cls: 'mid' }
   ];
 
+  /* 「编好」按钮：挂在表头 th[9]（XPath 1 起 → COLUMNS[8] = empty「空箱/空车」）
+   * 的第 1~30 个数据行。选中该单元格后以 ::after 伪元素浮现，点击打开发车作业全流程。
+   * 用 COLUMNS 下标推导而非写死 key：将来增删列时自动跟随。 */
+  var BIANHAO_COL     = COLUMNS[8] ? COLUMNS[8].key : 'empty';
+  /* 生效股道区间（按 track.config.js 的 TRACK_DEFS 顺序取 index 判定）：
+   * 1道(1) … X15，含两端。写股道 id 而非行号——行号会随分组/空线显隐而浮动。 */
+  var BIANHAO_FROM    = '1';
+  var BIANHAO_TO      = 'X15';
+  var BIANHAO_EXCLUDE = ['B1', 'B2'];   // 排除边修线（B1/B2 不参与编好）
+  var BIANHAO_HIT_W   = 36;   // 伪元素命中宽度：自单元格左缘起算（px）
+
   // fmt: track = 股道显示名（到发线加"道"）  dest = 到站按方向着色
   // col 取 Aggregate.COL 常量：SMIS 导出列序变动时只需改 aggregate.js 一处。
   //
@@ -683,14 +694,17 @@
           if (sp.start) {
             // 用分组自带的 color 做左侧色条 + 文字着色，醒目区分到发线/调车线/虚拟场等
             var gc = cfg ? cfg.groupColor : '#888';
-            cells.push('<td class="col-b-group grp" rowspan="' + sp.span + '" ' +
+            cells.push('<td class="col-b-group grp" data-col="group" rowspan="' + sp.span + '" ' +
                        'style="border-left:3px solid ' + gc + ';color:' + gc + '">' +
                        escapeHtml(sp.group) + '</td>');
           }
           return;   // 非首行：被上方 rowspan 覆盖，不输出 td
         }
 
-        cells.push('<td class="' + cls + '"' + style + '>' + inner + '</td>');
+        /* data-col 记录列 key：分组列用 rowspan 合并后，各行的 td 个数并不一致
+         *（非首行少一个分组单元格），td.cellIndex 会整体前移 1 位而不可靠。
+         * 因此「编好」等按列定位的逻辑一律用 data-col，禁用 cellIndex。 */
+        cells.push('<td class="' + cls + '" data-col="' + c.key + '"' + style + '>' + inner + '</td>');
       });
 
       html.push('<tr data-idx="' + idx + '" data-track="' + escapeHtml(track) + '"' +
@@ -1149,6 +1163,59 @@
       if (dt && !dt.contains(e.target)) clearDetailSel();
     });
 
+    /* ---------- 「编好」伪元素按钮（空箱/空车列 = 表头 th[9]） ---------- */
+
+    /** 清除所有「编好」标记 */
+    function clearBianhao() {
+      var list = $('tbody').querySelectorAll('td.bianhao-on');
+      for (var i = 0; i < list.length; i++) list[i].classList.remove('bianhao-on');
+    }
+
+    /** 该股道是否落在「编好」生效区间（1道 ~ X15，排除 B1/B2，按 track.config.js 的股道顺序） */
+    function inBianhaoRange(trackId) {
+      if (BIANHAO_EXCLUDE.indexOf(trackId) >= 0) return false;
+      var t = YardConfig.getTrack(trackId);
+      var a = YardConfig.getTrack(BIANHAO_FROM);
+      var b = YardConfig.getTrack(BIANHAO_TO);
+      if (!t || !a || !b) return false;
+      var lo = Math.min(a.index, b.index), hi = Math.max(a.index, b.index);
+      return t.index >= lo && t.index <= hi;
+    }
+
+    /** 根据 trackId 在 state.rows 中查找对应行数据 */
+    function findRowByTrack(trackId) {
+      if (!state.rows) return null;
+      for (var i = 0; i < state.rows.length; i++) {
+        if (state.rows[i].track === trackId) return state.rows[i];
+      }
+      return null;
+    }
+
+    /** 在静态 mockup HTML 中设置单元格文本（按 FineReport ID 模式 B4-0-73 查找） */
+    function setCellText(doc, cellId, value) {
+      if (!doc) return;
+      var td = doc.querySelector('[id^="' + cellId + '-"]');
+      if (td) {
+        // 清除旧内容，放入纯文本
+        td.innerHTML = '';
+        var div = doc.createElement('div');
+        div.style.maxHeight = '28px';
+        div.textContent = value;
+        td.appendChild(div);
+      }
+    }
+
+    /** 选中行后刷新「编好」标记：给该行的目标列单元格打标记 → ::after 浮现。
+     *  行级触发——点这一行任意单元格都会显示，无需点到第 9 列本身。 */
+    function syncBianhao(tr) {
+      clearBianhao();
+      if (!tr || tr.classList.contains('area-banner')) return;
+      if (tr.classList.contains('blank')) return;   // 空股道不显示「编好」
+      if (!inBianhaoRange(tr.getAttribute('data-track'))) return;
+      var td = tr.querySelector('td[data-col="' + BIANHAO_COL + '"]');
+      if (td) td.classList.add('bianhao-on');
+    }
+
     // 单击选中（作业区横幅行不参与选中，否则会被高亮且 selectedIdx 变为 NaN）
     on('tbody', 'click', function (e) {
       var tr = e.target.closest('tr');
@@ -1157,6 +1224,8 @@
       if (old) old.classList.remove('selected');
       tr.classList.add('selected');
       state.selectedIdx = +tr.getAttribute('data-idx');
+      // 选中这一行即刷新「编好」标记（无需点击第 9 列）
+      syncBianhao(tr);
     });
 
     // 空线分组显示/隐藏开关
@@ -1185,6 +1254,272 @@
       }, true);  // true = 捕获阶段，先于 tbody 行选中触发
     }
 
+    // 「编好」伪元素按钮：点击已标记单元格左侧按钮区 → 打开「发车作业全流程」浮窗，
+    // 并自动读取当前行股道信息填入 iframe 表格（B4 股道 / D4 辆数 / E4 换长 / F4 尾车车号）。
+    // 与 col-a「收起/展开」同一套路：伪元素不是事件目标，只能用坐标判定左侧命中区；
+    // 用捕获阶段 + stopPropagation，避免冒泡到 tbody 的行选中把标记清掉。
+    if (gridEl) {
+      gridEl.addEventListener('click', function (e) {
+        var td = e.target.closest
+          ? e.target.closest('td[data-col="' + BIANHAO_COL + '"].bianhao-on')
+          : null;
+        if (!td) return;
+        var rect = td.getBoundingClientRect();
+        // 仅当点击落在单元格左侧按钮区（BIANHAO_HIT_W）时才触发
+        if (e.clientX - rect.left > BIANHAO_HIT_W) return;
+        e.stopPropagation();
+        e.preventDefault();
+
+        // 读取当前行股道数据
+        var tr = td.parentNode;
+        var trackId = tr.getAttribute('data-track');
+        var row = findRowByTrack(trackId);
+        if (!row) { toast('未找到股道数据', 'warn'); return; }
+        var cfg = YardConfig.getTrack(trackId);
+        var trackName = cfg ? cfg.name : trackId;
+        var count = row.count || 0;
+        var length = (row.length === 0 || row.length == null) ? '' : Number(row.length).toFixed(1);
+        var lastCar = '';
+        if (row.raw && row.raw.length) {
+          var last = row.raw[row.raw.length - 1];
+          lastCar = String(last[COL.CARNO] == null ? '' : last[COL.CARNO]);
+        }
+
+        // 打开浮窗
+        UI.Modal.open('modalDeparture');
+
+        // 给 iframe 一点时间加载，然后填入单元格
+        var depFrame = document.getElementById('depFrame');
+        var depCheci = document.getElementById('depCheci');
+        if (depCheci) depCheci.value = '';
+        // 记录当前股道换长 / 重量，用于「列车超长 / 列车超重」提示
+        depWarnCtx.length = Number(row.length) || 0;
+        depWarnCtx.load = Number(row.load) || 0;
+        depWarn.dup = false;
+        depDupState = false;
+        refreshDepWarnByTrack();
+
+        function fillCells() {
+          writeDepCell('B4', trackName);
+          writeDepCell('D4', String(count));
+          writeDepCell('E4', length);
+          writeDepCell('F4', lastCar);
+        }
+
+        // 先尝试立即填充；报表常为异步渲染（FineReport 的 load 早于单元格就绪），故补几次重试
+        fillCells();
+        [300, 900, 1800].forEach(function (ms) { setTimeout(fillCells, ms); });
+        // 向报表页要一份最新的「编组车次」列表（扩展桥接通道），用于车次重复校验
+        try { window.postMessage({ channel: DEP_BRIDGE, type: 'readCheci', ts: Date.now() }, '*'); } catch (e) {}
+        if (depFrame) {
+          depFrame.addEventListener('load', function () {
+            fillCells();
+            setTimeout(fillCells, 400);
+            setTimeout(fillCells, 1200);
+            hintDepBlocked();
+          }, { once: true });
+        }
+        setTimeout(hintDepBlocked, 2000);
+      }, true);
+    }
+
+    /* ================= 发车浮窗警示标 =================
+     * 三类提示（任一命中即显示红色三角标，悬停在其后方以编号列表全部列出）：
+     *   1. 当前车次重复 —— 与 iframe「编组车次」列（td[col="2"]）已有车次相同
+     *   2. 列车超长     —— 本股道换长 > YardConfig.thresholds.overlong（70.0）
+     *   3. 列车超重     —— 本股道重量 > YardConfig.thresholds.overloadTons（5000）
+     * 均为「仅提示」：不拦截填表，车次照常写入 C4。 */
+    var depWarn = { dup: false, overlong: false, overweight: false };
+    var depWarnCtx = { length: 0, load: 0 };   // 当前股道的 换长 / 重量（点「编好」时记录）
+    var depCells = { B4: '', C4: '', D4: '', E4: '', F4: '' };  // 待填的 5 个单元格（含广播快照）
+
+    /** 报表是否「不可访问」：跨域 / 被 X-Frame-Options 拒绝时，
+     *  无法读写 iframe 内容（填表与查重都会静默失败），仅提示一次，避免反复打扰。 */
+    var depBlocked = false, depBlockedHinted = false;
+    function hintDepBlocked() {
+      if (!depBlocked || depBlockedHinted) return;
+      depBlockedHinted = true;
+      toast('发车流程报表无法自动填表：与页面不同源或被禁止嵌入', 'warn');
+    }
+
+    /** 取 iframe 文档；跨域或未加载返回 null */
+    function getDepDoc() {
+      var f = document.getElementById('depFrame');
+      if (!f) return null;
+      try { return f.contentDocument || (f.contentWindow && f.contentWindow.document) || null; }
+      catch (e) { depBlocked = true; return null; }   // 跨域
+    }
+
+    /** 扩展桥接（dep-bridge-extension）：页面 → content script → background → 报表标签页。
+     *  跨域可用（不要求同源），前提：浏览器装了该扩展并已启用。
+     *  未装扩展时这几行静默无效，不影响其它填表通道。 */
+    var DEP_BRIDGE = '__DEP_BRIDGE__';
+    var depBridgeTimer = null;
+    function pushDepBridge() {
+      try {
+        window.postMessage({ channel: DEP_BRIDGE, type: 'fill', cells: depCells, ts: Date.now() }, '*');
+      } catch (e) {}
+    }
+    /** 合并短时间内的多次写入，避免逐格/重试刷屏 */
+    function scheduleDepBridge() {
+      if (depBridgeTimer) clearTimeout(depBridgeTimer);
+      depBridgeTimer = setTimeout(pushDepBridge, 150);
+    }
+
+    /** 跨标签页填表：把单元格数据广播给同一浏览器里已打开的报表页。
+     *  双通道：BroadcastChannel 实时推送 + localStorage 兜底（报表页后开/刷新也能取到）。
+     *  前提：报表页与本页同源（例如都用 http://127.0.0.1:5500 打开）；
+     *        file:// 打开本页时 origin 为 null，与 http 源不同源，广播无效（此时请用 iframe 同源方案）。 */
+    var depBC = null;
+    function broadcastDepFill(cells) {
+      try {
+        if (typeof BroadcastChannel !== 'undefined') {
+          if (!depBC) depBC = new BroadcastChannel('zhancun-dep');
+          depBC.postMessage({ cells: cells, ts: Date.now() });
+        }
+      } catch (e) { /* 不支持则只走 localStorage */ }
+      try { localStorage.setItem('zhancun.depFill', JSON.stringify({ cells: cells, ts: Date.now() })); }
+      catch (e) { /* 隐私模式：忽略 */ }
+    }
+
+    /** 写入 iframe 单元格：优先走 FineReport 的 contentPane API，降级为静态 DOM；
+     *  同时广播给独立标签页里打开的报表页。 */
+    function writeDepCell(cellId, val) {
+      depCells[cellId] = val;
+      broadcastDepFill(depCells);   // 同源：BroadcastChannel / localStorage
+      scheduleDepBridge();          // 跨域：走浏览器扩展中转
+      var f = document.getElementById('depFrame');
+      if (!f) return;
+      try {
+        var cw = f.contentWindow;
+        if (cw && cw.contentPane && typeof cw.contentPane.setCellValue === 'function') {
+          cw.contentPane.setCellValue(cellId, null, val);
+          return;
+        }
+      } catch (e) { depBlocked = true; /* 跨域：走 DOM 降级 */ }
+      try { setCellText(getDepDoc(), cellId, val); } catch (e2) { /* ignore */ }
+    }
+
+    /** 独立标签页里的报表回传的「编组车次」列表（同源广播 / localStorage），
+     *  用于 iframe 读不到时（跨域或改用独立标签页）仍能查重。 */
+    var depRemoteCheci = [];
+    function bindDepReceive() {
+      try { var s = localStorage.getItem('zhancun.depCheci'); if (s) depRemoteCheci = JSON.parse(s) || []; }
+      catch (e) {}
+      try {
+        if (typeof BroadcastChannel === 'undefined') return;
+        var bc = new BroadcastChannel('zhancun-dep');
+        bc.onmessage = function (ev) {
+          var d = ev.data;
+          if (d && d.type === 'checiList' && d.list) depRemoteCheci = d.list;
+        };
+      } catch (e) {}
+      // 跨域回传：① window.opener.postMessage（本页 window.open 的标签页）
+      //           ② 浏览器扩展中转（dep-bridge-extension，带 channel 标记）
+      window.addEventListener('message', function (ev) {
+        var d = ev.data;
+        if (!d || d.type !== 'checiList' || !d.list) return;
+        if (d.channel && d.channel !== DEP_BRIDGE) return;   // 别的通道的消息不收
+        depRemoteCheci = d.list;
+        setDepWarn();                                        // 拿到列表后按当前车次重算提示
+      });
+    }
+    bindDepReceive();
+
+    /** 车次是否已在报表「编组车次」列中出现（当前填写行 C4 不计入） */
+    function depCheciDup(val) {
+      var v = String(val == null ? '' : val).replace(/\s+/g, '').toUpperCase();
+      if (!v) return false;
+      var doc = getDepDoc();
+      if (doc) {
+        var tds = doc.querySelectorAll('td[col="2"]');
+        for (var i = 0; i < tds.length; i++) {
+          var td = tds[i];
+          var id = td.getAttribute('id') || '';
+          if (id.indexOf('C4-') === 0) continue;            // 当前正在填写的输入行
+          var txt = (td.textContent || '').replace(/\s+/g, '').toUpperCase();
+          if (txt && txt === v) return true;
+        }
+      }
+      // iframe 读不到时，用报表页回传的车次列表再比对一次
+      for (var k = 0; k < depRemoteCheci.length; k++) {
+        if (String(depRemoteCheci[k]).replace(/\s+/g, '').toUpperCase() === v) return true;
+      }
+      return false;
+    }
+
+    /** 按固定顺序汇总当前命中的提示文案 */
+    function depWarnList() {
+      var list = [];
+      if (depWarn.dup) list.push('当前车次重复');
+      if (depWarn.overlong) list.push('列车超长');
+      if (depWarn.overweight) list.push('列车超重');
+      return list;
+    }
+
+    /** 刷新警示标：有提示 → 显示三角标 + 悬停列表；无提示 → 隐藏 */
+    function setDepWarn() {
+      var list = depWarnList();
+      var w = document.getElementById('depCheciWarn');
+      var tip = document.getElementById('depWarnTip');
+      var inp = document.getElementById('depCheci');
+      var on = list.length > 0;
+      if (w) {
+        w.classList.toggle('show', on);
+        // 不再写 title：浏览器原生 tooltip 与红色气泡会同时出现（双框），保留自定义气泡即可
+        if (!on) w.removeAttribute('title');
+      }
+      // 输入框红框只跟「车次重复」走（那是输入内容本身的问题）
+      if (inp) inp.classList.toggle('dup', !!depWarn.dup);
+      if (tip) {
+        tip.innerHTML = on
+          ? '<ol>' + list.map(function (t, i) {
+              return '<li>' + (i + 1) + '. ' + escapeHtml(t) + '</li>';
+            }).join('') + '</ol>'
+          : '';
+      }
+    }
+
+    /** 依据当前股道的换长 / 重量刷新「超长 / 超重」提示 */
+    function refreshDepWarnByTrack() {
+      var thr = (YardConfig && YardConfig.thresholds) || {};
+      var maxLen = thr.overlong == null ? 70 : thr.overlong;
+      var maxWt = thr.overloadTons == null ? 5000 : thr.overloadTons;
+      depWarn.overlong = Number(depWarnCtx.length) > maxLen;
+      depWarn.overweight = Number(depWarnCtx.load) > maxWt;
+      setDepWarn();
+    }
+
+    // 车次输入框：输入中只做查重提示（红三角标），不写表、不广播；
+    // 真正把车次写入 C4 并发送到报表页，仅在「回车 / 失焦」时（pushDepCheciToTab）才发生
+    var depDupState = false;
+    function applyDepCheci(showToast) {
+      var inp = document.getElementById('depCheci');
+      if (!inp) return;
+      var val = inp.value.trim();
+      depWarn.dup = val ? depCheciDup(val) : false;
+      setDepWarn();                                  // 只更新警示标，不写 C4
+      if (depWarn.dup && !depDupState && showToast) toast('当前车次重复', 'warn');
+      depDupState = depWarn.dup;
+    }
+    on('depCheci', 'input', function () { applyDepCheci(true); });   // 输入中：仅提示
+
+    // 输入完成（回车 / 失焦）→ 写入 C4 并广播到报表页（跨域走扩展桥）
+    function pushDepCheciToTab() {
+      var inp = document.getElementById('depCheci');
+      if (!inp) return;
+      applyDepCheci(false);                          // 先把查重提示刷到最新
+      writeDepCell('C4', inp.value.trim());          // 写 + 广播（scheduleDepBridge 走扩展桥）
+    }
+    on('depCheci', 'change', pushDepCheciToTab);
+    on('depCheci', 'keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); pushDepCheciToTab(); e.target.blur(); }
+    });
+
+    // iframe 重新加载后（src 换成真实报表地址时）按当前输入再校验一次
+    var depFrameEl = document.getElementById('depFrame');
+    if (depFrameEl) depFrameEl.addEventListener('load', function () { applyDepCheci(false); });
+
     // 自适应列宽（重置为内容自适应，清除手动拖动记忆）
     on('btnAutoFitCols', 'click', function () {
       var g = $('grid'), dt = $('detailTable');
@@ -1203,6 +1538,7 @@
     UI.Modal.register('modal31814');
     UI.Modal.register('modalSettings', { onOpen: refreshFolderPath });
     UI.Modal.register('modalProductivity');
+    UI.Modal.register('modalDeparture');
     UI.Drawer.register('drawer', { maskId: 'drawerMask' });
     UI.Drawer.register('searchDrawer', { maskId: 'searchMask' });
 
@@ -1211,6 +1547,9 @@
     on('rptClose', 'click', function () { UI.Modal.close('modal31814'); });
     on('btnSettingsClose', 'click', function () { UI.Modal.close('modalSettings'); });
     on('prodClose', 'click', function () { UI.Modal.close('modalProductivity'); });
+    on('depClose', 'click', function () { UI.Modal.close('modalDeparture'); });
+    // 原工具栏「发车流程」按钮（btnDepartureFlow）已移除：
+    // 改由主表「空箱/空车」列（表头 th[9]）的「编好」伪元素按钮打开同一浮窗。
 
     // 功能下拉菜单（组件负责展开 / 收起 / 点外部关闭）
     UI.Dropdown('btnMenu', 'menuList', {
@@ -1476,6 +1815,25 @@
         });
       }
 
+      /* 表头「颜色」后的收起 / 展开按钮：只切换数据行容器的显示，
+       * 状态存 Store，下次打开设置面板沿用。 */
+      var toggleBtn = $('btnCarTypeToggle');
+      function applyCarTypeCollapse(collapsed) {
+        box.classList.toggle('collapsed', !!collapsed);
+        if (toggleBtn) {
+          toggleBtn.textContent = collapsed ? '展开' : '收起';
+          toggleBtn.title = collapsed ? '展开配置表' : '收起配置表';
+          toggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        }
+        Store.set('carTypeCfgCollapsed', !!collapsed);
+      }
+      applyCarTypeCollapse(Store.get('carTypeCfgCollapsed', false) === true);
+      if (toggleBtn) {
+        toggleBtn.addEventListener('click', function () {
+          applyCarTypeCollapse(!box.classList.contains('collapsed'));
+        });
+      }
+
       /* 「恢复默认」按钮：清掉用户之前保存的自定义车型高亮配置，
        * 回到 defaultCarTypeConfig（包含 NX/X 双 starts 项，平板车全部命中）。
        * 浏览器里的 Store 是独立的，改默认配置对老用户无效——此按钮是面向
@@ -1586,9 +1944,81 @@
     });
   }
 
+  /* =================== 浮窗调整大小 =================== */
+  // 拖 .dep-resize-handle（右下角）改变浮窗宽高；尺寸记忆到 localStorage，下次打开沿用。
+  var DEP_SIZE_KEY = 'depModalSize';
+  function applyDepSize() {
+    var c = document.querySelector('#modalDeparture .modal-content');
+    if (!c) return;
+    var s = Store.get(DEP_SIZE_KEY, null);
+    if (!s || !s.w || !s.h) return;
+    c.style.maxWidth = 'none';
+    c.style.maxHeight = 'none';
+    c.style.width = s.w + 'px';
+    c.style.height = s.h + 'px';
+  }
+  function initModalResize() {
+    applyDepSize();
+    // 双击手柄 → 恢复默认尺寸
+    document.addEventListener('dblclick', function (e) {
+      var h = e.target.closest ? e.target.closest('.dep-resize-handle') : null;
+      if (!h) return;
+      var c = h.closest('.modal-content');
+      if (!c) return;
+      Store.remove(DEP_SIZE_KEY);
+      c.style.width = ''; c.style.height = '';
+      c.style.maxWidth = ''; c.style.maxHeight = '';
+    });
+    document.addEventListener('pointerdown', function (e) {
+      var handle = e.target.closest ? e.target.closest('.dep-resize-handle') : null;
+      if (!handle) return;
+      var modal = handle.closest('.modal');
+      if (!modal || !modal.classList.contains('show')) return;
+      var content = handle.closest('.modal-content');
+      if (!content) return;
+
+      var rect = content.getBoundingClientRect();
+      var startX = e.clientX, startY = e.clientY;
+      var w0 = rect.width, h0 = rect.height;
+      var cs = getComputedStyle(content);
+      var minW = parseFloat(cs.minWidth) || 320;
+      var minH = parseFloat(cs.minHeight) || 200;
+      // 允许超过 CSS 里的默认上限（50vh / 96vw）
+      content.style.maxWidth = 'none';
+      content.style.maxHeight = 'none';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+      // 指针捕获：拖动经过内部 iframe 时事件仍回到手柄，不会丢失
+      if (e.pointerId != null && handle.setPointerCapture) {
+        try { handle.setPointerCapture(e.pointerId); } catch (err) {}
+      }
+
+      function move(ev) {
+        var maxW = Math.max(minW, window.innerWidth - rect.left - 8);
+        var maxH = Math.max(minH, window.innerHeight - rect.top - 8);
+        var w = Math.max(minW, Math.min(w0 + (ev.clientX - startX), maxW));
+        var h = Math.max(minH, Math.min(h0 + (ev.clientY - startY), maxH));
+        content.style.width = w + 'px';
+        content.style.height = h + 'px';
+      }
+      function up() {
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+        document.body.style.userSelect = '';
+        Store.set(DEP_SIZE_KEY, {
+          w: Math.round(content.offsetWidth),
+          h: Math.round(content.offsetHeight)
+        });
+      }
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', up);
+    });
+  }
+
   /* =================== 初始化 =================== */
   function init() {
     initModalDrag();
+    initModalResize();
     // 方向库（惰性单例：全局只解析一次，报表模块共用同一份实例）
     if (typeof window.DirectionData !== 'string') {
       toast('方向库未加载，到站着色将不可用', 'error');
@@ -1609,6 +2039,23 @@
 
     // 先渲染空框架：让页面一打开就呈现完整股道清单，便于核对配置
     renderEmpty();
+
+    // 护眼色滑块
+    (function () {
+      var slider = $('eyeProtectSlider');
+      var overlay = $('eyeOverlay');
+      if (!slider || !overlay) return;
+      var saved = Store.get('eyeProtect', 0);
+      slider.value = saved;
+      overlay.style.opacity = saved / 100;
+      if (saved > 0) overlay.style.display = '';
+      on('eyeProtectSlider', 'input', function () {
+        var v = parseInt(this.value, 10);
+        overlay.style.display = v > 0 ? '' : 'none';
+        overlay.style.opacity = v / 100;
+        Store.set('eyeProtect', v);
+      });
+    })();
 
     // 恢复上次选择的文件夹，自动读取最新 xls
     if (!window.showDirectoryPicker) {
@@ -1638,6 +2085,7 @@
       $('stMsg').textContent = '读取上次的文件夹失败，请点「选择数据文件夹」重新选择';
       syncPickFolderBtn(true);   // 句柄不可用，重新亮出入口
     });
+
   }
 
   /* =================== 对外接口（window.YardApp） ===================

@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "站存-发车流程填表桥",
+  "version": "1.0.0",
+  "description": "在「股道存车计算器」与「发车作业报表」两个标签页之间转发填表数据，跨域可用",
+  "permissions": ["tabs", "scripting", "storage", "alarms", "declarativeNetRequest"],
+  "host_permissions": ["<all_urls>", "file:///*", "http://10.208.2.72:8080/*"],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "ruleset_map",
+        "enabled": true,
+        "path": "rules.json"
+      }
+    ]
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "站存-发车流程填表桥",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["page-fill.js"],
+      "run_at": "document_idle",
+      "world": "MAIN",
+      "all_frames": true
+    }
+  ]
+}

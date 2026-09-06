@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>站存-发车流程填表桥</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --card-bg: #fff;
+    --card-shadow: 0 1px 3px rgba(0,0,0,.06);
+    --text: #2a3340;
+    --text-sub: #8b95a5;
+    --text-hint: #a0aab5;
+    --title: #1e3f7c;
+    --title-bar: #1e3f7c;
+    --input-bg: #fafbfc;
+    --input-border: #dde1e8;
+    --input-focus-bg: #fff;
+    --input-focus-border: #1e3f7c;
+    --btn-primary: #1e3f7c;
+    --btn-test: #0d7a6f;
+    --btn-refresh: #5b6abf;
+    --dashed: #e3e8ef;
+    --toggle-off: #c7cfda;
+    --toggle-on: #1e3f7c;
+    --ok: #1a7f4b;
+    --no: #c0392b;
+    --theme-btn: #8b95a5;
+  }
+  [data-theme="dark"] {
+    --bg: #1a1d23;
+    --card-bg: #252830;
+    --card-shadow: 0 1px 4px rgba(0,0,0,.25);
+    --text: #d0d5dd;
+    --text-sub: #7a8494;
+    --text-hint: #5f6876;
+    --title: #7ba0e0;
+    --title-bar: #7ba0e0;
+    --input-bg: #2a2e36;
+    --input-border: #3a3f4a;
+    --input-focus-bg: #2f333c;
+    --input-focus-border: #7ba0e0;
+    --btn-primary: #4a6db5;
+    --btn-test: #2a9d8f;
+    --btn-refresh: #6b7ac0;
+    --dashed: #3a3f4a;
+    --toggle-off: #4a4f58;
+    --toggle-on: #4a6db5;
+    --ok: #3cb878;
+    --no: #e06050;
+    --theme-btn: #7a8494;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { width: 300px; padding: 10px 12px 8px;
+         font: 12px/1.5 "Microsoft YaHei", system-ui, sans-serif;
+         color: var(--text); background: var(--bg); transition: background .2s, color .2s; }
+  .card { background: var(--card-bg); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;
+          box-shadow: var(--card-shadow); transition: background .2s, box-shadow .2s; }
+  .card-title { font-size: 12px; font-weight: 700; color: var(--title); margin-bottom: 6px;
+                display: flex; align-items: center; gap: 4px; }
+  .card-title::before { content: ""; display: inline-block; width: 3px; height: 14px;
+                        background: var(--title-bar); border-radius: 2px; flex: none; }
+  .row { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
+  .k { flex: none; width: 56px; color: var(--text-sub); font-size: 11px; }
+  .v { flex: 1; word-break: break-all; font-size: 11px; }
+  .ok { color: var(--ok); font-weight: 700; }
+  .no { color: var(--no); font-weight: 700; }
+  input[type="text"],
+  input[type="number"] { width: 100%; padding: 5px 8px; font: 12px/1.4 "Microsoft YaHei", system-ui, sans-serif;
+              border: 1px solid var(--input-border); border-radius: 5px;
+              color: var(--text); background: var(--input-bg); transition: border-color .2s, background .2s, color .2s; }
+  input[type="text"]:focus,
+  input[type="number"]:focus { outline: none; border-color: var(--input-focus-border); background: var(--input-focus-bg); }
+  .lbl { display: block; font-size: 11px; color: var(--text-sub); margin: 6px 0 2px; }
+  .btn-row { display: flex; gap: 6px; margin-top: 6px; }
+  button { padding: 5px 12px; font: 12px "Microsoft YaHei", system-ui, sans-serif; color: #fff;
+           border: 0; border-radius: 5px; cursor: pointer; }
+  button:hover { opacity: .85; }
+  .btn-primary { background: var(--btn-primary); }
+  .btn-test { background: var(--btn-test); }
+  .btn-refresh { background: var(--btn-refresh); }
+  #parse, #tokenInfo { font-size: 11px; color: var(--text-sub); min-height: 16px; margin-top: 2px; word-break: break-all; }
+  .retry-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding-top: 6px;
+               border-top: 1px dashed var(--dashed); }
+  .toggle-switch { position: relative; display: inline-block; width: 34px; height: 18px; flex: none; }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--toggle-off); border-radius: 18px; transition: 0.2s; }
+  .toggle-slider:before { content: ""; position: absolute; height: 12px; width: 12px;
+    left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: 0.2s; }
+  .toggle-switch input:checked + .toggle-slider { background: var(--toggle-on); }
+  .toggle-switch input:checked + .toggle-slider:before { transform: translateX(16px); }
+  #retryCount { width: 38px; padding: 3px 4px; text-align: center; }
+  .sub { font-size: 10px; color: var(--text-hint); margin-top: 2px; }
+  .theme-toggle { position: absolute; top: 8px; right: 14px; width: 24px; height: 24px;
+    border: 0; background: none; cursor: pointer; font-size: 15px; line-height: 24px;
+    color: var(--theme-btn); padding: 0; border-radius: 50%; transition: color .2s; }
+  .theme-toggle:hover { opacity: .7; }
+  body { position: relative; }
+</style>
+</head>
+<body>
+  <button class="theme-toggle" id="themeToggle" title="切换暗色/亮色主题">☀</button>
+
+  <!-- 卡片1：站存-发车流程填表桥 -->
+  <div class="card">
+    <div class="card-title">站存-发车流程填表桥</div>
+    <div class="row"><span class="k">状态</span><span class="v" id="st">读取中…</span></div>
+    <div class="row"><span class="k">报表标签页</span><span class="v" id="tabs">-</span></div>
+    <div class="lbl">报表地址</div>
+    <input type="text" id="urlInput" placeholder="粘贴报表页完整地址…">
+    <div id="parse"></div>
+    <div class="btn-row"><button class="btn-primary" id="saveBtn">保存</button></div>
+    <div class="sub">保存后自动解析 host 特征，用于识别报表标签页</div>
+  </div>
+
+  <!-- 卡片2：地图Token管理 -->
+  <div class="card">
+    <div class="card-title">地图 Token 管理</div>
+    <div class="lbl" style="display:flex;align-items:center;justify-content:space-between;">
+      <span>Token 地址</span>
+      <button type="button" id="defaultTokenBtn" style="padding:2px 8px;font-size:11px;background:#a0aab5;color:#fff;border:0;border-radius:4px;cursor:pointer;">默认</button>
+    </div>
+    <input type="text" id="tokenUrl" placeholder="http://10.208.2.72:8080/getToken?ip=10.208.2.72">
+    <div class="lbl">Referer</div>
+    <input type="text" id="tokenReferer" placeholder="http://10.208.2.72:8080/cljl">
+    <div class="btn-row">
+      <button class="btn-test" id="testBtn">测试请求</button>
+      <button class="btn-refresh" id="tokenBtn">刷新 Token</button>
+    </div>
+    <div id="tokenInfo"></div>
+    <div class="retry-row">
+      <label class="toggle-switch" title="开启后 Token 请求遇到 401 自动重试">
+        <input type="checkbox" id="retryToggle">
+        <span class="toggle-slider"></span>
+      </label>
+      <span style="font-size:11px;color:var(--text);">401 自动重试</span>
+      <span style="flex:1;"></span>
+      <label for="retryCount" style="font-size:11px;color:var(--text-sub);">次数</label>
+      <input type="number" id="retryCount" value="2" min="0" max="10" title="0 表示不重试，最大 10 次">
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
