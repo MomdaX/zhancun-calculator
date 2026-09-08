@@ -1299,27 +1299,23 @@
         depDupState = false;
         refreshDepWarnByTrack();
 
-        function fillCells() {
-          writeDepCell('B4', trackName);
-          writeDepCell('D4', String(count));
-          writeDepCell('E4', length);
-          writeDepCell('F4', lastCar);
+        function fillLocalTable() {
+          // 预填 4 格（股道/辆数/换长/尾车车号）到本地表格；车次留空待用户输入
+          // 不再立即向报表发送——由用户点下方任一「发送」按钮触发，便于测试哪种 iframe 定位方式能跑通
+          var $b4 = $('depInputB4'), $c4 = $('depInputC4'),
+              $d4 = $('depInputD4'), $e4 = $('depInputE4'), $f4 = $('depInputF4');
+          if ($b4) $b4.value = trackName;
+          if ($c4) $c4.value = '';
+          if ($d4) $d4.value = String(count);
+          if ($e4) $e4.value = length;
+          if ($f4) $f4.value = lastCar;
+          refreshDepTime();
+          if ($c4) setTimeout(function () { $c4.focus(); $c4.select(); }, 80);
         }
 
-        // 先尝试立即填充；报表常为异步渲染（FineReport 的 load 早于单元格就绪），故补几次重试
-        fillCells();
-        [300, 900, 1800].forEach(function (ms) { setTimeout(fillCells, ms); });
+        fillLocalTable();
         // 向报表页要一份最新的「编组车次」列表（扩展桥接通道），用于车次重复校验
         try { window.postMessage({ channel: DEP_BRIDGE, type: 'readCheci', ts: Date.now() }, '*'); } catch (e) {}
-        if (depFrame) {
-          depFrame.addEventListener('load', function () {
-            fillCells();
-            setTimeout(fillCells, 400);
-            setTimeout(fillCells, 1200);
-            hintDepBlocked();
-          }, { once: true });
-        }
-        setTimeout(hintDepBlocked, 2000);
       }, true);
     }
 
@@ -1331,7 +1327,8 @@
      * 均为「仅提示」：不拦截填表，车次照常写入 C4。 */
     var depWarn = { dup: false, overlong: false, overweight: false };
     var depWarnCtx = { length: 0, load: 0 };   // 当前股道的 换长 / 重量（点「编好」时记录）
-    var depCells = { B4: '', C4: '', D4: '', E4: '', F4: '' };  // 待填的 5 个单元格（含广播快照）
+    // 注：不再保留 depCells 之类的「待填单元格」内存快照——5 个值只在 #depEntry 的 input 里，
+    //     发送时由 getDepCells() 现取，关窗即丢，不做任何持久化。
 
     /** 报表是否「不可访问」：跨域 / 被 X-Frame-Options 拒绝时，
      *  无法读写 iframe 内容（填表与查重都会静默失败），仅提示一次，避免反复打扰。 */
@@ -1354,51 +1351,11 @@
      *  跨域可用（不要求同源），前提：浏览器装了该扩展并已启用。
      *  未装扩展时这几行静默无效，不影响其它填表通道。 */
     var DEP_BRIDGE = '__DEP_BRIDGE__';
-    var depBridgeTimer = null;
-    function pushDepBridge() {
-      try {
-        window.postMessage({ channel: DEP_BRIDGE, type: 'fill', cells: depCells, ts: Date.now() }, '*');
-      } catch (e) {}
-    }
-    /** 合并短时间内的多次写入，避免逐格/重试刷屏 */
-    function scheduleDepBridge() {
-      if (depBridgeTimer) clearTimeout(depBridgeTimer);
-      depBridgeTimer = setTimeout(pushDepBridge, 150);
-    }
-
-    /** 跨标签页填表：把单元格数据广播给同一浏览器里已打开的报表页。
-     *  双通道：BroadcastChannel 实时推送 + localStorage 兜底（报表页后开/刷新也能取到）。
-     *  前提：报表页与本页同源（例如都用 http://127.0.0.1:5500 打开）；
-     *        file:// 打开本页时 origin 为 null，与 http 源不同源，广播无效（此时请用 iframe 同源方案）。 */
-    var depBC = null;
-    function broadcastDepFill(cells) {
-      try {
-        if (typeof BroadcastChannel !== 'undefined') {
-          if (!depBC) depBC = new BroadcastChannel('zhancun-dep');
-          depBC.postMessage({ cells: cells, ts: Date.now() });
-        }
-      } catch (e) { /* 不支持则只走 localStorage */ }
-      try { localStorage.setItem('zhancun.depFill', JSON.stringify({ cells: cells, ts: Date.now() })); }
-      catch (e) { /* 隐私模式：忽略 */ }
-    }
-
-    /** 写入 iframe 单元格：优先走 FineReport 的 contentPane API，降级为静态 DOM；
-     *  同时广播给独立标签页里打开的报表页。 */
-    function writeDepCell(cellId, val) {
-      depCells[cellId] = val;
-      broadcastDepFill(depCells);   // 同源：BroadcastChannel / localStorage
-      scheduleDepBridge();          // 跨域：走浏览器扩展中转
-      var f = document.getElementById('depFrame');
-      if (!f) return;
-      try {
-        var cw = f.contentWindow;
-        if (cw && cw.contentPane && typeof cw.contentPane.setCellValue === 'function') {
-          cw.contentPane.setCellValue(cellId, null, val);
-          return;
-        }
-      } catch (e) { depBlocked = true; /* 跨域：走 DOM 降级 */ }
-      try { setCellText(getDepDoc(), cellId, val); } catch (e2) { /* ignore */ }
-    }
+    /* （已移除）depCells / pushDepBridge / scheduleDepBridge / broadcastDepFill / writeDepCell
+     * 原因：新流程是「点「编好」→ 本地表格按当前股道重新读取预填 → 用户点发送按钮
+     *       → 经扩展桥一次性发到报表页」。本地录入表的数据【不做任何持久化】：
+     *       既不写 localStorage（原 broadcastDepFill 会写 zhancun.depFill），
+     *       也不走 BroadcastChannel，每次打开浮窗都按流程重新读取，关窗即丢弃。 */
 
     /** 独立标签页里的报表回传的「编组车次」列表（同源广播 / localStorage），
      *  用于 iframe 读不到时（跨域或改用独立标签页）仍能查重。 */
@@ -1460,9 +1417,9 @@
     /** 刷新警示标：有提示 → 显示三角标 + 悬停列表；无提示 → 隐藏 */
     function setDepWarn() {
       var list = depWarnList();
-      var w = document.getElementById('depCheciWarn');
-      var tip = document.getElementById('depWarnTip');
-      var inp = document.getElementById('depCheci');
+      var w = $('depCheciWarn');
+      var tip = $('depWarnTip');
+      var inp = $('depInputC4');
       var on = list.length > 0;
       if (w) {
         w.classList.toggle('show', on);
@@ -1494,7 +1451,7 @@
     // 真正把车次写入 C4 并发送到报表页，仅在「回车 / 失焦」时（pushDepCheciToTab）才发生
     var depDupState = false;
     function applyDepCheci(showToast) {
-      var inp = document.getElementById('depCheci');
+      var inp = $('depInputC4');
       if (!inp) return;
       var val = inp.value.trim();
       depWarn.dup = val ? depCheciDup(val) : false;
@@ -1502,23 +1459,96 @@
       if (depWarn.dup && !depDupState && showToast) toast('当前车次重复', 'warn');
       depDupState = depWarn.dup;
     }
-    on('depCheci', 'input', function () { applyDepCheci(true); });   // 输入中：仅提示
+    on('depInputC4', 'input', function () { applyDepCheci(true); });   // 输入中：仅提示
+    // 注：车次框按 Enter 不再自动发送——由用户自己点下方发送按钮触发，避免误发。
 
-    // 输入完成（回车 / 失焦）→ 写入 C4 并广播到报表页（跨域走扩展桥）
-    function pushDepCheciToTab() {
-      var inp = document.getElementById('depCheci');
-      if (!inp) return;
-      applyDepCheci(false);                          // 先把查重提示刷到最新
-      writeDepCell('C4', inp.value.trim());          // 写 + 广播（scheduleDepBridge 走扩展桥）
+    // ============== 时间显示（每秒刷新）==============
+    function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+    function formatDepTime() {
+      var d = new Date();
+      return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
+             ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
     }
-    on('depCheci', 'change', pushDepCheciToTab);
-    on('depCheci', 'keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); pushDepCheciToTab(); e.target.blur(); }
-    });
+    function refreshDepTime() {
+      var t = $('depTime');
+      if (t) t.textContent = formatDepTime();
+    }
+    refreshDepTime();
+    setInterval(refreshDepTime, 1000);
 
-    // iframe 重新加载后（src 换成真实报表地址时）按当前输入再校验一次
-    var depFrameEl = document.getElementById('depFrame');
-    if (depFrameEl) depFrameEl.addEventListener('load', function () { applyDepCheci(false); });
+    // ============== 浮窗内右下角状态提示（替代全局 toast）==============
+    // 默认 3 秒自动淡出；鼠标悬停时暂停消失（便于看完整回执），移开后 0.8 秒再消失
+    var depStatusTimer = null;
+    function hideDepStatus(delay) {
+      var el = $('depStatus');
+      if (!el) return;
+      if (depStatusTimer) clearTimeout(depStatusTimer);
+      depStatusTimer = setTimeout(function () { el.classList.remove('show'); }, delay);
+    }
+    function showDepStatus(msg, type) {
+      var el = $('depStatus');
+      if (!el) return;
+      el.textContent = msg;
+      el.className = 'dep-status show ' + (type || 'info');
+      hideDepStatus(3000);
+    }
+    // 悬停暂停 / 移开消失（回执文字较长，常含「目标=…」「错误=…」，需要停留查看）
+    (function () {
+      var el = $('depStatus');
+      if (!el) return;
+      el.addEventListener('mouseenter', function () {
+        if (depStatusTimer) { clearTimeout(depStatusTimer); depStatusTimer = null; }
+      });
+      el.addEventListener('mouseleave', function () {
+        hideDepStatus(800);          // 移开后短延迟再消失，避免误触抖动
+      });
+    })();
+
+    // ============== 发送按钮（不同 strategy 决定 iframe 定位方式，挑出能用的）==============
+    function getDepCells() {
+      return {
+        B4: ($('depInputB4') || {}).value || '',
+        C4: ($('depInputC4') || {}).value.trim() || '',
+        D4: ($('depInputD4') || {}).value || '',
+        E4: ($('depInputE4') || {}).value || '',
+        F4: ($('depInputF4') || {}).value || ''
+      };
+    }
+    var depSendBtns = document.querySelectorAll('.dep-send-btns .btn-send');
+    for (var i = 0; i < depSendBtns.length; i++) {
+      (function (btn) {
+        btn.addEventListener('click', function () {
+          var strategy = btn.getAttribute('data-strategy') || 'all';
+          var cells = getDepCells();
+          if (!cells.C4) { showDepStatus('请先输入车次', 'warn'); return; }
+          try {
+            window.postMessage({
+              channel: DEP_BRIDGE,
+              type: 'fillByStrategy',
+              cells: cells,
+              strategy: strategy,
+              ts: Date.now()
+            }, '*');
+            showDepStatus('已发送：' + strategy + '（车次 ' + cells.C4 + '）', 'ok');
+          } catch (e) {
+            showDepStatus('发送失败：' + e.message, 'warn');
+          }
+        });
+      })(depSendBtns[i]);
+    }
+
+    // 监听扩展桥回执（filled）—— 哪个 strategy 写成功 / 失败 / 原因都在这里能直接看到
+    window.addEventListener('message', function (ev) {
+      var d = ev.data;
+      if (!d || d.channel !== DEP_BRIDGE) return;
+      if (d.type === 'filled' && d.strategy) {
+        var msg = '回执 [' + d.strategy + '] 写入 ' + (d.ok || 0) + '/5';
+        if (d.target) msg += '，目标=' + d.target;
+        if (d.error) msg += '，错误=' + d.error;
+        if (d.failed && d.failed.length) msg += '，失败=[' + d.failed.join('; ') + ']';
+        showDepStatus(msg, (d.ok || 0) > 0 ? 'ok' : 'warn');
+      }
+    });
 
     // 自适应列宽（重置为内容自适应，清除手动拖动记忆）
     on('btnAutoFitCols', 'click', function () {
@@ -1564,15 +1594,22 @@
       }
     });
 
-    // 设置：表格字号滑块
+    // 设置：表格字号滑块（主页表格 grid + 明细抽屉表格 detailTable 同步生效）
     var gridFontSize = $('gridFontSize');
     var gridFontSizeVal = $('gridFontSizeVal');
+    function applyTableFontSize(v) {
+      $('grid').style.fontSize = v + 'px';
+      var detailTable = $('detailTable');
+      if (detailTable) {
+        detailTable.style.fontSize = v + 'px';   // 覆盖 CSS 中 table.detail 的固定字号
+      }
+    }
     if (gridFontSize && gridFontSizeVal) {
       var savedFs = Store.get('gridFontSize', '');
       if (savedFs) {
         gridFontSize.value = savedFs;
         gridFontSizeVal.textContent = savedFs + 'px';
-        $('grid').style.fontSize = savedFs + 'px';
+        applyTableFontSize(savedFs);
       }
       function highlightTick(v) {
         var ticks = document.querySelectorAll('.range-ticks .tick');
@@ -1588,7 +1625,7 @@
       gridFontSize.addEventListener('input', function () {
         var v = gridFontSize.value;
         gridFontSizeVal.textContent = v + 'px';
-        $('grid').style.fontSize = v + 'px';
+        applyTableFontSize(v);
         saveFontSize(v);
         highlightTick(v);
       });

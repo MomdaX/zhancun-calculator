@@ -1,0 +1,20 @@
+fetch("http://10.208.2.72:8080/getJl?map_version=C260702&td_id=1&zmdm=QVZ.HZQ&pmdm=0&jsb=0&train_number=0&ysfs=1&cz_xx=0&cx_xl=0", {
+  "headers": {
+    "accept": "*/*",
+    "authorization": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIxMC4yMDguMi43MiIsImV4cCI6MTc4ODc3MDg1MiwiaWF0IjoxNzg4NzQyMDUyfQ.RTmAJ7njTkyR6xGhJ4MNO91Zx8eOAkusxkZhil1jEJo",
+    "x-requested-with": "XMLHttpRequest"
+  },
+  "referrer": "",
+  "referrerPolicy": "strict-origin-when-cross-origin",
+  "body": null,
+  "method": "GET"
+});
+
+
+curl 'http://10.208.2.72:8080/getJl?map_version=C260702&td_id=1&zmdm=QVZ.HZQ&pmdm=0&jsb=0&train_number=0&ysfs=1&cz_xx=0&cx_xl=0' \
+  -H 'Accept: */*' \
+  -H 'Referer: ' \
+  -H 'X-Requested-With: XMLHttpRequest' \
+  -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.88 Safari/537.36' \
+  -H 'Authorization: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIxMC4yMDguMi43MiIsImV4cCI6MTc4ODc3MDg1MiwiaWF0IjoxNzg4NzQyMDUyfQ.RTmAJ7njTkyR6xGhJ4MNO91Zx8eOAkusxkZhil1jEJo' \
+  --compressed

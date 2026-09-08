@@ -1,0 +1,127 @@
+chinamap.html:1 Access to XMLHttpRequest at 'http://10.208.2.72:8080/getReleaseVersionData' from origin 'null' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: It does not have HTTP ok status.
+jquery.min.js:2          GET http://10.208.2.72:8080/getReleaseVersionData net::ERR_FAILED
+send @ jquery.min.js:2
+ajax @ jquery.min.js:2
+getVersion @ getToken.js:5
+GetToken @ getToken.js:70
+（匿名） @ chinamap.html:206
+e @ jquery.min.js:2
+t @ jquery.min.js:2
+setTimeout（异步）
+（匿名） @ jquery.min.js:2
+c @ jquery.min.js:2
+fireWith @ jquery.min.js:2
+fire @ jquery.min.js:2
+c @ jquery.min.js:2
+fireWith @ jquery.min.js:2
+ready @ jquery.min.js:2
+B @ jquery.min.js:2
+chinamap.html:1 Access to XMLHttpRequest at 'http://10.208.2.72:8080/getMapDftPoint?map_version=C260702' from origin 'null' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: It does not have HTTP ok status.
+jquery.min.js:2          GET http://10.208.2.72:8080/getMapDftPoint?map_version=C260702 net::ERR_FAILED
+send @ jquery.min.js:2
+ajax @ jquery.min.js:2
+getMapFontPoint @ map.js:119
+loadMapData @ map.js:88
+createMap @ map.js:71
+initMap @ chinamap.html:105
+error @ getToken.js:35
+c @ jquery.min.js:2
+fireWith @ jquery.min.js:2
+l @ jquery.min.js:2
+（匿名） @ jquery.min.js:2
+error（异步）
+send @ jquery.min.js:2
+ajax @ jquery.min.js:2
+getVersion @ getToken.js:5
+GetToken @ getToken.js:70
+（匿名） @ chinamap.html:206
+e @ jquery.min.js:2
+t @ jquery.min.js:2
+setTimeout（异步）
+（匿名） @ jquery.min.js:2
+c @ jquery.min.js:2
+fireWith @ jquery.min.js:2
+fire @ jquery.min.js:2
+c @ jquery.min.js:2
+fireWith @ jquery.min.js:2
+ready @ jquery.min.js:2
+B @ jquery.min.js:2
+chinamap.html:1 Access to XMLHttpRequest at 'http://10.208.2.72:8080/getMapDlnPoint?map_version=C260702' from origin 'null' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: It does not have HTTP ok status.
+jquery.min.js:2          GET http://10.208.2.72:8080/getMapDlnPoint?map_version=C260702 net::ERR_FAILED
+send @ jquery.min.js:2
+ajax @ jquery.min.js:2
+getMapLinePoint @ map.js:198
+loadMapData @ map.js:89
+createMap @ map.js:71
+initMap @ chinamap.html:105
+error @ getToken.js:35
+c @ jquery.min.js:2
+fireWith @ jquery.min.js:2
+l @ jquery.min.js:2
+（匿名） @ jquery.min.js:2
+error（异步）
+send @ jquery.min.js:2
+ajax @ jquery.min.js:2
+getVersion @ getToken.js:5
+GetToken @ getToken.js:70
+（匿名） @ chinamap.html:206
+e @ jquery.min.js:2
+t @ jquery.min.js:2
+setTimeout（异步）
+（匿名） @ jquery.min.js:2
+c @ jquery.min.js:2
+fireWith @ jquery.min.js:2
+fire @ jquery.min.js:2
+c @ jquery.min.js:2
+fireWith @ jquery.min.js:2
+ready @ jquery.min.js:2
+B @ jquery.min.js:2
+chinamap.html:1 Access to XMLHttpRequest at 'http://10.208.2.72:8080/getMapDndPoint?map_version=C260702' from origin 'null' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: It does not have HTTP ok status.
+jquery.min.js:2          GET http://10.208.2.72:8080/getMapDndPoint?map_version=C260702 net::ERR_FAILED
+send @ jquery.min.js:2
+ajax @ jquery.min.js:2
+getMapNodePoint @ map.js:278
+loadMapData @ map.js:90
+createMap @ map.js:71
+initMap @ chinamap.html:105
+error @ getToken.js:35
+c @ jquery.min.js:2
+fireWith @ jquery.min.js:2
+l @ jquery.min.js:2
+（匿名） @ jquery.min.js:2
+error（异步）
+send @ jquery.min.js:2
+ajax @ jquery.min.js:2
+getVersion @ getToken.js:5
+GetToken @ getToken.js:70
+（匿名） @ chinamap.html:206
+e @ jquery.min.js:2
+t @ jquery.min.js:2
+setTimeout（异步）
+（匿名） @ jquery.min.js:2
+c @ jquery.min.js:2
+fireWith @ jquery.min.js:2
+fire @ jquery.min.js:2
+c @ jquery.min.js:2
+fireWith @ jquery.min.js:2
+ready @ jquery.min.js:2
+B @ jquery.min.js:2
+chinamap.html:1 Access to XMLHttpRequest at 'http://10.208.2.72:8080/getJl?map_version=C260702&td_id=1&zmdm=QVZ.HZQ&pmdm=0&jsb=0&train_number=0&ysfs=1&cz_xx=0&cx_xl=0' from origin 'null' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: It does not have HTTP ok status.
+jquery.min.js:2          GET http://10.208.2.72:8080/getJl?map_version=C260702&td_id=1&zmdm=QVZ.HZQ&pmdm=0&jsb=0&train_number=0&ysfs=1&cz_xx=0&cx_xl=0 net::ERR_FAILED
+send @ jquery.min.js:2
+ajax @ jquery.min.js:2
+getJl @ jl.js:298
+generateJlByStation @ jl.js:806
+selectStation @ search.js:168
+Search.submitIfUnique @ search.js:69
+queryStation @ integration.js:55
+（匿名） @ integration.js:74
+postMessage（异步）
+post @ map-bridge.js:71
+onMessage @ map-bridge.js:104
+postMessage（异步）
+post @ integration.js:33
+（匿名） @ integration.js:92
+setInterval（异步）
+（匿名） @ integration.js:87
+（匿名） @ integration.js:104

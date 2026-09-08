@@ -1,0 +1,24 @@
+fetch("http://10.208.2.72:8080/getMapDftPoint?map_version=C260702", {
+  "headers": {
+    "accept": "*/*",
+    "accept-language": "zh-CN,zh;q=0.9",
+    "sec-fetch-mode": "cors"
+  },
+  "referrerPolicy": "strict-origin-when-cross-origin",
+  "body": null,
+  "method": "OPTIONS"
+});
+
+
+curl 'http://10.208.2.72:8080/getMapDftPoint?map_version=C260702' \
+  -X 'OPTIONS' \
+  -H 'Accept: */*' \
+  -H 'Accept-Language: zh-CN,zh;q=0.9' \
+  -H 'Access-Control-Request-Headers: authorization,x-requested-with' \
+  -H 'Access-Control-Request-Method: GET' \
+  -H 'Connection: keep-alive' \
+  -H 'Origin: null' \
+  -H 'Sec-Fetch-Mode: cors' \
+  -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.88 Safari/537.36' \
+  --compressed \
+  --insecure

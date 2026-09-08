@@ -1361,16 +1361,19 @@ td.dest span.station-link:hover {
   border-color: #2b5cb0;
   box-shadow: 0 0 0 2px rgba(43,92,176,.2);
 }
-/* 内容区随窗口高度伸缩；滚动条隐藏但保留滚动（滚轮 / 触控板仍可滚） */
+/* 内容区随窗口高度伸缩；滚动条隐藏但保留滚动（滚轮 / 触控板仍可滚）
+ * 原来是 display:flex（给 iframe 用的），会把「发送按钮区」排到表格右侧；
+ * 改回 block，让录入表格与发送按钮区上下堆叠。 */
 .dep-body {
-  padding: 0;
+  padding: 50px;
   min-width: 0;
   min-height: 0;
   flex: 1;
-  display: flex;
+  display: block;
   overflow: auto;
   scrollbar-width: none;        /* Firefox */
   -ms-overflow-style: none;     /* IE / 旧版 Edge */
+  box-sizing: border-box;
 }
 .dep-body::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .dep-frame {
@@ -1731,3 +1734,150 @@ td.dest span.station-link:hover {
   position: relative;
   top: -1px;
 }
+
+/* ============== 发车流程浮窗 - 本地录入表格 ==============
+ * 视觉对齐帆软原报表（发车作业全流程追踪 B2:F4 区域）：
+ *   x-table：table-layout:fixed + border-collapse:collapse
+ *   单元格 .fh：9pt 宋体、垂直居中
+ *   时间行（B2/C2）：加粗 11pt、无边框
+ *   表头行（B3:F3）：加粗居中、黑框（上/左 2px，右/下 1px）
+ *   录入行（B4:F4）：绿底 rgb(204,255,204) + 同款黑框
+ * ========================================================== */
+.dep-entry {
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-family: SimSun, "宋体", serif;
+  font-size: 9pt;                /* 帆软默认 9pt ≈ 12px */
+  color: #000;
+  background: #fff;
+}
+.dep-entry td,
+.dep-entry th {
+  overflow: hidden;
+  vertical-align: middle;
+  padding-left: 2px;
+  padding-right: 2px;
+}
+/* 时间行：对应原表 B2「时间：」+ C2 时间值，加粗 11pt 无边框 */
+.dep-entry .dep-time-row td {
+  height: 30px;
+  border: 0;
+  font-weight: bold;
+  font-size: 11pt;
+  text-align: left;
+  color: #000;
+}
+/* 表头行：对应原表 B3:F3（股道/编组车次/辆数/换长/尾车车号） */
+.dep-entry .dep-head-row th {
+  height: 38px;
+  font-weight: bold;
+  font-size: 9pt;
+  text-align: center;
+  background: #fff;
+  border: 1px solid #000;
+  border-top-width: 2px;
+  border-left-width: 2px;
+}
+/* 录入行：对应原表 B4:F4，绿底可填写行 */
+.dep-entry .dep-input-row td {
+  height: 30px;
+  background: rgb(204, 255, 204);
+  border: 1px solid #000;
+  border-left-width: 2px;
+  position: relative;
+}
+/* 原表只有最左列（B 列）左边框是 2px，C:F 列是 1px */
+.dep-entry .dep-head-row th:not(:first-child),
+.dep-entry .dep-input-row td:not(:first-child) {
+  border-left-width: 1px;
+}
+/* 填报控件：贴满单元格，无边框；聚焦时才显白底 + 蓝框，便于看清正在编辑哪一格 */
+.dep-cell {
+  width: 100%;
+  height: 100%;
+  min-height: 24px;
+  padding: 0 2px;
+  font-family: inherit;
+  font-size: 9pt;
+  color: #000;
+  text-align: center;
+  border: 0;
+  background: transparent;
+  box-sizing: border-box;
+  outline: none;
+}
+.dep-cell:focus {
+  background: #fff;
+  outline: 1px solid #4a90d9;
+  outline-offset: -1px;
+}
+.dep-cell.dup {
+  background: #ffd6d6;
+}
+.dep-cell-checi-td {
+  position: relative;
+}
+.dep-cell-checi {
+  font-weight: bold;
+}
+.dep-send-row {
+  padding: 12px 14px;
+  background: #f8fafc;
+  border-top: 1px solid var(--border, #dde1e8);
+}
+.dep-send-hint {
+  display: block;
+  font-size: 12px;
+  color: #6b7889;
+  margin-bottom: 8px;
+}
+.dep-send-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.dep-send-btns .btn-send {
+  font-size: 12px;
+  padding: 5px 10px;
+  background: #1e3f7c;
+  color: #fff;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.dep-send-btns .btn-send:hover { background: #2b5cb0; }
+.dep-send-btns .btn-send:active { background: #163268; }
+
+/* 浮窗内右下角状态提示：替代全局 toast 展示「已发送」「回执」等消息，3 秒后淡出 */
+.dep-status {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;             /* 避开右下角 .dep-resize-handle（16~20px 区域） */
+  max-width: 70%;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #155724;
+  background: #d4edda;
+  border: 1px solid #c3e6cb;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .12);
+  pointer-events: none;       /* 隐藏时完全不挡点击 */
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity .2s, transform .2s;
+  z-index: 5;
+  word-break: break-all;
+}
+.dep-status.show {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;       /* 显示后可悬停：鼠标移上去暂停自动消失，便于看完整回执 */
+  cursor: default;
+}
+.dep-status.ok    { color: #155724; background: #d4edda; border-color: #c3e6cb; }
+.dep-status.warn  { color: #721c24; background: #f8d7da; border-color: #f5c6cb; }
+.dep-status.info  { color: #1e3f7c; background: #d6e6ff; border-color: #b5d3f0; }

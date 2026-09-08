@@ -287,7 +287,7 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
     var hitReport = 0;
     (tabs || []).forEach(function (t) {
       if (t.id === fromTabId) return;               // 不发回来源标签页，避免回环
-      if (payload.type === 'fill') {
+      if (payload.type === 'fill' || payload.type === 'fillByStrategy') {
         // 填表指令：只发给报表页
         if (isReport(t.url)) { hitReport++; send(t.id, payload); }
       } else {

@@ -129,6 +129,162 @@
       if (document.querySelector('td[col="2"]')) {
         post({ type: 'checiList', list: collectCheci(), url: location.href });
       }
+    } else if (d.type === 'fillByStrategy' && d.cells) {
+      /* 发送按钮用的「按 strategy 选目标」填表：
+       *   - 'fs_tab_id' / 'first_iframe' / 'fs_tab_class' / 'name_fs_tab'：仅顶层 frame 处理，
+       *     在本页 document 里按对应选择器找 iframe，调其 contentWindow.contentPane.setCellValue
+       *   - 'self'：仅报表 iframe frame 自身有 contentPane 时处理
+       *   - 'all'：仅顶层 frame 处理（兜底按多种选择器逐个尝试）
+       * 帧角色判定避免多 frame 重复执行 setCellValue。 */
+      var strategy = d.strategy || 'all';
+      console.log('[dep-bridge] fillByStrategy 收到', 'strategy=' + strategy, 'isTop=' + (window === window.top), 'selfHasContentPane=' + !!(window.contentPane), 'cells=' + JSON.stringify(d.cells));
+      var targetWin = null;
+      var targetLabel = '';
+      var skipReason = '';
+
+      /* 遍历「所有」匹配 selector 的 iframe，取第一个真的带 contentPane 的。
+       * 必须遍历而不是只取第一个：FS 平台页里有 2 个 iframe，
+       * 第 1 个是 display:none 的首页占位（formlet=demo/homepage/finereport.frm，无 contentPane），
+       * 第 2 个才是报表（id/name=fs_tab_xxx，class 多了 fs-tab-content-toolbar）。 */
+      function trySelect(selector, label) {
+        try {
+          var list = document.querySelectorAll(selector);
+          console.log('[dep-bridge] trySelect "' + selector + '" → 匹配到 ' + list.length + ' 个');
+          for (var k = 0; k < list.length; k++) {
+            var f = list[k];
+            try {
+              var cwOk = !!(f && f.contentWindow);
+              var cpOk = !!(cwOk && f.contentWindow.contentPane &&
+                            typeof f.contentWindow.contentPane.setCellValue === 'function');
+              console.log('[dep-bridge]   [' + k + '] src="' + String(f.src || '').slice(0, 70) +
+                          '" contentWindow=' + (cwOk ? 'yes' : 'no') +
+                          ' contentPane=' + (cpOk ? 'yes' : 'no') +
+                          ' display=' + (f.style && f.style.display ? f.style.display : '(visible)'));
+              if (cpOk) {
+                targetWin = f.contentWindow;
+                targetLabel = label + '[' + k + ']';
+                return true;
+              }
+            } catch (e) {
+              console.log('[dep-bridge]   [' + k + '] 访问抛错（多半是跨域）：' + (e.message || e));
+            }
+          }
+        } catch (e) {}
+        return false;
+      }
+
+      if (strategy === 'self') {
+        if (window !== window.top && window.contentPane &&
+            typeof window.contentPane.setCellValue === 'function') {
+          targetWin = window;
+          targetLabel = 'self';
+        } else {
+          skipReason = 'self: this frame has no contentPane';
+        }
+      } else if (strategy === 'all') {
+        // 兜底只在顶层 frame 跑（避免和 self 重复）；按「报表 iframe 特征」优先级从高到低逐个试
+        if (window === window.top) {
+          if (!trySelect('iframe.fs-tab-content-toolbar', 'iframe.fs-tab-content-toolbar') &&
+              !trySelect('iframe[id^="fs_tab"]', 'iframe[id^="fs_tab"]') &&
+              !trySelect('iframe[name^="fs_tab"]', 'iframe[name^="fs_tab"]') &&
+              !trySelect('iframe.fs-tab-content-item', 'iframe.fs-tab-content-item') &&
+              !trySelect('iframe', 'querySelector("iframe")')) {
+            skipReason = 'all: no contentPane iframe found';
+          }
+        } else {
+          skipReason = 'all: only top frame handles';
+        }
+      } else if (strategy === 'fs_tab_toolbar') {
+        // 报表 iframe 独有的 class（第 1 个首页占位 iframe 没有这个 class），最精准
+        if (window === window.top) {
+          if (!trySelect('iframe.fs-tab-content-toolbar', 'iframe.fs-tab-content-toolbar')) {
+            skipReason = 'fs_tab_toolbar: no match';
+          }
+        } else skipReason = 'fs_tab_toolbar: only top frame handles';
+      } else if (strategy === 'fs_tab_id') {
+        if (window === window.top) {
+          if (!trySelect('iframe[id^="fs_tab"]', 'iframe[id^="fs_tab"]')) {
+            skipReason = 'fs_tab_id: no match';
+          }
+        } else skipReason = 'fs_tab_id: only top frame handles';
+      } else if (strategy === 'first_iframe') {
+        if (window === window.top) {
+          if (!trySelect('iframe', 'querySelector("iframe")')) {
+            skipReason = 'first_iframe: no match';
+          }
+        } else skipReason = 'first_iframe: only top frame handles';
+      } else if (strategy === 'fs_tab_class') {
+        if (window === window.top) {
+          if (!trySelect('iframe.fs-tab-content-item', 'iframe.fs-tab-content-item')) {
+            skipReason = 'fs_tab_class: no match';
+          }
+        } else skipReason = 'fs_tab_class: only top frame handles';
+      } else if (strategy === 'name_fs_tab') {
+        if (window === window.top) {
+          if (!trySelect('iframe[name^="fs_tab"]', 'iframe[name^="fs_tab"]')) {
+            skipReason = 'name_fs_tab: no match';
+          }
+        } else skipReason = 'name_fs_tab: only top frame handles';
+      } else {
+        skipReason = 'unknown strategy: ' + strategy;
+      }
+
+      if (!targetWin) {
+        console.log('[dep-bridge] ✗ 没找到目标：' + (skipReason || 'no target') + '（strategy=' + strategy + '）');
+        post({ type: 'filled', ok: 0, url: location.href, strategy: strategy, target: targetLabel, error: skipReason || 'no target' });
+        return;
+      }
+      console.log('[dep-bridge] ✓ 选中目标：' + targetLabel + '，isTargetSelf=' + (targetWin === window) + '，hasContentPane=' + !!(targetWin.contentPane));
+
+      try {
+        // 行激活：真实帆软模板里 setCellValue 必须先「选中行」才生效（否则提交报"请输入内容"）
+        // 用 td[idx="0"] 而非 [id^="B4-"]：不依赖 id 模式，DOM 顺序第一个 idx="0" 的 td
+        // 点它能激活"第一条新增行"，让后续 setCellValue 落到 dirty 状态、能过校验
+        try {
+          var b4Doc = (targetWin === window) ? document : targetWin.document;
+          var firstIdx = b4Doc && b4Doc.querySelector('td[idx="0"]');
+          console.log('[dep-bridge] 行激活 ' + (firstIdx
+            ? '找到 td[idx="0"]（id=' + (firstIdx.id || '?') + '），已 click()'
+            : '未找到 td[idx="0"]'));
+          if (firstIdx) firstIdx.click();
+        } catch (e) { /* 行激活失败不影响后续写入 */ }
+
+        var ok = 0, failed = [];
+        var keys = Object.keys(d.cells);
+        for (var ki = 0; ki < keys.length; ki++) {
+          var id = keys[ki];
+          try {
+            targetWin.contentPane.setCellValue(id, null, d.cells[id]);
+            console.log('[dep-bridge] setCellValue ' + id + ' = ' + JSON.stringify(d.cells[id]) + ' → ok');
+            ok++;
+          } catch (e) {
+            console.log('[dep-bridge] setCellValue ' + id + ' → 抛错：' + (e.message || e));
+            failed.push(id + ':' + (e.message || e));
+          }
+        }
+        console.log('[dep-bridge] 完成：ok=' + ok + '/5, strategy=' + strategy + ', target=' + targetLabel);
+        post({
+          type: 'filled', ok: ok, failed: failed,
+          url: location.href, strategy: strategy, target: targetLabel
+        });
+        // 填完顺手回传一次车次列表（与 fill 通道保持一致）
+        if (targetWin.document && targetWin.document.querySelector('td[col="2"]')) {
+          // 在目标 win 的文档里抓车次（与 collectCheci 同样的逻辑）
+          try {
+            var tds = targetWin.document.querySelectorAll('td[col="2"]');
+            var checiOut = [];
+            for (var ti = 0; ti < tds.length; ti++) {
+              var tid = tds[ti].getAttribute('id') || '';
+              if (tid.indexOf('C4-') === 0) continue;
+              var tt = (tds[ti].textContent || '').replace(/\s+/g, '');
+              if (tt) checiOut.push(tt);
+            }
+            post({ type: 'checiList', list: checiOut, url: targetWin.location.href });
+          } catch (e) {}
+        }
+      } catch (e) {
+        post({ type: 'filled', ok: 0, url: location.href, strategy: strategy, target: targetLabel, error: e.message });
+      }
     } else if (d.type === 'readCheci') {
       post({ type: 'checiList', list: collectCheci(), url: location.href });
     } else if (d.type === 'map-token' && d.token) {

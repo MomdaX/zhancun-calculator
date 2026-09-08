@@ -259,13 +259,12 @@ document.addEventListener('click', function(e){
     }
   }
 
-  // 1) BroadcastChannel 实时推送
+  // 1) BroadcastChannel：只用于「把车次列表回传主页面查重」（见下方 pushCheci），
+  //    不再接收主页面的填表推送——新流程改走扩展桥，本页打开时应为干净空表。
+  var bc = null;
   try {
-    if (typeof BroadcastChannel !== 'undefined') {
-      var bc = new BroadcastChannel('zhancun-dep');
-      bc.onmessage = function (ev) { apply(ev.data && ev.data.cells); };
-    }
-  } catch (e) { /* 不支持则走 localStorage */ }
+    if (typeof BroadcastChannel !== 'undefined') bc = new BroadcastChannel('zhancun-dep');
+  } catch (e) {}
 
   /* 反向回传：把本表「编组车次」列（td[col="2"]，不含正在填写的 C4）的车次列表
      发给主页面，供其做「车次重复」校验（独立标签页模式下主页面读不到本页 DOM）。 */
@@ -288,25 +287,13 @@ document.addEventListener('click', function(e){
   }
   window.addEventListener('load', function () { setTimeout(pushCheci, 300); });
 
-  // 2) localStorage：同浏览器其它标签页写入时触发（本页自身写入不触发）
-  var KEY = 'zhancun.depFill';
-  window.addEventListener('storage', function (ev) {
-    if (ev.key !== KEY || !ev.newValue) return;
-    try { apply(JSON.parse(ev.newValue).cells); } catch (e) {}
-  });
-  try {
-    var saved = localStorage.getItem(KEY);
-    if (saved) apply(JSON.parse(saved).cells);      // 后开 / 刷新时回填最后一次数据
-  } catch (e) {}
-
-  // 3) URL 参数（跨域打开也能带数据）
-  try {
-    var q = new URLSearchParams(location.search), fromUrl = {}, hit = false;
-    for (var i = 0; i < CELLS.length; i++) {
-      if (q.has(CELLS[i])) { fromUrl[CELLS[i]] = q.get(CELLS[i]); hit = true; }
-    }
-    if (hit) apply(fromUrl);
-  } catch (e) {}
+  /* （已移除）localStorage 回填 与 URL 参数填表
+   * 原因：新流程是「主页面点发送 → 扩展桥 → contentPane.setCellValue」，
+   *       本页作为测试用的报表页，每次打开都应是干净的空表；
+   *       旧逻辑会从 localStorage['zhancun.depFill'] 自动回填历史数据，
+   *       导致「还没点发送，输入框里就已经有值」。
+   * 顺带清掉旧版本遗留的键，避免下次打开又被填。 */
+  try { localStorage.removeItem('zhancun.depFill'); } catch (e) {}
 })();
 </script>
 
