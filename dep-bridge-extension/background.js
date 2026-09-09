@@ -19,7 +19,11 @@ var CHANNEL = '__DEP_BRIDGE__';
  * 这里只留内存缓存，启动时 + 变更时从 storage 载入：
  *   REPORT_URL   = 用户输入的完整地址
  *   REPORT_MATCH = 解析出的 host（如 10.190.136.28:6060），用于判定哪个标签页是报表页 */
-var cfg = { reportUrl: '', reportMatch: '' };
+/* broadcast：是否启用「广播兜底」。
+ * 精确匹配（isReport）没命中任何标签页时：
+ *   开 → 广播给所有普通标签页，由页面自行判断是否含 contentPane（popup 里可关）
+ *   关 → 只认精确匹配，地址没配对就发不出去（用于验证地址配置是否正确） */
+var cfg = { reportUrl: '', reportMatch: '', broadcast: true };
 
 /* 地图 token 接口（可在 popup 里改，存在 storage：
  *   depTokenUrl      接口完整地址
@@ -35,10 +39,12 @@ function hostOf(u) {
 }
 
 function loadCfg(cb) {
-  chrome.storage.local.get(['depReportUrl', 'depTokenUrl', 'depTokenReferer'], function (r) {
+  chrome.storage.local.get(['depReportUrl', 'depTokenUrl', 'depTokenReferer', 'depBroadcast'], function (r) {
     var url = (r && r.depReportUrl) || '';
     cfg.reportUrl = url;
     cfg.reportMatch = url ? hostOf(url) : '';
+    // 没存过 → 默认开启广播兜底
+    cfg.broadcast = (r && r.depBroadcast !== undefined) ? !!r.depBroadcast : true;
     if (r && r.depTokenUrl) mapTokenCfg.url = r.depTokenUrl;
     mapTokenCfg.referer = (r && r.depTokenReferer) || '';
     applyRefererRule();
@@ -74,8 +80,7 @@ function applyRefererRule() {
 loadCfg();
 chrome.storage.onChanged.addListener(function (changes, area) {
   if (area === 'local' && changes.depReportUrl) {
-    loadCfg();
-    clearPendingFill();                            // 报表地址变更，丢弃旧 fill，避免给老标签重发
+    loadCfg();                                     // 报表地址变更，重新载入匹配特征
   }
 });
 
@@ -94,26 +99,6 @@ function isReport(url) {
     var b = new URL(cfg.reportUrl);
     return a.host === b.host && a.pathname === b.pathname;
   } catch (e) { return false; }
-}
-
-/* ====== 待发 fill 队列（用于自动开报表页后延迟投递） =====================
- * 解决：之前用 [2000,4000,7000] 的 setTimeout 重试，会让"上次"点击的旧 fill
- * 在新打开的报表页加载完后被自动填上，看起来像"没点就填了"。
- * 改为：每次新 fill 来时刷新时间戳，30 秒内重试，过期自动丢弃。 */
-var pendingFill = null;             // { payload, tabId, ts }
-var pendingFillTimer = null;
-var FILL_TTL_MS = 30 * 1000;         // 30 秒过期
-var FILL_MAX_TRIES = 20;             // 最多重试 20 次（约 6 秒）
-
-function clearPendingFill() {
-  if (pendingFillTimer) { clearInterval(pendingFillTimer); pendingFillTimer = null; }
-  pendingFill = null;
-}
-
-function pumpPendingFill() {
-  if (!pendingFill) return;
-  if (Date.now() - pendingFill.ts > FILL_TTL_MS) { clearPendingFill(); return; }
-  try { send(pendingFill.tabId, pendingFill.payload); } catch (e) {}
 }
 
 /* ====== 工具栏图标颜色：已连接(报表页≥1)绿，未连接灰 ====== */
@@ -283,12 +268,31 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
     return;
   }
 
+  /* 计算器页「刷新报表页」按钮：
+   * 给「匹配 popup 报表地址」的标签页下刷新指令（chrome.tabs.reload）。
+   * 网页本身没有 tabs 权限，必须由扩展代劳。 */
+  if (payload.type === 'reloadReport') {
+    chrome.tabs.query({}, function (tabs) {
+      var n = 0;
+      (tabs || []).forEach(function (t) {
+        if (!isReport(t.url)) return;
+        try { chrome.tabs.reload(t.id, { bypassCache: false }); n++; }
+        catch (e) { /* 忽略个别标签刷新失败 */ }
+      });
+      console.log('[dep-bridge] 刷新报表页：命中 ' + n + ' 个（匹配 ' + (cfg.reportUrl || '未配置') + '）');
+      if (fromTabId != null) {
+        send(fromTabId, { type: 'reloadResult', count: n, reportUrl: cfg.reportUrl || '' });
+      }
+    });
+    return;
+  }
+
   chrome.tabs.query({}, function (tabs) {
     var hitReport = 0;
     (tabs || []).forEach(function (t) {
       if (t.id === fromTabId) return;               // 不发回来源标签页，避免回环
       if (payload.type === 'fill' || payload.type === 'fillByStrategy') {
-        // 填表指令：只发给报表页
+        // 填表指令：优先发给「匹配 popup 配置的报表页」
         if (isReport(t.url)) { hitReport++; send(t.id, payload); }
       } else {
         // checiList / filled 等回传：只发给非报表页（即计算器页面）
@@ -296,26 +300,27 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
       }
     });
 
-    // 报表标签页没开 → 自动开一个，加载完后再补发；但 fill 30 秒过期，到期自动丢弃
-    if (payload.type === 'fill' && hitReport === 0 && cfg.reportUrl) {
-      try {
-        var payloadCopy = Object.assign({}, payload, { ts: Date.now() });
-        clearPendingFill();                       // 旧的取消，换成这次新点击的
-        pendingFill = { payload: payloadCopy, tabId: null, ts: payloadCopy.ts };
-        chrome.tabs.create({ url: cfg.reportUrl }, function (tab) {
-          if (!tab || !tab.id) { clearPendingFill(); return; }
-          pendingFill.tabId = tab.id;
-          // 每 300ms 尝试一次，每次校验 ttl 与次数；超时/过限自动清掉
-          var tries = 0;
-          pendingFillTimer = setInterval(function () {
-            tries++;
-            if (!pendingFill || Date.now() - pendingFill.ts > FILL_TTL_MS) { clearPendingFill(); return; }
-            if (tries > FILL_MAX_TRIES) { clearPendingFill(); return; }
-            pumpPendingFill();
-          }, 300);
-          pumpPendingFill();                      // 立即试一次（应对报表页其实已 ready 的情形）
-        });
-      } catch (e) { clearPendingFill(); }
+    /* 兜底广播：popup 没配地址、或配的地址与当前实际页面不符
+     * （例如配了 10.190.136.28 但实际开着 127.0.0.1 的测试页）时，
+     * 上面精确匹配会一个都命中不了。此时广播给所有标签页，
+     * 由各页面的 page-fill 自行判断「本页有没有 contentPane」：
+     *   有 → 填表；没有 → 静默跳过。不会误填无关页面。 */
+    if ((payload.type === 'fill' || payload.type === 'fillByStrategy') && hitReport === 0 && !cfg.broadcast) {
+      console.log('[dep-bridge] 未匹配到报表页，且「广播兜底」已关闭 → 不发送。' +
+                  '请在 popup 里检查报表地址，或打开广播兜底开关。');
+    }
+
+    if ((payload.type === 'fill' || payload.type === 'fillByStrategy') && hitReport === 0 && cfg.broadcast) {
+      console.log('[dep-bridge] 未匹配到报表页，广播兜底（由页面自行判断 contentPane）');
+      (tabs || []).forEach(function (t) {
+        if (t.id === fromTabId) return;
+        // 跳过内置页（chrome:// / edge:// / about: 等）：扩展无法向它们注入
+        // content script，发了也收不到，纯属浪费
+        if (!t.url || /^(chrome|chrome-extension|edge|about|devtools|view-source|file):/i.test(t.url)) {
+          return;
+        }
+        send(t.id, payload);
+      });
     }
   });
 });

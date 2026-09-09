@@ -859,6 +859,16 @@
             var dStation = stationOf(agg);
             var dCls = dStation ? 'derived station-link' : 'derived';
             var dAttr = dStation ? ' data-station="' + escapeHtml(dStation) + '"' : '';
+            // 派生字也按方向着色（与 renderDest 一致）：取首站方向 → shakou/nankou/guanna，
+            // 叠加在 .derived 之上。方向色（style.css 中定义于 .derived 之后）覆盖默认灰，
+            // 斜体样式保留，从而「派生斜体 + 方向色」并存。
+            if (dStation) {
+              var ddir = (state.dirIndex && state.dirIndex.map)
+                ? (state.dirIndex.map[dStation] || '') : '';
+              if (/沙/.test(ddir)) dCls += ' shakou';
+              else if (/南/.test(ddir)) dCls += ' nankou';
+              else if (/管内/.test(ddir)) dCls += ' guanna';
+            }
             return '<td class="dest"><span class="' + dCls + '"' + dAttr + '>' +
                    escapeHtml(agg) + '</span></td>';
           }
@@ -1461,6 +1471,10 @@
     }
     on('depInputC4', 'input', function () { applyDepCheci(true); });   // 输入中：仅提示
     // 注：车次框按 Enter 不再自动发送——由用户自己点下方发送按钮触发，避免误发。
+    // 输入完成后按 Enter → 失焦（blur），方便收起输入法 / 退出当前框
+    on('depInputC4', 'keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
+    });
 
     // ============== 时间显示（每秒刷新）==============
     function pad2(n) { return n < 10 ? '0' + n : '' + n; }
@@ -1514,39 +1528,90 @@
         F4: ($('depInputF4') || {}).value || ''
       };
     }
+    // ============== 发送模式（下方 7 个按钮：点一下切换当前模式，默认 ⑦）==============
+    // strategy 内部标识 → 状态提示里显示的友好名（与下方按钮文字一致）
+    var STRATEGY_LABEL = {
+      fs_tab_toolbar: '报表Toolbar',
+      fs_tab_id: 'id^fs_tab',
+      first_iframe: '首个iframe',
+      fs_tab_class: 'item类',
+      name_fs_tab: 'name^fs_tab',
+      self: '自身',
+      all: '兜底'
+    };
     var depSendBtns = document.querySelectorAll('.dep-send-btns .btn-send');
+    var depLastTrack = '';   // 最近一次发送所用的股道（道号），用于回执提示
+    var depActiveStrategy = 'fs_tab_toolbar';
+    function setActiveStrategy(btn) {
+      for (var k = 0; k < depSendBtns.length; k++) depSendBtns[k].classList.remove('active');
+      btn.classList.add('active');
+      depActiveStrategy = btn.getAttribute('data-strategy') || 'all';
+    }
     for (var i = 0; i < depSendBtns.length; i++) {
       (function (btn) {
-        btn.addEventListener('click', function () {
-          var strategy = btn.getAttribute('data-strategy') || 'all';
-          var cells = getDepCells();
-          if (!cells.C4) { showDepStatus('请先输入车次', 'warn'); return; }
-          try {
-            window.postMessage({
-              channel: DEP_BRIDGE,
-              type: 'fillByStrategy',
-              cells: cells,
-              strategy: strategy,
-              ts: Date.now()
-            }, '*');
-            showDepStatus('已发送：' + strategy + '（车次 ' + cells.C4 + '）', 'ok');
-          } catch (e) {
-            showDepStatus('发送失败：' + e.message, 'warn');
-          }
-        });
+        btn.addEventListener('click', function () { setActiveStrategy(btn); });
       })(depSendBtns[i]);
     }
+    // 同步 HTML 里默认带 active 的那个（⑦ fs_tab_toolbar）
+    (function () {
+      var def = document.querySelector('.dep-send-btns .btn-send.active');
+      if (def) depActiveStrategy = def.getAttribute('data-strategy') || 'fs_tab_toolbar';
+    })();
+
+    // ============== 右侧「发送」按钮：用当前选中的模式发送 ==============
+    on('btnSendCurrent', 'click', function () {
+      var cells = getDepCells();
+      if (!cells.C4) { showDepStatus('请先输入车次', 'warn'); return; }
+      depLastTrack = cells.B4;
+      try {
+        window.postMessage({
+          channel: DEP_BRIDGE,
+          type: 'fillByStrategy',
+          cells: cells,
+          strategy: depActiveStrategy,
+          ts: Date.now()
+        }, '*');
+        showDepStatus('已下发填报指令 · 模式：' + (STRATEGY_LABEL[depActiveStrategy] || depActiveStrategy) + ' · 车次：' + cells.C4, 'ok');
+      } catch (e) {
+        showDepStatus('发送失败：' + e.message, 'warn');
+      }
+    });
+
+
+    // 「刷新报表页」：向扩展桥下刷新指令，由 background 刷新「popup 报表地址」匹配的标签页
+    on('btnReloadReport', 'click', function () {
+      try {
+        window.postMessage({ channel: DEP_BRIDGE, type: 'reloadReport', ts: Date.now() }, '*');
+        showDepStatus('已发送刷新指令…', 'info');
+      } catch (e) {
+        showDepStatus('刷新指令发送失败：' + e.message, 'warn');
+      }
+    });
 
     // 监听扩展桥回执（filled）—— 哪个 strategy 写成功 / 失败 / 原因都在这里能直接看到
     window.addEventListener('message', function (ev) {
       var d = ev.data;
       if (!d || d.channel !== DEP_BRIDGE) return;
+      // 刷新指令回执
+      if (d.type === 'reloadResult') {
+        showDepStatus(
+          (d.count || 0) > 0
+            ? ('已刷新 ' + d.count + ' 个报表页')
+            : '未找到报表页：请检查 popup 里的「报表地址」是否与已打开的页面一致',
+          (d.count || 0) > 0 ? 'ok' : 'warn'
+        );
+        return;
+      }
       if (d.type === 'filled' && d.strategy) {
-        var msg = '回执 [' + d.strategy + '] 写入 ' + (d.ok || 0) + '/5';
-        if (d.target) msg += '，目标=' + d.target;
-        if (d.error) msg += '，错误=' + d.error;
-        if (d.failed && d.failed.length) msg += '，失败=[' + d.failed.join('; ') + ']';
-        showDepStatus(msg, (d.ok || 0) > 0 ? 'ok' : 'warn');
+        var ok = d.ok || 0, total = 5;
+        var track = depLastTrack ? depLastTrack + '道' : '';
+        var msg;
+        if (ok >= total)      msg = track + '编好';
+        else if (ok > 0)      msg = track + '编好（部分 ' + ok + '/' + total + '）';
+        else                  msg = track + '编好失败';
+        if (d.error)  msg += ' · 原因：' + d.error;
+        if (d.failed && d.failed.length) msg += ' · 未写入：' + d.failed.join('、');
+        showDepStatus(msg, ok > 0 ? 'ok' : 'warn');
       }
     });
 
@@ -1985,14 +2050,12 @@
   // 拖 .dep-resize-handle（右下角）改变浮窗宽高；尺寸记忆到 localStorage，下次打开沿用。
   var DEP_SIZE_KEY = 'depModalSize';
   function applyDepSize() {
+    // 尺寸完全由 CSS（.dep-modal）控制，不再用内联样式覆盖。
+    // 仅确保默认不残留旧的内联 max 限制即可（拖动时的内联尺寸由拖动逻辑管理）。
     var c = document.querySelector('#modalDeparture .modal-content');
     if (!c) return;
-    var s = Store.get(DEP_SIZE_KEY, null);
-    if (!s || !s.w || !s.h) return;
-    c.style.maxWidth = 'none';
-    c.style.maxHeight = 'none';
-    c.style.width = s.w + 'px';
-    c.style.height = s.h + 'px';
+    c.style.maxWidth = '';
+    c.style.maxHeight = '';
   }
   function initModalResize() {
     applyDepSize();

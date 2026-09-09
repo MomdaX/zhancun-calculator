@@ -411,6 +411,36 @@ suite('到站推断', () => {
 });
 
 /* ==========================================================================
+ * 4.5 到站写回约束（防回归：只有方向库车站名才许写回「到站」列）
+ * ========================================================================== */
+suite('到站写回约束', () => {
+  // 注入最小方向库：兴业 是车站名（应写回）；永鑫 不在库内（是设置里的卸车地点，不写回）
+  global.DirectionData = 'station,direction\n兴业,管内\n钦州港,待卸\n';
+  const idx = Aggregate.buildDirectionIndex(global.DirectionData);
+  const now = new Date(2026, 8, 2, 6, 0);
+
+  t('段1 在记事中命中方向库站名 → 写回到站列', () => {
+    const rows = [ mkRow({ TRACK: '1', LOAD: 0, DEST: '钦州港', NOTE: '兴业 汽油', CARTYPE: 'C70' }) ];
+    const res = Aggregate.aggregate(rows, {}, idx.stations, {}, now);
+    eq(res['1'].raw[0][Aggregate.COL.DEST], '兴业');   // 原「钦州港」被站名覆盖
+    eq(res['1'].raw[0].__dest, '兴业');
+  });
+
+  t('段2 卸车地点（永鑫，来自设置）识别为分类但不写回到站列', () => {
+    const rows = [ mkRow({ TRACK: '1', LOAD: 50, DEST: '钦州港', NOTE: '卸车地点 永鑫', CARTYPE: 'C70' }) ];
+    const res = Aggregate.aggregate(rows, {}, idx.stations, {}, now);
+    eq(res['1'].raw[0][Aggregate.COL.DEST], '钦州港');  // 到站列保持原值，不被卸车地点污染
+    eq(res['1'].raw[0].__dest, '永鑫');                 // 但方向统计仍识别为永鑫
+  });
+
+  t('段1 未命中站名（仅车种/罐型分类）也不写回到站列', () => {
+    const rows = [ mkRow({ TRACK: '1', LOAD: 0, DEST: '钦州港', NOTE: '待装', CARTYPE: 'P64' }) ];
+    const res = Aggregate.aggregate(rows, {}, idx.stations, {}, now);
+    eq(res['1'].raw[0][Aggregate.COL.DEST], '钦州港');  // 保持原值
+  });
+});
+
+/* ==========================================================================
  * 5. 端到端聚合
  * ========================================================================== */
 suite('端到端聚合', () => {

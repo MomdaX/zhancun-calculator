@@ -243,6 +243,17 @@
 
       // __dest：聚合后的到站分类（可能是车站名，也可能是 路罐/自备罐/黑罐/车种）
       row.__dest = resolveDest(work, dirStations, now, _dirIndexForResolve && _dirIndexForResolve.firstCharIndex);
+      // 写回到站列（raw）的硬约束：识别出的 __dest 必须是「方向库车站名」。
+      // 仅段1 在记事中命中 direction.data.js 站名时满足；其余一律不改写「到站」列：
+      //   - 段2 的卸车地点（永鑫/货场/中油…，来自设置）与「到卸」分类 → 不写回；
+      //   - 段1/段3 未命中站名时回落的 路罐/自备罐/黑罐/车种 分类 → 不写回；
+      //   - 原始到站为空、回退派生的车 → 不写回（保留 raw 空，走 .derived 斜体分支）。
+      // 卸车地点 / 到卸 / 车种分类只用于方向统计与明细加粗，不应污染车站名列。
+      if (r[COL.DEST] != null && r[COL.DEST] !== '' &&
+          row.__dest != null && row.__dest !== '' && row.__dest !== r[COL.DEST] &&
+          dirStations.indexOf(row.__dest) >= 0) {
+        row[COL.DEST] = row.__dest;
+      }
       row.__carType = extractCarType(r[COL.CARTYPE]);
       row.__track = track;
       // 派生：到达时间解析一次缓存到行，聚合循环与明细/搜索渲染复用（见 app.js renderRows），

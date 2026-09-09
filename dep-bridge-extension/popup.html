@@ -112,6 +112,16 @@
     <div id="parse"></div>
     <div class="btn-row"><button class="btn-primary" id="saveBtn">保存</button></div>
     <div class="sub">保存后自动解析 host 特征，用于识别报表标签页</div>
+    <div class="retry-row">
+      <label class="toggle-switch" title="开启：地址没配对时广播给所有标签页，由页面自己判断是否含 contentPane。
+关闭：只发给「精确匹配」的报表页，用来验证上面的地址是否配对">
+        <input type="checkbox" id="broadcastToggle">
+        <span class="toggle-slider"></span>
+      </label>
+      <span style="font-size:11px;color:var(--text);">广播兜底</span>
+      <span style="flex:1;"></span>
+      <span class="sub" style="margin:0;" id="broadcastHint">关掉可验证地址是否配对</span>
+    </div>
   </div>
 
   <!-- 卡片2：地图Token管理 -->

@@ -267,63 +267,66 @@
       <button class="btn" id="depClose">关闭</button>
     </div>
     <div class="modal-body dep-body">
-      <!-- 真实报表在另一个标签页里：本地这张表是"录入区"。
-           4 格（股道/辆数/换长/尾车车号）点「编好」时自动预填，
-           车次由用户手填，全部 5 格点下方任一发送按钮（用不同 iframe 定位方式）
-           经浏览器扩展桥发到目标标签页执行 contentPane.setCellValue。
-           测试期先放 6 种 strategy 按钮挑能用的，正式版只留一种。 -->
-      <table class="detail dep-entry" id="depEntry">
-        <!-- 列宽按帆软原表 B:F 比例（52/63/49/49/72px）适配 .dep-body padding:50px 后的内容区
-             （模态框 500px - 100px padding = 400px），像素值保证最后一列不被截断。
-             在 .dep-body 更窄时由 overflow:auto 兜底出现横向滚动条，不会撑出容器。 -->
-        <colgroup>
-          <col style="width:73px">
-          <col style="width:88px">
-          <col style="width:69px">
-          <col style="width:69px">
-          <col style="width:101px">
-        </colgroup>
-        <tbody>
-        <tr class="dep-time-row">
-          <td colspan="5">时间：<span id="depTime">--</span></td>
-        </tr>
-        <tr class="dep-head-row">
-          <th>股道</th>
-          <th>编组车次</th>
-          <th>辆数</th>
-          <th>换长</th>
-          <th>尾车车号</th>
-        </tr>
-        <tr class="dep-input-row">
-          <td><input type="text" id="depInputB4" class="dep-cell" tabindex="1"></td>
-          <td class="dep-cell-checi-td">
-            <input type="text" id="depInputC4" class="dep-cell dep-cell-checi" tabindex="2" maxlength="10" placeholder="车次">
-            <!-- 车次查重 / 列车超长 / 列车超重 警示标，悬停列出全部提示 -->
-            <span class="dep-checi-warn" id="depCheciWarn" tabindex="0">
-              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
-                <path d="M12 2.6 L22.6 21.2 L1.4 21.2 Z" fill="#e03131" stroke="#b02020" stroke-width="1.1" stroke-linejoin="round"></path>
-                <rect x="11.05" y="8.4" width="1.9" height="6.1" rx="0.95" fill="#fff"></rect>
-                <circle cx="12" cy="17.7" r="1.05" fill="#fff"></circle>
-              </svg>
-              <span class="dep-warn-tip" id="depWarnTip"></span>
-            </span>
-          </td>
-          <td><input type="text" id="depInputD4" class="dep-cell" tabindex="3"></td>
-          <td><input type="text" id="depInputE4" class="dep-cell" tabindex="4"></td>
-          <td><input type="text" id="depInputF4" class="dep-cell" tabindex="5"></td>
-        </tr>
-        </tbody>
-      </table>
+      <!-- 表格区 + 右侧操作按钮（刷新 / 发送），用 flex 横排 -->
+      <div class="dep-main-row">
+        <table class="detail dep-entry" id="depEntry">
+          <!-- 列宽按帆软原表 B:F 比例（52/63/49/49/72px）适配 .dep-body padding:50px 后的内容区
+               （模态框 500px - 100px padding = 400px），像素值保证最后一列不被截断。
+               在 .dep-body 更窄时由 overflow:auto 兜底出现横向滚动条，不会撑出容器。 -->
+          <colgroup>
+            <col style="width:73px">
+            <col style="width:88px">
+            <col style="width:69px">
+            <col style="width:69px">
+            <col style="width:101px">
+          </colgroup>
+          <tbody>
+          <tr class="dep-time-row">
+            <td colspan="5">时间：<span id="depTime">--</span></td>
+          </tr>
+          <tr class="dep-head-row">
+            <th>股道</th>
+            <th>编组车次</th>
+            <th>辆数</th>
+            <th>换长</th>
+            <th>尾车车号</th>
+          </tr>
+          <tr class="dep-input-row">
+            <td><input type="text" id="depInputB4" class="dep-cell" tabindex="1"></td>
+            <td class="dep-cell-checi-td">
+              <input type="text" id="depInputC4" class="dep-cell dep-cell-checi" tabindex="2" maxlength="10" placeholder="车次">
+              <!-- 车次查重 / 列车超长 / 列车超重 警示标，悬停列出全部提示 -->
+              <span class="dep-checi-warn" id="depCheciWarn" tabindex="0">
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+                  <path d="M12 2.6 L22.6 21.2 L1.4 21.2 Z" fill="#e03131" stroke="#b02020" stroke-width="1.1" stroke-linejoin="round"></path>
+                  <rect x="11.05" y="8.4" width="1.9" height="6.1" rx="0.95" fill="#fff"></rect>
+                  <circle cx="12" cy="17.7" r="1.05" fill="#fff"></circle>
+                </svg>
+                <span class="dep-warn-tip" id="depWarnTip"></span>
+              </span>
+            </td>
+            <td><input type="text" id="depInputD4" class="dep-cell" tabindex="3"></td>
+            <td><input type="text" id="depInputE4" class="dep-cell" tabindex="4"></td>
+            <td><input type="text" id="depInputF4" class="dep-cell" tabindex="5"></td>
+          </tr>
+          </tbody>
+        </table>
+        <!-- 右侧操作区：发送（用当前选中的 strategy）+ 刷新报表页 -->
+        <div class="dep-side-btns">
+          <button class="btn-side btn-side-send" id="btnSendCurrent" title="使用下方选中的发送模式">发送</button>
+          <button class="btn-side btn-side-refresh" id="btnReloadReport" title="刷新 popup 中「报表地址」所匹配的标签页">⟳ 刷新报表页</button>
+        </div>
+      </div>
       <div class="dep-send-row">
-        <span class="dep-send-hint">向报表页发送（先点哪个能用哪个，用以排查 iframe 定位）：</span>
-        <div class="dep-send-btns">
-          <button class="btn-send" data-strategy="fs_tab_toolbar">⑦ iframe.fs-tab-content-toolbar（报表独有）</button>
-          <button class="btn-send" data-strategy="fs_tab_id">① iframe[id^="fs_tab"]</button>
-          <button class="btn-send" data-strategy="first_iframe">② querySelector("iframe")</button>
-          <button class="btn-send" data-strategy="fs_tab_class">③ iframe.fs-tab-content-item</button>
-          <button class="btn-send" data-strategy="name_fs_tab">④ iframe[name^="fs_tab"]</button>
-          <button class="btn-send" data-strategy="self">⑤ 自身 contentPane</button>
-          <button class="btn-send" data-strategy="all">⑥ 兜底（顶层逐个找）</button>
+        <span class="dep-send-hint">发送模式_[默认⑦]：</span>
+        <div class="dep-send-btns" id="depSendBtns">
+          <button class="btn-send" data-strategy="fs_tab_id">① id^fs_tab</button>
+          <button class="btn-send" data-strategy="first_iframe">② 首个iframe</button>
+          <button class="btn-send" data-strategy="fs_tab_class">③ item类</button>
+          <button class="btn-send" data-strategy="name_fs_tab">④ name^fs_tab</button>
+          <button class="btn-send" data-strategy="self">⑤ 自身</button>
+          <button class="btn-send" data-strategy="all">⑥ 兜底</button>
+          <button class="btn-send active" data-strategy="fs_tab_toolbar">⑦ 报表Toolbar</button>
         </div>
       </div>
       <!-- 浮窗内右下角状态提示：显示「已发送：xxx」「回执 [...] 写入 X/5」等，3 秒自动淡出 -->

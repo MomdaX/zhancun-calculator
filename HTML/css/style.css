@@ -366,9 +366,9 @@ body {
   grid-template-rows: minmax(0, 1fr);
   gap: 10px;
   align-items: stretch;
-  height: 62vh;
   min-height: 360px;
   max-height: 720px;
+  padding: 3px;
 }
 .rpt-right .cfg-tracks-zone { min-width: 0; display: flex; flex-direction: column; }
 .rpt-right .cfg-ready-zone { min-width: 0; display: flex; flex-direction: column; }
@@ -1254,15 +1254,15 @@ td.dest span.station-link:hover {
 /* 默认尺寸 = 用户确认过的大小；JS 拖拽后会改写内联 width/height 并记忆 */
 .dep-modal {
   width: 500px;
-  height: 50vh;
-  max-width: 96vw;
+  height: 32vh;
+  max-width: 160vw;
   display: flex;
   flex-direction: column;
   border-radius: 10px;
   overflow: hidden;
   position: relative;
-  min-width: 320px;
-  min-height: 200px;
+  min-width: 460px;
+  min-height: 300px;
 }
 /* 右下角拖拽调整大小手柄 */
 .dep-resize-handle {
@@ -1365,7 +1365,7 @@ td.dest span.station-link:hover {
  * 原来是 display:flex（给 iframe 用的），会把「发送按钮区」排到表格右侧；
  * 改回 block，让录入表格与发送按钮区上下堆叠。 */
 .dep-body {
-  padding: 50px;
+  padding: 16px;
   min-width: 0;
   min-height: 0;
   flex: 1;
@@ -1841,15 +1841,70 @@ td.dest span.station-link:hover {
 .dep-send-btns .btn-send {
   font-size: 12px;
   padding: 5px 10px;
-  background: #1e3f7c;
+  background: #6c757d;          /* 未启用：灰色 */
+  color: #e9ecef;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.dep-send-btns .btn-send:hover { background: #868e96; }
+/* 当前选中的发送模式：高亮（亮蓝 + 描边） */
+.dep-send-btns .btn-send.active {
+  background: #2f6bd8;
+  color: #fff;
+  box-shadow: 0 0 0 2px #6ea8fe inset;
+}
+
+/* 表格 + 右侧操作按钮 横向排列（表格在左，按钮在右） */
+.dep-main-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.dep-side-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 0 0 auto;
+  padding-top: 26px;          /* 与表格首行（时间行）视觉对齐 */
+}
+.btn-side {
+  font-size: 13px;
+  padding: 11px 18px;
+  color: #fff;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s;
+}
+.btn-side-refresh {
+  background: #0d7a6f;
+  padding: 5px 18px;          /* 高度约为发送按钮的一半 */
+}
+.btn-side-refresh:hover { background: #0a6259; }
+.btn-side-refresh:active { background: #084f47; }
+.btn-side-send {
+  background: #2f6bd8;
+  font-weight: bold;
+  font-size: 14px;
+}
+.btn-side-send:hover { background: #2b5cb0; }
+.btn-side-send:active { background: #163268; }
+/* 「刷新报表页」用青色，与蓝色发送按钮区分（一个是页面管理，一个是数据发送） */
+.dep-send-btns .btn-reload {
+  font-size: 12px;
+  padding: 5px 10px;
+  background: #0d7a6f;
   color: #fff;
   border: 0;
   border-radius: 4px;
   cursor: pointer;
   transition: background .15s;
 }
-.dep-send-btns .btn-send:hover { background: #2b5cb0; }
-.dep-send-btns .btn-send:active { background: #163268; }
+.dep-send-btns .btn-reload:hover { background: #0a6259; }
+.dep-send-btns .btn-reload:active { background: #084f47; }
 
 /* 浮窗内右下角状态提示：替代全局 toast 展示「已发送」「回执」等消息，3 秒后淡出 */
 .dep-status {

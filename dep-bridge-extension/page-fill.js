@@ -137,10 +137,27 @@
        *   - 'all'：仅顶层 frame 处理（兜底按多种选择器逐个尝试）
        * 帧角色判定避免多 frame 重复执行 setCellValue。 */
       var strategy = d.strategy || 'all';
+
+      /* 前置过滤：本页如果没有「报表平台特征」的 iframe，就不是 FS 平台页，直接静默跳过。
+       * 注意不能只看「有没有 iframe」——计算器页自己也带一个 <iframe id="mapFrame">（about:blank），
+       * 广播兜底会误发到它，导致刷一堆 "no match"。这里按报表特征判断才准。 */
+      if (strategy !== 'self') {
+        var reportIframes = document.querySelectorAll(
+          '.fs-tab-content-item, .fs-tab-content-toolbar, iframe[id^="fs_tab"], iframe[name^="fs_tab"]'
+        );
+        if (reportIframes.length === 0) {
+          console.log('[dep-bridge] ⊘ 跳过：本页无报表平台 iframe（strategy=' + strategy + '）');
+          return;
+        }
+      }
+
       console.log('[dep-bridge] fillByStrategy 收到', 'strategy=' + strategy, 'isTop=' + (window === window.top), 'selfHasContentPane=' + !!(window.contentPane), 'cells=' + JSON.stringify(d.cells));
       var targetWin = null;
       var targetLabel = '';
       var skipReason = '';
+      // 「本 frame 按角色本就不处理该 strategy」= 跳过（不是失败）。
+      // 跳过的 frame 绝不能回传 filled，否则会用它把真正写入成功的回执覆盖成 0/5。
+      var isSkip = false;
 
       /* 遍历「所有」匹配 selector 的 iframe，取第一个真的带 contentPane 的。
        * 必须遍历而不是只取第一个：FS 平台页里有 2 个 iframe，
@@ -179,6 +196,7 @@
           targetWin = window;
           targetLabel = 'self';
         } else {
+          isSkip = true;      // 顶层 frame 没有 contentPane，self 策略本就不归它处理
           skipReason = 'self: this frame has no contentPane';
         }
       } else if (strategy === 'all') {
@@ -192,6 +210,7 @@
             skipReason = 'all: no contentPane iframe found';
           }
         } else {
+          isSkip = true;
           skipReason = 'all: only top frame handles';
         }
       } else if (strategy === 'fs_tab_toolbar') {
@@ -200,36 +219,48 @@
           if (!trySelect('iframe.fs-tab-content-toolbar', 'iframe.fs-tab-content-toolbar')) {
             skipReason = 'fs_tab_toolbar: no match';
           }
-        } else skipReason = 'fs_tab_toolbar: only top frame handles';
+        } else { isSkip = true; skipReason = 'fs_tab_toolbar: only top frame handles'; }
       } else if (strategy === 'fs_tab_id') {
         if (window === window.top) {
           if (!trySelect('iframe[id^="fs_tab"]', 'iframe[id^="fs_tab"]')) {
             skipReason = 'fs_tab_id: no match';
           }
-        } else skipReason = 'fs_tab_id: only top frame handles';
+        } else { isSkip = true; skipReason = 'fs_tab_id: only top frame handles'; }
       } else if (strategy === 'first_iframe') {
         if (window === window.top) {
           if (!trySelect('iframe', 'querySelector("iframe")')) {
             skipReason = 'first_iframe: no match';
           }
-        } else skipReason = 'first_iframe: only top frame handles';
+        } else { isSkip = true; skipReason = 'first_iframe: only top frame handles'; }
       } else if (strategy === 'fs_tab_class') {
         if (window === window.top) {
           if (!trySelect('iframe.fs-tab-content-item', 'iframe.fs-tab-content-item')) {
             skipReason = 'fs_tab_class: no match';
           }
-        } else skipReason = 'fs_tab_class: only top frame handles';
+        } else { isSkip = true; skipReason = 'fs_tab_class: only top frame handles'; }
       } else if (strategy === 'name_fs_tab') {
         if (window === window.top) {
           if (!trySelect('iframe[name^="fs_tab"]', 'iframe[name^="fs_tab"]')) {
             skipReason = 'name_fs_tab: no match';
           }
-        } else skipReason = 'name_fs_tab: only top frame handles';
+        } else { isSkip = true; skipReason = 'name_fs_tab: only top frame handles'; }
       } else {
         skipReason = 'unknown strategy: ' + strategy;
       }
 
       if (!targetWin) {
+        /* 静默跳过的两种情况（都不是真失败 → 不回传 filled，避免覆盖成功回执）：
+         *   1. isSkip      ：本 frame 按角色本就不处理该 strategy
+         *                    （如 iframe 内的 frame 收到 top-only 策略）
+         *   2. 本页无 iframe：不是 FS 平台页。广播兜底会发给所有标签页，
+         *      无关页面 / 失效页面（如连不上的报表页）会走到这里，静默即可。 */
+        var noIframe = (strategy !== 'self') && !document.querySelector('iframe');
+        if (isSkip || noIframe) {
+          console.log('[dep-bridge] ⊘ 跳过（不回执）：' +
+            (noIframe ? '本页无 iframe，非报表平台页' : skipReason));
+          return;
+        }
+        // 走到这里才是真问题：本页有 iframe，但里面没有带 contentPane 的报表
         console.log('[dep-bridge] ✗ 没找到目标：' + (skipReason || 'no target') + '（strategy=' + strategy + '）');
         post({ type: 'filled', ok: 0, url: location.href, strategy: strategy, target: targetLabel, error: skipReason || 'no target' });
         return;
@@ -237,18 +268,11 @@
       console.log('[dep-bridge] ✓ 选中目标：' + targetLabel + '，isTargetSelf=' + (targetWin === window) + '，hasContentPane=' + !!(targetWin.contentPane));
 
       try {
-        // 行激活：真实帆软模板里 setCellValue 必须先「选中行」才生效（否则提交报"请输入内容"）
-        // 用 td[idx="0"] 而非 [id^="B4-"]：不依赖 id 模式，DOM 顺序第一个 idx="0" 的 td
-        // 点它能激活"第一条新增行"，让后续 setCellValue 落到 dirty 状态、能过校验
-        try {
-          var b4Doc = (targetWin === window) ? document : targetWin.document;
-          var firstIdx = b4Doc && b4Doc.querySelector('td[idx="0"]');
-          console.log('[dep-bridge] 行激活 ' + (firstIdx
-            ? '找到 td[idx="0"]（id=' + (firstIdx.id || '?') + '），已 click()'
-            : '未找到 td[idx="0"]'));
-          if (firstIdx) firstIdx.click();
-        } catch (e) { /* 行激活失败不影响后续写入 */ }
-
+        /* 直接写值，无需「激活行」：
+         * 已取得准确的 contentPane 对象（等价于
+         *   document.querySelector('.fs-tab-content-item.fs-tab-content-toolbar')
+         *     .contentWindow.contentPane）
+         * 直接 cp.setCellValue(...) 即可写入，实测可行（真实网页已验证）。 */
         var ok = 0, failed = [];
         var keys = Object.keys(d.cells);
         for (var ki = 0; ki < keys.length; ki++) {

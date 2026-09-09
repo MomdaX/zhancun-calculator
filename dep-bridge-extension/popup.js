@@ -145,6 +145,29 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 
+  // 广播兜底开关：关掉后只发给「精确匹配」的报表页，用于验证地址是否配对
+  var broadcastToggle = document.getElementById('broadcastToggle');
+  var broadcastHint = document.getElementById('broadcastHint');
+  if (broadcastToggle) {
+    chrome.storage.local.get(['depBroadcast'], function (r) {
+      // 默认开启（没存过就是开）
+      broadcastToggle.checked = (r && r.depBroadcast !== undefined) ? !!r.depBroadcast : true;
+      if (broadcastHint) {
+        broadcastHint.textContent = broadcastToggle.checked
+          ? '开：地址没配对也能找到报表页'
+          : '关：只发给精确匹配的报表页';
+      }
+    });
+    broadcastToggle.addEventListener('change', function () {
+      chrome.storage.local.set({ depBroadcast: this.checked });
+      if (broadcastHint) {
+        broadcastHint.textContent = this.checked
+          ? '开：地址没配对也能找到报表页'
+          : '关：只发给精确匹配的报表页';
+      }
+    });
+  }
+
   // 401 自动重试开关与重试次数
   var retryToggle = document.getElementById('retryToggle');
   var retryCount = document.getElementById('retryCount');

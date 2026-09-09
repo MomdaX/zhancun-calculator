@@ -1,301 +1,1106 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>发车作业全流程</title>
-<style>
-body{margin:12px;font-family:"Microsoft YaHei","SimSun",Arial,sans-serif;font-size:12px;color:#000;background:#fff;}
-/* 嵌入浮窗内时隐藏滚动条（保留滚轮滚动） */
-html{scrollbar-width:none;-ms-overflow-style:none}
-html::-webkit-scrollbar{width:0;height:0;display:none}
-.toolbar{margin:0 0 10px;}
-.toolbar button{height:26px;padding:0 14px;font-size:13px;line-height:24px;cursor:pointer;background:#f5f5f5;border:1px solid #b5b5b5;border-radius:2px;color:#333;}
-.toolbar button:hover{background:#e6f0ff;border-color:#7aa7e0;}
-/* ---- 精简自原报表：仅保留本表格实际用到的样式规则 ---- */
-.x-table{overflow:hidden;table-layout:fixed;border-collapse:collapse;*word-break:break-all;*overflow:visible}
-.bw{word-wrap:break-word}
-.fh{overflow:hidden;padding:0;vertical-align:middle;text-align:left;font-size:9pt;font-family:SimSun}
-.fh-nopadding{overflow:hidden;padding:0;vertical-align:middle;text-align:left;font-size:12px;font-family:SimSun}
-.f11-0{font-size:11pt}
-.f24-0{font-size:24pt}
-.fwb{font-weight:bold}
-.tac{text-align:center}
-.tar{text-align:right}
-.pl2{padding-left:2px;*padding-left:0}
-.b0{border:0}
-.b1{border:1px solid #000}
-.bt0{border-top:0}
-.bl0{border-left:0}
-.br0{border-right:0}
-.bt1{border-top:1px solid #000}
-.bb1{border-bottom:1px solid #000}
-.bl1{border-left:1px solid #000}
-.br1{border-right:1px solid #000}
-.btcb{border-top-color:#000}
-.bbcb{border-bottom-color:#000}
-.blcb{border-left-color:#000}
-.brcb{border-right-color:#000}
-.btw1{border-top-width:1px}
-.bbw1{border-bottom-width:1px}
-.blw1{border-left-width:1px}
-.brw1{border-right-width:1px}
-.btw2{border-top-width:2px}
-.bbw2{border-bottom-width:2px}
-.blw2{border-left-width:2px}
-.brw2{border-right-width:2px}
-.btss{border-top-style:solid}
-.bbss{border-bottom-style:solid}
-.blss{border-left-style:solid}
-.brss{border-right-style:solid}
-</style>
-</head>
-<body>
 
-<div class="toolbar">
-  <div class="fr-btn ui-state-enabled" widgetname="Submit">
-    <div id="fr-btn-Submit" class="fr-btn-up fr-btn-text-icon">
-      <div class="fr-btn-small fr-btn-icon-small-left">
-        <em unselectable="on"><button unselectable="none" type="button" data-role="none" class="fr-btn-text x-emb-submit">提交</button></em>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>发车作业全流程</title>
+  <style>
+    body {
+      margin: 12px;
+      font-family: "Microsoft YaHei", "SimSun", Arial, sans-serif;
+      font-size: 12px;
+      color: #000;
+      background: #fff;
+    }
+
+    /* 嵌入浮窗内时隐藏滚动条（保留滚轮滚动） */
+    html {
+      scrollbar-width: none;
+      -ms-overflow-style: none
+    }
+
+    html::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+      display: none
+    }
+
+    .toolbar {
+      margin: 0 0 10px;
+    }
+
+    .toolbar button {
+      height: 26px;
+      padding: 0 14px;
+      font-size: 13px;
+      line-height: 24px;
+      cursor: pointer;
+      background: #f5f5f5;
+      border: 1px solid #b5b5b5;
+      border-radius: 2px;
+      color: #333;
+    }
+
+    .toolbar button:hover {
+      background: #e6f0ff;
+      border-color: #7aa7e0;
+    }
+
+    /* ---- 精简自原报表：仅保留本表格实际用到的样式规则 ---- */
+    .x-table {
+      overflow: hidden;
+      table-layout: fixed;
+      border-collapse: collapse;
+      *word-break: break-all;
+      *overflow: visible
+    }
+
+    .bw {
+      word-wrap: break-word
+    }
+
+    .fh {
+      overflow: hidden;
+      padding: 0;
+      vertical-align: middle;
+      text-align: left;
+      font-size: 9pt;
+      font-family: SimSun
+    }
+
+    .fh-nopadding {
+      overflow: hidden;
+      padding: 0;
+      vertical-align: middle;
+      text-align: left;
+      font-size: 12px;
+      font-family: SimSun
+    }
+
+    .f11-0 {
+      font-size: 11pt
+    }
+
+    .f24-0 {
+      font-size: 24pt
+    }
+
+    .fwb {
+      font-weight: bold
+    }
+
+    .tac {
+      text-align: center
+    }
+
+    .tar {
+      text-align: right
+    }
+
+    .pl2 {
+      padding-left: 2px;
+      *padding-left: 0
+    }
+
+    .b0 {
+      border: 0
+    }
+
+    .b1 {
+      border: 1px solid #000
+    }
+
+    .bt0 {
+      border-top: 0
+    }
+
+    .bl0 {
+      border-left: 0
+    }
+
+    .br0 {
+      border-right: 0
+    }
+
+    .bt1 {
+      border-top: 1px solid #000
+    }
+
+    .bb1 {
+      border-bottom: 1px solid #000
+    }
+
+    .bl1 {
+      border-left: 1px solid #000
+    }
+
+    .br1 {
+      border-right: 1px solid #000
+    }
+
+    .btcb {
+      border-top-color: #000
+    }
+
+    .bbcb {
+      border-bottom-color: #000
+    }
+
+    .blcb {
+      border-left-color: #000
+    }
+
+    .brcb {
+      border-right-color: #000
+    }
+
+    .btw1 {
+      border-top-width: 1px
+    }
+
+    .bbw1 {
+      border-bottom-width: 1px
+    }
+
+    .blw1 {
+      border-left-width: 1px
+    }
+
+    .brw1 {
+      border-right-width: 1px
+    }
+
+    .btw2 {
+      border-top-width: 2px
+    }
+
+    .bbw2 {
+      border-bottom-width: 2px
+    }
+
+    .blw2 {
+      border-left-width: 2px
+    }
+
+    .brw2 {
+      border-right-width: 2px
+    }
+
+    .btss {
+      border-top-style: solid
+    }
+
+    .bbss {
+      border-bottom-style: solid
+    }
+
+    .blss {
+      border-left-style: solid
+    }
+
+    .brss {
+      border-right-style: solid
+    }
+  </style>
+</head>
+
+<body class="fr-quick-border-layout ui-state-enabled"
+  style="width: 100%; height: 100%; overflow: hidden; position: absolute;">
+
+  <div class="reportPane ui-state-enabled fr-quick-border-layout"
+    style="left: 0px; top: 28px; width: 708px; height: 819px; position: absolute; overflow: hidden;">
+    <div id="content-container" class="content-container"
+      style="overflow: hidden; border-top: 0px; left: 0px; top: 0px; width: 708px; height: 819px; position: absolute;">
+      <div class="sheet-container">
+        <table class="frozen-table" cellpadding="0" cellspacing="0">
+          <tbody>
+            <tr>
+              <td>
+                <div id="frozen-corner" class="frozen-corner offset-c" style="overflow:hidden;position:relative;">
+                  <table class="x-table" style="table-layout:fixed;width:285px;position:relative;" cellspacing="0"
+                    id="55" cellpadding="0">
+                    <colgroup>
+                      <col style="width:52px;" col="1">
+                      <col style="width:63px;" col="2">
+                      <col style="width:49px;" col="3">
+                      <col style="width:49px;" col="4">
+                      <col style="width:72px;" col="5">
+                    </colgroup>
+                    <tbody class="rows-height-counter">
+                      <tr style="height:50px;" tridx="0" id="r-0-0">
+                        <td class="fh bw pl2 b0" style="display:none;" col="0" id="A1-0-55" row="0" idx="0"></td>
+                        <td class="fh tac bw fwb f24-0 pl2 b0" col="1" colspan="5" id="B1-0-55" row="0" idx="0"></td>
+                      </tr>
+                      <tr style="height:30px;" tridx="1" id="r-1-0">
+                        <td class="fh bw pl2 b0" style="display:none;" col="0" id="A2-0-55" row="1"></td>
+                        <td class="fh tac bw fwb f11-0 pl2 b0" col="1" cv="&quot;时间：&quot;" id="B2-0-55" row="1" fmt="T"
+                          idx="0">
+                          <div style="max-height:29px;" heavytd="light">时间：</div>
+                        </td>
+                        <td class="fh bw fwb pl2 b0 dirty" col="2" cv="&quot;2026-09-09 02:08:56&quot;" colspan="4"
+                          id="C2-0-55" row="1" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0" style="color: rgb(0, 0, 0);">
+                          2026-09-09 02:08:56</td>
+                      </tr>
+                      <tr style="height:38px;" tridx="2" id="r-2-0">
+                        <td class="fh bw pl2 b0" style="display:none;" col="0" id="A3-0-55" row="2" idx="0"></td>
+                        <td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb blw2 blss blcb btw2 btss btcb"
+                          col="1" cv="&quot;股道&quot;" id="B3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">股道</div>
+                        </td>
+                        <td
+                          class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="2" cv="&quot;编组车次&quot;" id="C3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">编组车次</div>
+                        </td>
+                        <td
+                          class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="3" cv="&quot;辆数&quot;" id="D3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">辆数</div>
+                        </td>
+                        <td
+                          class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="4" cv="&quot;换长&quot;" id="E3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">换长</div>
+                        </td>
+                        <td
+                          class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="5" cv="&quot;尾车车号&quot;" id="F3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">尾车车号</div>
+                        </td>
+                      </tr>
+                      <tr style="height:30px;" tridx="3" id="r-3-0">
+                        <td class="fh bw pl2 b0 cur-tr-bg" style="display:none;" col="0" id="A4-0-55" row="3" idx="0">
+                        </td>
+                        <td
+                          class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb blw2 blss blcb bt1 btw1 btss btcb fst-edt cur-tr-bg"
+                          style="background-color:rgb(204,255,204);padding-left:0;padding-right:0;" col="1" editor="B4"
+                          widgetwidth="52" widgetheight="29" id="B4-0-55" row="3" idx="0"></td>
+                        <td class="fh tac bw pl2 b1 cur-tr-bg"
+                          style="background-color:rgb(204,255,204);padding-left:0;padding-right:0;" col="2" editor="C4"
+                          widgetwidth="63" widgetheight="29" id="C4-0-55" row="3" idx="0"></td>
+                        <td class="fh tac bw pl2 b1 cur-tr-bg"
+                          style="background-color:rgb(204,255,204);padding-left:0;padding-right:0;" col="3" editor="D4"
+                          widgetwidth="49" widgetheight="29" id="D4-0-55" row="3" idx="0"></td>
+                        <td class="fh tac bw pl2 b1 cur-tr-bg"
+                          style="background-color:rgb(204,255,204);padding-left:0;padding-right:0;" col="4" editor="E4"
+                          widgetwidth="49" widgetheight="29" id="E4-0-55" row="3" idx="0"></td>
+                        <td class="fh tac bw pl2 b1 cur-tr-bg"
+                          style="background-color:rgb(204,255,204);padding-left:0;padding-right:0;" col="5" editor="F4"
+                          widgetwidth="72" widgetheight="29" id="F4-0-55" row="3" idx="0"></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div class="fDtop" id="fDtop" style="top: 118px; left: 0px; width: 53px;"><img
+                      style="border:0;width:1px;height:1px;"
+                      src="/WebReport/ReportServer?op=resource&amp;resource=/com/fr/web/images/s.gif"></div>
+                  <div class="fDleft" id="fDleft" style="top: 119px; left: 0px; height: 29px;"><img
+                      style="border:0;width:1px;height:1px;"
+                      src="/WebReport/ReportServer?op=resource&amp;resource=/com/fr/web/images/s.gif"></div>
+                  <div class="fDbottom" id="fDbottom" style="top: 148px; left: 0px; width: 53px;"><img
+                      style="border:0;width:1px;height:1px;"
+                      src="/WebReport/ReportServer?op=resource&amp;resource=/com/fr/web/images/s.gif"></div>
+                  <div class="fDright" id="fDright" style="top: 119px; left: 52px; height: 29px;"><img
+                      style="border:0;width:1px;height:1px;"
+                      src="/WebReport/ReportServer?op=resource&amp;resource=/com/fr/web/images/s.gif"></div>
+                  <div style="top: 146px; left: 50px;"></div>
+                </div>
+              </td>
+              <td>
+                <div id="frozen-north" class="frozen-north offset-c"
+                  style="overflow: hidden scroll; position: relative; width: 422px;">
+                  <table class="x-table" style="table-layout:fixed;width:1453px;position:relative;" cellspacing="0"
+                    id="55" cellpadding="0">
+                    <colgroup>
+                      <col style="width:72px;" col="6">
+                      <col style="width:72px;" col="7">
+                      <col style="width:72px;" col="8">
+                      <col style="width:72px;" col="9">
+                      <col style="width:72px;" col="10">
+                      <col style="width:72px;" col="11">
+                      <col style="width:72px;" col="12">
+                      <col style="width:72px;" col="13">
+                      <col style="width:72px;" col="14">
+                      <col style="width:72px;" col="15">
+                      <col style="width:72px;" col="16">
+                      <col style="width:72px;" col="17">
+                      <col style="width:72px;" col="18">
+                      <col style="width:72px;" col="19">
+                      <col style="width:72px;" col="20">
+                      <col style="width:72px;" col="21">
+                      <col style="width:85px;" col="22">
+                      <col style="width:72px;" col="23">
+                      <col style="width:72px;" col="24">
+                      <col style="width:72px;" col="25">
+                    </colgroup>
+                    <tbody class="rows-height-counter">
+                      <tr style="height:50px;" tridx="0" id="r-0-0">
+                        <td class="fh tac bw fwb f24-0 pl2 b0" col="1" cv="&quot;钦州港站发车作业流程追踪&quot;" colspan="18"
+                          id="B1-0-55" row="0" fmt="T" idx="0">
+                          <div style="max-height:49px;" heavytd="light">钦州港站发车作业流程追踪</div>
+                        </td>
+                        <td class="fh bw pl2 b0" col="24" id="Y1-0-55" row="0"></td>
+                        <td class="fh bw pl2 b0" col="25" id="Z1-0-55" row="0"></td>
+                        <td class="fh bw pl2 b0" style="display:none;" col="26" id="AA1-0-55" row="0"></td>
+                        <td class="fh bw pl2 b0" style="display:none;" col="27" id="AB1-0-55" row="0"></td>
+                      </tr>
+                      <tr style="height:30px;" tridx="1" id="r-1-0">
+                        <td class="fh bw pl2 b0" col="6" id="G2-0-55" row="1"></td>
+                        <td class="fh bw pl2 b0" col="7" id="H2-0-55" row="1"></td>
+                        <td class="fh bw pl2 b0" col="8" id="I2-0-55" row="1"></td>
+                        <td class="fh bw pl2 b0" col="9" id="J2-0-55" row="1"></td>
+                        <td class="fh bw pl2 b0" col="10" id="K2-0-55" row="1"></td>
+                        <td class="fh bw pl2 b0" col="11" id="L2-0-55" row="1"></td>
+                        <td class="fh bw pl2 b0" col="12" id="M2-0-55" row="1"></td>
+                        <td class="fh bw pl2 b0" col="13" id="N2-0-55" row="1"></td>
+                        <td class="fh bw pl2 b0" col="14" id="O2-0-55" row="1"></td>
+                        <td class="fh bw pl2 b0" col="15" id="P2-0-55" row="1"></td>
+                        <td class="fh bw pl2 b0" col="16" id="Q2-0-55" row="1"></td>
+                        <td class="fh bw pl2 b0" col="17" id="R2-0-55" row="1"></td>
+                        <td class="fh bw pl2 b0" col="18" id="S2-0-55" row="1"></td>
+                        <td class="fh bw pl2 b0" col="19" id="T2-0-55" row="1"></td>
+                        <td class="fh bw pl2 b0" col="20" id="U2-0-55" row="1"></td>
+                        <td class="fh bw pl2 b0" col="21" id="V2-0-55" row="1"></td>
+                        <td class="fh bw pl2 b0" col="22" id="W2-0-55" row="1"></td>
+                        <td class="fh bw pl2 b0" col="23" id="X2-0-55" row="1"></td>
+                        <td class="fh bw pl2 b0" col="24" id="Y2-0-55" row="1"></td>
+                        <td class="fh bw pl2 b0" col="25" id="Z2-0-55" row="1"></td>
+                        <td class="fh bw pl2 b0" style="display:none;" col="26" id="AA2-0-55" row="1" idx="0"></td>
+                        <td class="fh bw pl2 b0" style="display:none;" col="27" id="AB2-0-55" row="1" idx="0"></td>
+                      </tr>
+                      <tr style="height:38px;" tridx="2" id="r-2-0">
+                        <td
+                          class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="6" cv="&quot;编成列车&quot;" id="G3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">编成列车</div>
+                        </td>
+                        <td
+                          class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="7" cv="&quot;通知商检&quot;" id="H3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">通知商检</div>
+                        </td>
+                        <td
+                          class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="8" cv="&quot;通知列检&quot;" id="I3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">通知列检</div>
+                        </td>
+                        <td
+                          class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="9" cv="&quot;生成\n出发编组&quot;" id="J3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">生成<br>出发编组</div>
+                        </td>
+                        <td
+                          class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="10" cv="&quot;商检完毕&quot;" id="K3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">商检完毕</div>
+                        </td>
+                        <td
+                          class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="11" cv="&quot;机车号码&quot;" id="L3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">机车号码</div>
+                        </td>
+                        <td
+                          class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="12" cv="&quot;机车出库时间&quot;" id="M3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">机车出库时间</div>
+                        </td>
+                        <td
+                          class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="13" cv="&quot;通知列尾&quot;" id="N3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">通知列尾</div>
+                        </td>
+                        <td
+                          class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="14" cv="&quot;列尾主机号&quot;" id="O3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">列尾主机号</div>
+                        </td>
+                        <td
+                          class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="15" cv="&quot;列尾作业完毕&quot;" id="P3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">列尾作业完毕</div>
+                        </td>
+                        <td
+                          class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="16" cv="&quot;列检\n开始作业&quot;" id="Q3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">列检<br>开始作业</div>
+                        </td>
+                        <td
+                          class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="17" cv="&quot;列检作业完毕&quot;" id="R3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">列检作业完毕</div>
+                        </td>
+                        <td
+                          class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="18" cv="&quot;机车挂头&quot;" id="S3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">机车挂头</div>
+                        </td>
+                        <td
+                          class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="19" cv="&quot;确认运统1\n已签收&quot;" id="T3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">确认运统1<br>已签收</div>
+                        </td>
+                        <td
+                          class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="20" cv="&quot;货运\n票据编制&quot;" id="U3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">货运<br>票据编制</div>
+                        </td>
+                        <td
+                          class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="21" cv="&quot;防溜措施\n撤除&quot;" id="V3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">防溜措施<br>撤除</div>
+                        </td>
+                        <td
+                          class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="22" cv="&quot;调度命令已交付&quot;" id="W3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">调度命令已交付</div>
+                        </td>
+                        <td class="fh tac bw pl2 brw2 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="23" cv="&quot;是否具备发车条件&quot;" id="X3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">是否具备发车条件</div>
+                        </td>
+                        <td class="fh tac bw pl2 brw2 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb"
+                          col="24" cv="&quot;备注&quot;" id="Y3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">备注</div>
+                        </td>
+                        <td class="fh tac bw pl2 brw2 brss brcb bb1 bbw1 bbss bbcb blw2 blss blcb btw2 btss btcb"
+                          col="25" cv="&quot;全流程耗时\n（m）&quot;" id="Z3-0-55" row="2" fmt="T" idx="0">
+                          <div style="max-height:35px;" heavytd="light">全流程耗时<br>（m）</div>
+                        </td>
+                        <td class="fh bw pl2 b0" style="display:none;" col="26" id="AA3-0-55" row="2"></td>
+                        <td class="fh bw pl2 b0" style="display:none;" col="27" id="AB3-0-55" row="2"></td>
+                      </tr>
+                      <tr style="height:30px;" tridx="3" id="r-3-0">
+                        <td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="6" id="G4-0-55"
+                          row="3" idx="0"></td>
+                        <td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="7" id="H4-0-55"
+                          row="3" idx="0"></td>
+                        <td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="8" id="I4-0-55"
+                          row="3" idx="0"></td>
+                        <td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="9" id="J4-0-55"
+                          row="3" idx="0"></td>
+                        <td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="10" id="K4-0-55"
+                          row="3" idx="0"></td>
+                        <td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="11" id="L4-0-55"
+                          row="3" idx="0"></td>
+                        <td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="12" id="M4-0-55"
+                          row="3" idx="0"></td>
+                        <td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="13" id="N4-0-55"
+                          row="3" idx="0"></td>
+                        <td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="14" id="O4-0-55"
+                          row="3" idx="0"></td>
+                        <td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="15" id="P4-0-55"
+                          row="3" idx="0"></td>
+                        <td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="16" id="Q4-0-55"
+                          row="3" idx="0"></td>
+                        <td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="17" id="R4-0-55"
+                          row="3" idx="0"></td>
+                        <td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="18" id="S4-0-55"
+                          row="3" idx="0"></td>
+                        <td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="19" id="T4-0-55"
+                          row="3" idx="0"></td>
+                        <td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="20" id="U4-0-55"
+                          row="3" idx="0"></td>
+                        <td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="21" id="V4-0-55"
+                          row="3" idx="0"></td>
+                        <td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="22" id="W4-0-55"
+                          row="3" idx="0"></td>
+                        <td
+                          class="fh tac bw pl2 brw2 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb bt1 btw1 btss btcb"
+                          style="background-color:rgb(192,192,192);" col="23" id="X4-0-55" row="3" idx="0"></td>
+                        <td
+                          class="fh tac bw pl2 brw2 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb bt1 btw1 btss btcb"
+                          style="background-color:rgb(192,192,192);" col="24" id="Y4-0-55" row="3" idx="0"></td>
+                        <td class="fh bw pl2 brw2 brss brcb bb1 bbw1 bbss bbcb blw2 blss blcb bt1 btw1 btss btcb"
+                          style="background-color:rgb(192,192,192);" col="25" id="Z4-0-55" row="3" idx="0"></td>
+                        <td class="fh bw pl2 b0" style="display:none;" col="26" id="AA4-0-55" row="3"></td>
+                        <td class="fh bw pl2 b0" style="display:none;" col="27" id="AB4-0-55" row="3"></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td valign="top">
+                <div id="frozen-west" class="frozen-west offset-c"
+                  style="overflow: scroll hidden; position: relative; height: 671px;">
+                  <table class="x-table" style="table-layout:fixed;width:285px;position:relative;" cellspacing="0"
+                    id="55" cellpadding="0">
+                    <colgroup>
+                      <col style="width:52px;" col="1">
+                      <col style="width:63px;" col="2">
+                      <col style="width:49px;" col="3">
+                      <col style="width:49px;" col="4">
+                      <col style="width:72px;" col="5">
+                    </colgroup>
+                    <tbody class="rows-height-counter">
+                      <tr style="height:30px;" tridx="4" id="r-4-0">
+                        <td class="fh tar bw pl2 b0" style="display:none;" col="0" cv="807" id="A5-0-55" row="4"
+                          idx="0">
+                          <div style="max-height:29px;" heavytd="light">807</div>
+                        </td>
+                        <td
+                          class="celink fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb blw2 blss blcb bt1 btw1 btss btcb"
+                          col="1" cv="&quot;5道&quot;" id="B5-0-55" row="4" fmt="T" idx="0"><span class="linkspan"
+                            style="cursor:pointer;" onclick="_g().stopEditing(),eval($(this).attr('link'))"
+                            link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;股道\&quot;,\&quot;ID\&quot;:\&quot;807\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)">
+                            <div style="max-height:28px;" heavytd="light">5道</div>
+                          </span></td>
+                        <td class="celink fh tac bw pl2 b1" col="2" cv="&quot;35012&quot;" id="C5-0-55" row="4" fmt="T"
+                          idx="0"><span class="linkspan" style="cursor:pointer;"
+                            onclick="_g().stopEditing(),eval($(this).attr('link'))"
+                            link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;编组车次\&quot;,\&quot;ID\&quot;:\&quot;807\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)">
+                            <div style="max-height:28px;" heavytd="light">35012</div>
+                          </span></td>
+                        <td class="celink fh tac bw pl2 b1" col="3" cv="&quot;52&quot;" id="D5-0-55" row="4" fmt="T"
+                          idx="0"><span class="linkspan" style="cursor:pointer;"
+                            onclick="_g().stopEditing(),eval($(this).attr('link'))"
+                            link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;辆数\&quot;,\&quot;ID\&quot;:\&quot;807\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)">
+                            <div style="max-height:28px;" heavytd="light">52</div>
+                          </span></td>
+                        <td class="celink fh tac bw pl2 b1" col="4" cv="&quot;59.2&quot;" id="E5-0-55" row="4" fmt="T"
+                          idx="0"><span class="linkspan" style="cursor:pointer;"
+                            onclick="_g().stopEditing(),eval($(this).attr('link'))"
+                            link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;换长\&quot;,\&quot;ID\&quot;:\&quot;807\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)">
+                            <div style="max-height:28px;" heavytd="light">59.2</div>
+                          </span></td>
+                        <td class="celink fh tac bw pl2 b1" col="5" cv="&quot;5491730&quot;" id="F5-0-55" row="4"
+                          fmt="T" idx="0"><span class="linkspan" style="cursor:pointer;"
+                            onclick="_g().stopEditing(),eval($(this).attr('link'))"
+                            link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;尾车车号\&quot;,\&quot;ID\&quot;:\&quot;807\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)">
+                            <div style="max-height:28px;" heavytd="light">5491730</div>
+                          </span></td>
+                      </tr>
+                      <tr style="height:30px;" tridx="5" id="r-5-0">
+                        <td class="fh tar bw pl2 b0" style="display:none;" col="0" cv="806" id="A6-0-55" row="5"
+                          idx="0">
+                          <div style="max-height:29px;" heavytd="light">806</div>
+                        </td>
+                        <td
+                          class="celink fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb blw2 blss blcb bt1 btw1 btss btcb"
+                          col="1" cv="&quot;7道&quot;" id="B6-0-55" row="5" fmt="T" idx="0"><span class="linkspan"
+                            style="cursor:pointer;" onclick="_g().stopEditing(),eval($(this).attr('link'))"
+                            link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;股道\&quot;,\&quot;ID\&quot;:\&quot;806\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)">
+                            <div style="max-height:28px;" heavytd="light">7道</div>
+                          </span></td>
+                        <td class="celink fh tac bw pl2 b1" col="2" cv="&quot;34108&quot;" id="C6-0-55" row="5" fmt="T"
+                          idx="0"><span class="linkspan" style="cursor:pointer;"
+                            onclick="_g().stopEditing(),eval($(this).attr('link'))"
+                            link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;编组车次\&quot;,\&quot;ID\&quot;:\&quot;806\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)">
+                            <div style="max-height:28px;" heavytd="light">34108</div>
+                          </span></td>
+                        <td class="celink fh tac bw pl2 b1" col="3" cv="&quot;54&quot;" id="D6-0-55" row="5" fmt="T"
+                          idx="0"><span class="linkspan" style="cursor:pointer;"
+                            onclick="_g().stopEditing(),eval($(this).attr('link'))"
+                            link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;辆数\&quot;,\&quot;ID\&quot;:\&quot;806\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)">
+                            <div style="max-height:28px;" heavytd="light">54</div>
+                          </span></td>
+                        <td class="celink fh tac bw pl2 b1" col="4" cv="&quot;69.9&quot;" id="E6-0-55" row="5" fmt="T"
+                          idx="0"><span class="linkspan" style="cursor:pointer;"
+                            onclick="_g().stopEditing(),eval($(this).attr('link'))"
+                            link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;换长\&quot;,\&quot;ID\&quot;:\&quot;806\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)">
+                            <div style="max-height:28px;" heavytd="light">69.9</div>
+                          </span></td>
+                        <td class="celink fh tac bw pl2 b1" col="5" cv="&quot;5776667&quot;" id="F6-0-55" row="5"
+                          fmt="T" idx="0"><span class="linkspan" style="cursor:pointer;"
+                            onclick="_g().stopEditing(),eval($(this).attr('link'))"
+                            link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;尾车车号\&quot;,\&quot;ID\&quot;:\&quot;806\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)">
+                            <div style="max-height:28px;" heavytd="light">5776667</div>
+                          </span></td>
+                      </tr>
+                      <tr style="height:30px;" tridx="6" id="r-6-0">
+                        <td class="fh tar bw pl2 b0" style="display:none;" col="0" cv="805" id="A7-0-55" row="6"
+                          idx="0">
+                          <div style="max-height:29px;" heavytd="light">805</div>
+                        </td>
+                        <td
+                          class="celink fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb blw2 blss blcb bt1 btw1 btss btcb"
+                          col="1" cv="&quot;6道&quot;" id="B7-0-55" row="6" fmt="T" idx="0"><span class="linkspan"
+                            style="cursor:pointer;" onclick="_g().stopEditing(),eval($(this).attr('link'))"
+                            link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;股道\&quot;,\&quot;ID\&quot;:\&quot;805\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)">
+                            <div style="max-height:28px;" heavytd="light">6道</div>
+                          </span></td>
+                        <td class="celink fh tac bw pl2 b1" col="2" cv="&quot;86776&quot;" id="C7-0-55" row="6" fmt="T"
+                          idx="0"><span class="linkspan" style="cursor:pointer;"
+                            onclick="_g().stopEditing(),eval($(this).attr('link'))"
+                            link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;编组车次\&quot;,\&quot;ID\&quot;:\&quot;805\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)">
+                            <div style="max-height:28px;" heavytd="light">86776</div>
+                          </span></td>
+                        <td class="celink fh tac bw pl2 b1" col="3" cv="&quot;44&quot;" id="D7-0-55" row="6" fmt="T"
+                          idx="0"><span class="linkspan" style="cursor:pointer;"
+                            onclick="_g().stopEditing(),eval($(this).attr('link'))"
+                            link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;辆数\&quot;,\&quot;ID\&quot;:\&quot;805\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)">
+                            <div style="max-height:28px;" heavytd="light">44</div>
+                          </span></td>
+                        <td class="celink fh tac bw pl2 b1" col="4" cv="&quot;56.7&quot;" id="E7-0-55" row="6" fmt="T"
+                          idx="0"><span class="linkspan" style="cursor:pointer;"
+                            onclick="_g().stopEditing(),eval($(this).attr('link'))"
+                            link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;换长\&quot;,\&quot;ID\&quot;:\&quot;805\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)">
+                            <div style="max-height:28px;" heavytd="light">56.7</div>
+                          </span></td>
+                        <td class="celink fh tac bw pl2 b1" col="5" cv="&quot;1867509&quot;" id="F7-0-55" row="6"
+                          fmt="T" idx="0"><span class="linkspan" style="cursor:pointer;"
+                            onclick="_g().stopEditing(),eval($(this).attr('link'))"
+                            link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;尾车车号\&quot;,\&quot;ID\&quot;:\&quot;805\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)">
+                            <div style="max-height:28px;" heavytd="light">1867509</div>
+                          </span></td>
+                      </tr>
+                      <tr style="height:31px;" tridx="7" id="r-7-0">
+                        <td class="fh bw pl2 b0" style="display:none;" col="0" id="A8-0-55" row="7"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb blw2 blss blcb bt1 btw1 btss btcb" col="1" id="B8-0-55"
+                          row="7" idx="0"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="2" id="C8-0-55" row="7"
+                          idx="0"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="3" id="D8-0-55" row="7"
+                          idx="0"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="4" id="E8-0-55" row="7"
+                          idx="0"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="5" id="F8-0-55" row="7"
+                          idx="0"></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </td>
+              <td valign="top">
+                <div id="frozen-center" class="frozen-center offset-c"
+                  style="overflow: scroll; position: relative; width: 422px; height: 671px;">
+                  <table class="x-table" style="table-layout:fixed;width:1453px;position:relative;" cellspacing="0"
+                    id="55" cellpadding="0">
+                    <colgroup>
+                      <col style="width:72px;" col="6">
+                      <col style="width:72px;" col="7">
+                      <col style="width:72px;" col="8">
+                      <col style="width:72px;" col="9">
+                      <col style="width:72px;" col="10">
+                      <col style="width:72px;" col="11">
+                      <col style="width:72px;" col="12">
+                      <col style="width:72px;" col="13">
+                      <col style="width:72px;" col="14">
+                      <col style="width:72px;" col="15">
+                      <col style="width:72px;" col="16">
+                      <col style="width:72px;" col="17">
+                      <col style="width:72px;" col="18">
+                      <col style="width:72px;" col="19">
+                      <col style="width:72px;" col="20">
+                      <col style="width:72px;" col="21">
+                      <col style="width:85px;" col="22">
+                      <col style="width:72px;" col="23">
+                      <col style="width:72px;" col="24">
+                      <col style="width:72px;" col="25">
+                    </colgroup>
+                    <tbody class="rows-height-counter">
+                      <tr style="height:30px;" tridx="4" id="r-4-0">
+                        <td class="fh tac bw pl2 b1" col="6" cv="&quot;&quot;" id="G5-0-55" row="4" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="7" cv="&quot;&quot;" id="H5-0-55" row="4" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="8" cv="&quot;&quot;" id="I5-0-55" row="4" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="9" cv="&quot;&quot;" id="J5-0-55" row="4" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="10" cv="&quot;&quot;" id="K5-0-55" row="4" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="11" cv="&quot;&quot;" id="L5-0-55" row="4" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="12" cv="&quot;&quot;" id="M5-0-55" row="4" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="13" cv="&quot;&quot;" id="N5-0-55" row="4" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="14" cv="&quot;&quot;" id="O5-0-55" row="4" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="15" cv="&quot;&quot;" id="P5-0-55" row="4" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="16" cv="&quot;&quot;" id="Q5-0-55" row="4" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="17" cv="&quot;&quot;" id="R5-0-55" row="4" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="18" cv="&quot;&quot;" id="S5-0-55" row="4" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="19" cv="&quot;&quot;" id="T5-0-55" row="4" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="20" cv="&quot;&quot;" id="U5-0-55" row="4" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="21" cv="&quot;&quot;" id="V5-0-55" row="4" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="22" cv="&quot;&quot;" frs="0" id="W5-0-55" row="4" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw fwb pl2 brw2 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb bt0"
+                          style="background-color:rgb(255,0,0);" col="23" cv="&quot;否&quot;" id="X5-0-55" row="4"
+                          fmt="T" idx="0">
+                          <div style="max-height:28px;" heavytd="light">否</div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" style="padding-left:0;padding-right:0;" col="24" editor="Y5"
+                          cv="&quot;&quot;" widgetwidth="72" widgetheight="29" id="Y5-0-55" row="4" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 brw2 brss brcb bb1 bbw1 bbss bbcb blw2 blss blcb bt1 btw1 btss btcb"
+                          col="25" cv="&quot;&quot;"
+                          fm="if(len(W5) > 0, DATESUBDATE(W5, AA5, &quot;m&quot;), &quot;&quot;)" id="Z5-0-55" row="4"
+                          idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh bw pl2 b0" style="display:none;" col="26"
+                          cv="{&quot;date_milliseconds&quot;:1788882463000}" frs="0" id="AA5-0-55" row="4"
+                          fmt="DTyyyy-MM-dd HH:mm:ss" idx="0">
+                          <div style="max-height:29px;" heavytd="light">2026-09-08 23:47:43</div>
+                        </td>
+                        <td class="fh tar bw pl2 b0" style="display:none;" col="27" cv="807" id="AB5-0-55" row="4"
+                          idx="0">
+                          <div style="max-height:29px;" heavytd="light">807</div>
+                        </td>
+                      </tr>
+                      <tr style="height:30px;" tridx="5" id="r-5-0">
+                        <td class="fh tac bw pl2 b1" col="6" cv="&quot;&quot;" id="G6-0-55" row="5" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="7" cv="&quot;&quot;" id="H6-0-55" row="5" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="8" cv="&quot;&quot;" id="I6-0-55" row="5" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="9" cv="&quot;&quot;" id="J6-0-55" row="5" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="10" cv="&quot;&quot;" id="K6-0-55" row="5" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="11" cv="&quot;&quot;" id="L6-0-55" row="5" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="12" cv="&quot;&quot;" id="M6-0-55" row="5" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="13" cv="&quot;&quot;" id="N6-0-55" row="5" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="14" cv="&quot;&quot;" id="O6-0-55" row="5" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="15" cv="&quot;&quot;" id="P6-0-55" row="5" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="16" cv="&quot;&quot;" id="Q6-0-55" row="5" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="17" cv="&quot;&quot;" id="R6-0-55" row="5" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="18" cv="&quot;&quot;" id="S6-0-55" row="5" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="19" cv="&quot;&quot;" id="T6-0-55" row="5" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="20" cv="&quot;&quot;" id="U6-0-55" row="5" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="21" cv="&quot;&quot;" id="V6-0-55" row="5" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="22" cv="&quot;&quot;" frs="0" id="W6-0-55" row="5" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw fwb pl2 brw2 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb bt0"
+                          style="background-color:rgb(255,0,0);" col="23" cv="&quot;否&quot;" id="X6-0-55" row="5"
+                          fmt="T" idx="0">
+                          <div style="max-height:28px;" heavytd="light">否</div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" style="padding-left:0;padding-right:0;" col="24" editor="Y6"
+                          cv="&quot;&quot;" widgetwidth="72" widgetheight="29" id="Y6-0-55" row="5" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 brw2 brss brcb bb1 bbw1 bbss bbcb blw2 blss blcb bt1 btw1 btss btcb"
+                          col="25" cv="&quot;&quot;"
+                          fm="if(len(W6) > 0, DATESUBDATE(W6, AA6, &quot;m&quot;), &quot;&quot;)" id="Z6-0-55" row="5"
+                          idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh bw pl2 b0" style="display:none;" col="26"
+                          cv="{&quot;date_milliseconds&quot;:1788882400000}" frs="0" id="AA6-0-55" row="5"
+                          fmt="DTyyyy-MM-dd HH:mm:ss" idx="0">
+                          <div style="max-height:29px;" heavytd="light">2026-09-08 23:46:40</div>
+                        </td>
+                        <td class="fh tar bw pl2 b0" style="display:none;" col="27" cv="806" id="AB6-0-55" row="5"
+                          idx="0">
+                          <div style="max-height:29px;" heavytd="light">806</div>
+                        </td>
+                      </tr>
+                      <tr style="height:30px;" tridx="6" id="r-6-0">
+                        <td class="fh tac bw pl2 b1" col="6" cv="{&quot;date_milliseconds&quot;:1788882362000}"
+                          id="G7-0-55" row="6" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0">
+                          <div style="max-height:28px;" heavytd="light">2026-09-08 23:46:02</div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="7" cv="{&quot;date_milliseconds&quot;:1788882364000}"
+                          id="H7-0-55" row="6" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0">
+                          <div style="max-height:28px;" heavytd="light">2026-09-08 23:46:04</div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="8" cv="{&quot;date_milliseconds&quot;:1788882367000}"
+                          id="I7-0-55" row="6" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0">
+                          <div style="max-height:28px;" heavytd="light">2026-09-08 23:46:07</div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="9" cv="{&quot;date_milliseconds&quot;:1788885160000}"
+                          id="J7-0-55" row="6" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0">
+                          <div style="max-height:28px;" heavytd="light">2026-09-09 00:32:40</div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="10" cv="{&quot;date_milliseconds&quot;:1788883854000}"
+                          id="K7-0-55" row="6" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0">
+                          <div style="max-height:28px;" heavytd="light">2026-09-09 00:10:54</div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="11" cv="&quot;&quot;" id="L7-0-55" row="6" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="12" cv="&quot;&quot;" id="M7-0-55" row="6" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="13" cv="&quot;&quot;" id="N7-0-55" row="6" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="14" cv="&quot;&quot;" id="O7-0-55" row="6" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="15" cv="&quot;&quot;" id="P7-0-55" row="6" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="16" cv="&quot;&quot;" id="Q7-0-55" row="6" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="17" cv="&quot;&quot;" id="R7-0-55" row="6" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="18" cv="&quot;&quot;" id="S7-0-55" row="6" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="19" cv="&quot;&quot;" id="T7-0-55" row="6" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="20" cv="{&quot;date_milliseconds&quot;:1788883445000}"
+                          id="U7-0-55" row="6" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0">
+                          <div style="max-height:28px;" heavytd="light">2026-09-09 00:04:05</div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="21" cv="&quot;&quot;" id="V7-0-55" row="6" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" col="22" cv="&quot;&quot;" frs="0" id="W7-0-55" row="6" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw fwb pl2 brw2 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb bt0"
+                          style="background-color:rgb(255,0,0);" col="23" cv="&quot;否&quot;" id="X7-0-55" row="6"
+                          fmt="T" idx="0">
+                          <div style="max-height:28px;" heavytd="light">否</div>
+                        </td>
+                        <td class="fh tac bw pl2 b1" style="padding-left:0;padding-right:0;" col="24" editor="Y7"
+                          cv="&quot;&quot;" widgetwidth="72" widgetheight="29" id="Y7-0-55" row="6" idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh tac bw pl2 brw2 brss brcb bb1 bbw1 bbss bbcb blw2 blss blcb bt1 btw1 btss btcb"
+                          col="25" cv="&quot;&quot;"
+                          fm="if(len(W7) > 0, DATESUBDATE(W7, AA7, &quot;m&quot;), &quot;&quot;)" id="Z7-0-55" row="6"
+                          idx="0">
+                          <div style="max-height:28px;" heavytd="light"></div>
+                        </td>
+                        <td class="fh bw pl2 b0" style="display:none;" col="26"
+                          cv="{&quot;date_milliseconds&quot;:1788881113000}" frs="0" id="AA7-0-55" row="6"
+                          fmt="DTyyyy-MM-dd HH:mm:ss" idx="0">
+                          <div style="max-height:29px;" heavytd="light">2026-09-08 23:25:13</div>
+                        </td>
+                        <td class="fh tar bw pl2 b0" style="display:none;" col="27" cv="805" id="AB7-0-55" row="6"
+                          idx="0">
+                          <div style="max-height:29px;" heavytd="light">805</div>
+                        </td>
+                      </tr>
+                      <tr style="height:31px;" tridx="7" id="r-7-0">
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="6" id="G8-0-55" row="7"
+                          idx="0"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="7" id="H8-0-55" row="7"
+                          idx="0"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="8" id="I8-0-55" row="7"
+                          idx="0"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="9" id="J8-0-55" row="7"
+                          idx="0"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="10" id="K8-0-55" row="7"
+                          idx="0"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="11" id="L8-0-55" row="7"
+                          idx="0"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="12" id="M8-0-55" row="7"
+                          idx="0"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="13" id="N8-0-55" row="7"
+                          idx="0"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="14" id="O8-0-55" row="7"
+                          idx="0"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="15" id="P8-0-55" row="7"
+                          idx="0"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="16" id="Q8-0-55" row="7"
+                          idx="0"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="17" id="R8-0-55" row="7"
+                          idx="0"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="18" id="S8-0-55" row="7"
+                          idx="0"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="19" id="T8-0-55" row="7"
+                          idx="0"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="20" id="U8-0-55" row="7"
+                          idx="0"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="21" id="V8-0-55" row="7"
+                          idx="0"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="22" id="W8-0-55" row="7"
+                          idx="0"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="23" id="X8-0-55" row="7"
+                          idx="0"></td>
+                        <td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="24" id="Y8-0-55" row="7"
+                          idx="0"></td>
+                        <td class="fh bw pl2 brw2 brss brcb bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="25" id="Z8-0-55"
+                          row="7" idx="0"></td>
+                        <td class="fh bw pl2 b0" style="display:none;" col="26" id="AA8-0-55" row="7"></td>
+                        <td class="fh bw pl2 b0" style="display:none;" col="27" id="AB8-0-55" row="7"></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="x-editor" style="z-index:4;display:none;padding-left:0px;position:absolute;"></div>
+        <div></div>
+        <div id="glanceDiv" style="position:absolute;top:0px;left:0px">
+          <div></div>
+          <div class="gltop" id="gltop"><img style="border:0;width:1px;height:1px;"
+              src="/WebReport/ReportServer?op=resource&amp;resource=/com/fr/web/images/s.gif"></div>
+          <div class="glleft" id="glleft"><img style="border:0;width:1px;height:1px;"
+              src="/WebReport/ReportServer?op=resource&amp;resource=/com/fr/web/images/s.gif"></div>
+          <div class="glbottom" id="glbottom"><img style="border:0;width:1px;height:1px;"
+              src="/WebReport/ReportServer?op=resource&amp;resource=/com/fr/web/images/s.gif"></div>
+          <div class="glright" id="glright"><img style="border:0;width:1px;height:1px;"
+              src="/WebReport/ReportServer?op=resource&amp;resource=/com/fr/web/images/s.gif"></div>
+          <div class="glance-editor-img" title="编辑" style="top: -999px;"></div>
+        </div>
       </div>
     </div>
   </div>
-</div>
-
-<table class="frozen-table" cellpadding="0" cellspacing="0"><tbody><tr><td><div id="frozen-corner" class="frozen-corner offset-c" style="overflow:hidden;position:relative;"><table class="x-table" style="table-layout:fixed;width:285px;position:relative;" cellspacing="0" id="73" cellpadding="0"><colgroup><col style="width:52px;" col="1"><col style="width:63px;" col="2"><col style="width:49px;" col="3"><col style="width:49px;" col="4"><col style="width:72px;" col="5"></colgroup><tbody class="rows-height-counter"><tr style="height:50px;" tridx="0" id="r-0-0"><td class="fh bw pl2 b0" style="display:none;" col="0" id="A1-0-73" row="0" idx="0"></td><td class="fh tac bw fwb f24-0 pl2 b0" col="1" colspan="5" id="B1-0-73" row="0" idx="0"></td></tr><tr style="height:30px;" tridx="1" id="r-1-0"><td class="fh bw pl2 b0" style="display:none;" col="0" id="A2-0-73" row="1"></td><td class="fh tac bw fwb f11-0 pl2 b0" col="1" cv="&quot;时间：&quot;" id="B2-0-73" row="1" fmt="T" idx="0"><div style="max-height:29px;" heavytd="light">时间：</div></td><td class="fh bw fwb pl2 b0 dirty" col="2" cv="&quot;2026-09-03 14:45:57&quot;" colspan="4" id="C2-0-73" row="1" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0" style="color: rgb(0, 0, 0);">2026-09-03 14:45:57</td></tr><tr style="height:38px;" tridx="2" id="r-2-0"><td class="fh bw pl2 b0" style="display:none;" col="0" id="A3-0-73" row="2" idx="0"></td><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb blw2 blss blcb btw2 btss btcb" col="1" cv="&quot;股道&quot;" id="B3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">股道</div></td><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="2" cv="&quot;编组车次&quot;" id="C3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">编组车次</div></td><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="3" cv="&quot;辆数&quot;" id="D3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">辆数</div></td><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="4" cv="&quot;换长&quot;" id="E3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">换长</div></td><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="5" cv="&quot;尾车车号&quot;" id="F3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">尾车车号</div></td></tr><tr style="height:30px;" tridx="3" id="r-3-0"><td class="fh bw pl2 b0 cur-tr-bg" style="display:none;" col="0" id="A4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb blw2 blss blcb bt1 btw1 btss btcb fst-edt cur-tr-bg" style="background-color:rgb(204,255,204);padding-left:0;padding-right:0;" col="1" editor="B4" widgetwidth="52" widgetheight="29" id="B4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 b1 cur-tr-bg" style="background-color:rgb(204,255,204);padding-left:0;padding-right:0;" col="2" editor="C4" widgetwidth="63" widgetheight="29" id="C4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 b1 cur-tr-bg" style="background-color:rgb(204,255,204);padding-left:0;padding-right:0;" col="3" editor="D4" widgetwidth="49" widgetheight="29" id="D4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 b1 cur-tr-bg" style="background-color:rgb(204,255,204);padding-left:0;padding-right:0;" col="4" editor="E4" widgetwidth="49" widgetheight="29" id="E4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 b1 cur-tr-bg" style="background-color:rgb(204,255,204);padding-left:0;padding-right:0;" col="5" editor="F4" widgetwidth="72" widgetheight="29" id="F4-0-73" row="3" idx="0"></td></tr></tbody></table><div class="fDtop" id="fDtop" style="top: 118px; left: 0px; width: 53px;"><img style="border:0;width:1px;height:1px;" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></div><div class="fDleft" id="fDleft" style="top: 119px; left: 0px; height: 29px;"><img style="border:0;width:1px;height:1px;" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></div><div class="fDbottom" id="fDbottom" style="top: 148px; left: 0px; width: 53px;"><img style="border:0;width:1px;height:1px;" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></div><div class="fDright" id="fDright" style="top: 119px; left: 52px; height: 29px;"><img style="border:0;width:1px;height:1px;" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></div><div style="top: 146px; left: 50px;"></div></div></td><td><div id="frozen-north" class="frozen-north offset-c" style="overflow: hidden scroll; position: relative; width: 1634px;"><table class="x-table" style="table-layout:fixed;width:1453px;position:relative;" cellspacing="0" id="73" cellpadding="0"><colgroup><col style="width:72px;" col="6"><col style="width:72px;" col="7"><col style="width:72px;" col="8"><col style="width:72px;" col="9"><col style="width:72px;" col="10"><col style="width:72px;" col="11"><col style="width:72px;" col="12"><col style="width:72px;" col="13"><col style="width:72px;" col="14"><col style="width:72px;" col="15"><col style="width:72px;" col="16"><col style="width:72px;" col="17"><col style="width:72px;" col="18"><col style="width:72px;" col="19"><col style="width:72px;" col="20"><col style="width:72px;" col="21"><col style="width:85px;" col="22"><col style="width:72px;" col="23"><col style="width:72px;" col="24"><col style="width:72px;" col="25"></colgroup><tbody class="rows-height-counter"><tr style="height:50px;" tridx="0" id="r-0-0"><td class="fh tac bw fwb f24-0 pl2 b0" col="1" cv="&quot;钦州港站发车作业流程追踪&quot;" colspan="18" id="B1-0-73" row="0" fmt="T" idx="0"><div style="max-height:49px;" heavytd="light">钦州港站发车作业流程追踪</div></td><td class="fh bw pl2 b0" col="24" id="Y1-0-73" row="0"></td><td class="fh bw pl2 b0" col="25" id="Z1-0-73" row="0"></td><td class="fh bw pl2 b0" style="display:none;" col="26" id="AA1-0-73" row="0"></td><td class="fh bw pl2 b0" style="display:none;" col="27" id="AB1-0-73" row="0"></td></tr><tr style="height:30px;" tridx="1" id="r-1-0"><td class="fh bw pl2 b0" col="6" id="G2-0-73" row="1"></td><td class="fh bw pl2 b0" col="7" id="H2-0-73" row="1"></td><td class="fh bw pl2 b0" col="8" id="I2-0-73" row="1"></td><td class="fh bw pl2 b0" col="9" id="J2-0-73" row="1"></td><td class="fh bw pl2 b0" col="10" id="K2-0-73" row="1"></td><td class="fh bw pl2 b0" col="11" id="L2-0-73" row="1"></td><td class="fh bw pl2 b0" col="12" id="M2-0-73" row="1"></td><td class="fh bw pl2 b0" col="13" id="N2-0-73" row="1"></td><td class="fh bw pl2 b0" col="14" id="O2-0-73" row="1"></td><td class="fh bw pl2 b0" col="15" id="P2-0-73" row="1"></td><td class="fh bw pl2 b0" col="16" id="Q2-0-73" row="1"></td><td class="fh bw pl2 b0" col="17" id="R2-0-73" row="1"></td><td class="fh bw pl2 b0" col="18" id="S2-0-73" row="1"></td><td class="fh bw pl2 b0" col="19" id="T2-0-73" row="1"></td><td class="fh bw pl2 b0" col="20" id="U2-0-73" row="1"></td><td class="fh bw pl2 b0" col="21" id="V2-0-73" row="1"></td><td class="fh bw pl2 b0" col="22" id="W2-0-73" row="1"></td><td class="fh bw pl2 b0" col="23" id="X2-0-73" row="1"></td><td class="fh bw pl2 b0" col="24" id="Y2-0-73" row="1"></td><td class="fh bw pl2 b0" col="25" id="Z2-0-73" row="1"></td><td class="fh bw pl2 b0" style="display:none;" col="26" id="AA2-0-73" row="1" idx="0"></td><td class="fh bw pl2 b0" style="display:none;" col="27" id="AB2-0-73" row="1" idx="0"></td></tr><tr style="height:38px;" tridx="2" id="r-2-0"><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="6" cv="&quot;编成列车&quot;" id="G3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">编成列车</div></td><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="7" cv="&quot;通知商检&quot;" id="H3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">通知商检</div></td><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="8" cv="&quot;通知列检&quot;" id="I3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">通知列检</div></td><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="9" cv="&quot;生成\n出发编组&quot;" id="J3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">生成<br>出发编组</div></td><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="10" cv="&quot;商检完毕&quot;" id="K3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">商检完毕</div></td><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="11" cv="&quot;机车号码&quot;" id="L3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">机车号码</div></td><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="12" cv="&quot;机车出库时间&quot;" id="M3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">机车出库时间</div></td><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="13" cv="&quot;通知列尾&quot;" id="N3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">通知列尾</div></td><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="14" cv="&quot;列尾主机号&quot;" id="O3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">列尾主机号</div></td><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="15" cv="&quot;列尾作业完毕&quot;" id="P3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">列尾作业完毕</div></td><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="16" cv="&quot;列检\n开始作业&quot;" id="Q3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">列检<br>开始作业</div></td><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="17" cv="&quot;列检作业完毕&quot;" id="R3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">列检作业完毕</div></td><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="18" cv="&quot;机车挂头&quot;" id="S3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">机车挂头</div></td><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="19" cv="&quot;确认运统1\n已签收&quot;" id="T3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">确认运统1<br>已签收</div></td><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="20" cv="&quot;货运\n票据编制&quot;" id="U3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">货运<br>票据编制</div></td><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="21" cv="&quot;防溜措施\n撤除&quot;" id="V3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">防溜措施<br>撤除</div></td><td class="fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="22" cv="&quot;调度命令已交付&quot;" id="W3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">调度命令已交付</div></td><td class="fh tac bw pl2 brw2 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="23" cv="&quot;是否具备发车条件&quot;" id="X3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">是否具备发车条件</div></td><td class="fh tac bw pl2 brw2 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb btw2 btss btcb" col="24" cv="&quot;备注&quot;" id="Y3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">备注</div></td><td class="fh tac bw pl2 brw2 brss brcb bb1 bbw1 bbss bbcb blw2 blss blcb btw2 btss btcb" col="25" cv="&quot;全流程耗时\n（m）&quot;" id="Z3-0-73" row="2" fmt="T" idx="0"><div style="max-height:35px;" heavytd="light">全流程耗时<br>（m）</div></td><td class="fh bw pl2 b0" style="display:none;" col="26" id="AA3-0-73" row="2"></td><td class="fh bw pl2 b0" style="display:none;" col="27" id="AB3-0-73" row="2"></td></tr><tr style="height:30px;" tridx="3" id="r-3-0"><td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="6" id="G4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="7" id="H4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="8" id="I4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="9" id="J4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="10" id="K4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="11" id="L4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="12" id="M4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="13" id="N4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="14" id="O4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="15" id="P4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="16" id="Q4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="17" id="R4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="18" id="S4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="19" id="T4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="20" id="U4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="21" id="V4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 b1" style="background-color:rgb(192,192,192);" col="22" id="W4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 brw2 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb bt1 btw1 btss btcb" style="background-color:rgb(192,192,192);" col="23" id="X4-0-73" row="3" idx="0"></td><td class="fh tac bw pl2 brw2 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb bt1 btw1 btss btcb" style="background-color:rgb(192,192,192);" col="24" id="Y4-0-73" row="3" idx="0"></td><td class="fh bw pl2 brw2 brss brcb bb1 bbw1 bbss bbcb blw2 blss blcb bt1 btw1 btss btcb" style="background-color:rgb(192,192,192);" col="25" id="Z4-0-73" row="3" idx="0"></td><td class="fh bw pl2 b0" style="display:none;" col="26" id="AA4-0-73" row="3"></td><td class="fh bw pl2 b0" style="display:none;" col="27" id="AB4-0-73" row="3"></td></tr></tbody></table></div></td></tr><tr><td valign="top"><div id="frozen-west" class="frozen-west offset-c" style="overflow: scroll hidden; position: relative; height: 705px;"><table class="x-table" style="table-layout:fixed;width:285px;position:relative;" cellspacing="0" id="73" cellpadding="0"><colgroup><col style="width:52px;" col="1"><col style="width:63px;" col="2"><col style="width:49px;" col="3"><col style="width:49px;" col="4"><col style="width:72px;" col="5"></colgroup><tbody class="rows-height-counter"><tr style="height:30px;" tridx="4" id="r-4-0"><td class="fh tar bw pl2 b0" style="display:none;" col="0" cv="726" id="A5-0-73" row="4" idx="0"><div style="max-height:29px;" heavytd="light">726</div></td><td class="celink fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb blw2 blss blcb bt1 btw1 btss btcb" col="1" cv="&quot;6道&quot;" id="B5-0-73" row="4" fmt="T" idx="0"><span class="linkspan" style="cursor:pointer;" onclick="_g().stopEditing(),eval($(this).attr(&#39;link&#39;))" link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;股道\&quot;,\&quot;ID\&quot;:\&quot;726\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)"><div style="max-height:28px;" heavytd="light">6道</div></span></td><td class="celink fh tac bw pl2 b1" col="2" cv="&quot;85356&quot;" id="C5-0-73" row="4" fmt="T" idx="0"><span class="linkspan" style="cursor:pointer;" onclick="_g().stopEditing(),eval($(this).attr(&#39;link&#39;))" link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;编组车次\&quot;,\&quot;ID\&quot;:\&quot;726\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)"><div style="max-height:28px;" heavytd="light">85356</div></span></td><td class="celink fh tac bw pl2 b1" col="3" cv="&quot;43&quot;" id="D5-0-73" row="4" fmt="T" idx="0"><span class="linkspan" style="cursor:pointer;" onclick="_g().stopEditing(),eval($(this).attr(&#39;link&#39;))" link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;辆数\&quot;,\&quot;ID\&quot;:\&quot;726\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)"><div style="max-height:28px;" heavytd="light">43</div></span></td><td class="celink fh tac bw pl2 b1" col="4" cv="&quot;47.3&quot;" id="E5-0-73" row="4" fmt="T" idx="0"><span class="linkspan" style="cursor:pointer;" onclick="_g().stopEditing(),eval($(this).attr(&#39;link&#39;))" link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;换长\&quot;,\&quot;ID\&quot;:\&quot;726\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)"><div style="max-height:28px;" heavytd="light">47.3</div></span></td><td class="celink fh tac bw pl2 b1" col="5" cv="&quot;6282862&quot;" id="F5-0-73" row="4" fmt="T" idx="0"><span class="linkspan" style="cursor:pointer;" onclick="_g().stopEditing(),eval($(this).attr(&#39;link&#39;))" link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;尾车车号\&quot;,\&quot;ID\&quot;:\&quot;726\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)"><div style="max-height:28px;" heavytd="light">6282862</div></span></td></tr><tr style="height:30px;" tridx="5" id="r-5-0"><td class="fh tar bw pl2 b0" style="display:none;" col="0" cv="725" id="A6-0-73" row="5" idx="0"><div style="max-height:29px;" heavytd="light">725</div></td><td class="celink fh tac bw pl2 br1 brw1 brss brcb bb1 bbw1 bbss bbcb blw2 blss blcb bt1 btw1 btss btcb" col="1" cv="&quot;3道&quot;" id="B6-0-73" row="5" fmt="T" idx="0"><span class="linkspan" style="cursor:pointer;" onclick="_g().stopEditing(),eval($(this).attr(&#39;link&#39;))" link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;股道\&quot;,\&quot;ID\&quot;:\&quot;725\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)"><div style="max-height:28px;" heavytd="light">3道</div></span></td><td class="celink fh tac bw pl2 b1" col="2" cv="&quot;20332&quot;" id="C6-0-73" row="5" fmt="T" idx="0"><span class="linkspan" style="cursor:pointer;" onclick="_g().stopEditing(),eval($(this).attr(&#39;link&#39;))" link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;编组车次\&quot;,\&quot;ID\&quot;:\&quot;725\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)"><div style="max-height:28px;" heavytd="light">20332</div></span></td><td class="celink fh tac bw pl2 b1" col="3" cv="&quot;51&quot;" id="D6-0-73" row="5" fmt="T" idx="0"><span class="linkspan" style="cursor:pointer;" onclick="_g().stopEditing(),eval($(this).attr(&#39;link&#39;))" link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;辆数\&quot;,\&quot;ID\&quot;:\&quot;725\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)"><div style="max-height:28px;" heavytd="light">51</div></span></td><td class="celink fh tac bw pl2 b1" col="4" cv="&quot;66.2&quot;" id="E6-0-73" row="5" fmt="T" idx="0"><span class="linkspan" style="cursor:pointer;" onclick="_g().stopEditing(),eval($(this).attr(&#39;link&#39;))" link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;换长\&quot;,\&quot;ID\&quot;:\&quot;725\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)"><div style="max-height:28px;" heavytd="light">66.2</div></span></td><td class="celink fh tac bw pl2 b1" col="5" cv="&quot;5227037&quot;" id="F6-0-73" row="5" fmt="T" idx="0"><span class="linkspan" style="cursor:pointer;" onclick="_g().stopEditing(),eval($(this).attr(&#39;link&#39;))" link="FR.doHyperlink(event||window.event, [{&quot;data&quot;:&quot;var as=arguments; return FR.tc(function(){FR.doHyperlinkByGet4Reportlet({\&quot;para\&quot;:{\&quot;op\&quot;:\&quot;write\&quot;,\&quot;__pi__\&quot;:true,\&quot;作业\&quot;:\&quot;尾车车号\&quot;,\&quot;ID\&quot;:\&quot;725\&quot;},\&quot;feature\&quot;:\&quot;width=400,height=300,\&quot;,\&quot;title\&quot;:\&quot;网络报表1\&quot;,\&quot;url\&quot;:\&quot;/WebReport/ReportServer?reportlet=%2F%5B63a5%5D%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B6d41%5D%5B7a0b%5D%2F%5B53d1%5D%5B8f66%5D%5B4f5c%5D%5B4e1a%5D%5B65f6%5D%5B95f4%5D%5B4fee%5D%5B6539%5D.cpt\&quot;,\&quot;target\&quot;:\&quot;_dialog\&quot;})}, this, as)&quot;,&quot;name&quot;:&quot;网络报表1&quot;}], true)"><div style="max-height:28px;" heavytd="light">5227037</div></span></td></tr><tr style="height:30px;" tridx="6" id="r-6-0"><td class="fh bw pl2 b0" style="display:none;" col="0" id="A7-0-73" row="6"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb blw2 blss blcb bt1 btw1 btss btcb" col="1" id="B7-0-73" row="6" idx="0"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="2" id="C7-0-73" row="6" idx="0"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="3" id="D7-0-73" row="6" idx="0"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="4" id="E7-0-73" row="6" idx="0"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="5" id="F7-0-73" row="6" idx="0"></td></tr></tbody></table></div></td><td valign="top"><div id="frozen-center" class="frozen-center offset-c" style="overflow: scroll; position: relative; width: 1634px; height: 705px;"><table class="x-table" style="table-layout:fixed;width:1453px;position:relative;" cellspacing="0" id="73" cellpadding="0"><colgroup><col style="width:72px;" col="6"><col style="width:72px;" col="7"><col style="width:72px;" col="8"><col style="width:72px;" col="9"><col style="width:72px;" col="10"><col style="width:72px;" col="11"><col style="width:72px;" col="12"><col style="width:72px;" col="13"><col style="width:72px;" col="14"><col style="width:72px;" col="15"><col style="width:72px;" col="16"><col style="width:72px;" col="17"><col style="width:72px;" col="18"><col style="width:72px;" col="19"><col style="width:72px;" col="20"><col style="width:72px;" col="21"><col style="width:85px;" col="22"><col style="width:72px;" col="23"><col style="width:72px;" col="24"><col style="width:72px;" col="25"></colgroup><tbody class="rows-height-counter"><tr style="height:30px;" tridx="4" id="r-4-0"><td class="fh tac bw pl2 b1" col="6" cv="{&quot;date_milliseconds&quot;:1788410006000}" id="G5-0-73" row="4" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0"><div style="max-height:28px;" heavytd="light">2026-09-03 12:33:26</div></td><td class="fh tac bw pl2 b1" col="7" cv="{&quot;date_milliseconds&quot;:1788410008000}" id="H5-0-73" row="4" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0"><div style="max-height:28px;" heavytd="light">2026-09-03 12:33:28</div></td><td class="fh tac bw pl2 b1" col="8" cv="{&quot;date_milliseconds&quot;:1788410010000}" id="I5-0-73" row="4" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0"><div style="max-height:28px;" heavytd="light">2026-09-03 12:33:30</div></td><td class="fh tac bw pl2 b1" col="9" cv="{&quot;date_milliseconds&quot;:1788413412000}" id="J5-0-73" row="4" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0"><div style="max-height:28px;" heavytd="light">2026-09-03 13:30:12</div></td><td class="fh tac bw pl2 b1" col="10" cv="{&quot;date_milliseconds&quot;:1788412792000}" id="K5-0-73" row="4" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0"><div style="max-height:28px;" heavytd="light">2026-09-03 13:19:52</div></td><td class="fh tac bw pl2 b1" col="11" cv="&quot;23707007&quot;" id="L5-0-73" row="4" fmt="T" idx="0"><div style="max-height:28px;" heavytd="light">23707007</div></td><td class="fh tac bw pl2 b1" col="12" cv="{&quot;date_milliseconds&quot;:1788417537000}" id="M5-0-73" row="4" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0"><div style="max-height:28px;" heavytd="light">2026-09-03 14:38:57</div></td><td class="fh tac bw pl2 b1" col="13" cv="{&quot;date_milliseconds&quot;:1788417202000}" id="N5-0-73" row="4" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0"><div style="max-height:28px;" heavytd="light">2026-09-03 14:33:22</div></td><td class="fh tac bw pl2 b1" col="14" cv="&quot;&quot;" id="O5-0-73" row="4" idx="0"><div style="max-height:28px;" heavytd="light"></div></td><td class="fh tac bw pl2 b1" col="15" cv="&quot;&quot;" id="P5-0-73" row="4" idx="0"><div style="max-height:28px;" heavytd="light"></div></td><td class="fh tac bw pl2 b1" col="16" cv="{&quot;date_milliseconds&quot;:1788415319000}" id="Q5-0-73" row="4" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0"><div style="max-height:28px;" heavytd="light">2026-09-03 14:01:59</div></td><td class="fh tac bw pl2 b1" col="17" cv="{&quot;date_milliseconds&quot;:1788417454000}" id="R5-0-73" row="4" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0"><div style="max-height:28px;" heavytd="light">2026-09-03 14:37:34</div></td><td class="fh tac bw pl2 b1" col="18" cv="{&quot;date_milliseconds&quot;:1788417606000}" id="S5-0-73" row="4" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0"><div style="max-height:28px;" heavytd="light">2026-09-03 14:40:06</div></td><td class="fh tac bw pl2 b1" col="19" cv="&quot;&quot;" id="T5-0-73" row="4" idx="0"><div style="max-height:28px;" heavytd="light"></div></td><td class="fh tac bw pl2 b1" col="20" cv="{&quot;date_milliseconds&quot;:1788413072000}" id="U5-0-73" row="4" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0"><div style="max-height:28px;" heavytd="light">2026-09-03 13:24:32</div></td><td class="fh tac bw pl2 b1" col="21" cv="&quot;&quot;" id="V5-0-73" row="4" idx="0"><div style="max-height:28px;" heavytd="light"></div></td><td class="fh tac bw pl2 b1" col="22" cv="&quot;&quot;" frs="0" id="W5-0-73" row="4" idx="0"><div style="max-height:28px;" heavytd="light"></div></td><td class="fh tac bw fwb pl2 brw2 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb bt0" style="background-color:rgb(255,0,0);" col="23" cv="&quot;否&quot;" id="X5-0-73" row="4" fmt="T" idx="0"><div style="max-height:28px;" heavytd="light">否</div></td><td class="fh tac bw pl2 b1" style="padding-left:0;padding-right:0;" col="24" editor="Y5" cv="&quot;&quot;" widgetwidth="72" widgetheight="29" id="Y5-0-73" row="4" idx="0"><div style="max-height:28px;" heavytd="light"></div></td><td class="fh tac bw pl2 brw2 brss brcb bb1 bbw1 bbss bbcb blw2 blss blcb bt1 btw1 btss btcb" col="25" cv="&quot;&quot;" fm="if(len(W5) &gt; 0, DATESUBDATE(W5, AA5, &quot;m&quot;), &quot;&quot;)" id="Z5-0-73" row="4" idx="0"><div style="max-height:28px;" heavytd="light"></div></td><td class="fh bw pl2 b0" style="display:none;" col="26" cv="{&quot;date_milliseconds&quot;:1788409743000}" frs="0" id="AA5-0-73" row="4" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0"><div style="max-height:29px;" heavytd="light">2026-09-03 12:29:03</div></td><td class="fh tar bw pl2 b0" style="display:none;" col="27" cv="726" id="AB5-0-73" row="4" idx="0"><div style="max-height:29px;" heavytd="light">726</div></td></tr><tr style="height:30px;" tridx="5" id="r-5-0"><td class="fh tac bw pl2 b1" col="6" cv="{&quot;date_milliseconds&quot;:1788410007000}" id="G6-0-73" row="5" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0"><div style="max-height:28px;" heavytd="light">2026-09-03 12:33:27</div></td><td class="fh tac bw pl2 b1" col="7" cv="{&quot;date_milliseconds&quot;:1788410009000}" id="H6-0-73" row="5" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0"><div style="max-height:28px;" heavytd="light">2026-09-03 12:33:29</div></td><td class="fh tac bw pl2 b1" col="8" cv="{&quot;date_milliseconds&quot;:1788410011000}" id="I6-0-73" row="5" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0"><div style="max-height:28px;" heavytd="light">2026-09-03 12:33:31</div></td><td class="fh tac bw pl2 b1" col="9" cv="{&quot;date_milliseconds&quot;:1788417765000}" id="J6-0-73" row="5" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0"><div style="max-height:28px;" heavytd="light">2026-09-03 14:42:45</div></td><td class="fh tac bw pl2 b1" col="10" cv="{&quot;date_milliseconds&quot;:1788415443000}" id="K6-0-73" row="5" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0"><div style="max-height:28px;" heavytd="light">2026-09-03 14:04:03</div></td><td class="fh tac bw pl2 b1" col="11" cv="&quot;&quot;" id="L6-0-73" row="5" idx="0"><div style="max-height:28px;" heavytd="light"></div></td><td class="fh tac bw pl2 b1" col="12" cv="&quot;&quot;" id="M6-0-73" row="5" idx="0"><div style="max-height:28px;" heavytd="light"></div></td><td class="fh tac bw pl2 b1" col="13" cv="&quot;&quot;" id="N6-0-73" row="5" idx="0"><div style="max-height:28px;" heavytd="light"></div></td><td class="fh tac bw pl2 b1" col="14" cv="&quot;&quot;" id="O6-0-73" row="5" idx="0"><div style="max-height:28px;" heavytd="light"></div></td><td class="fh tac bw pl2 b1" col="15" cv="&quot;&quot;" id="P6-0-73" row="5" idx="0"><div style="max-height:28px;" heavytd="light"></div></td><td class="fh tac bw pl2 b1" col="16" cv="&quot;&quot;" id="Q6-0-73" row="5" idx="0"><div style="max-height:28px;" heavytd="light"></div></td><td class="fh tac bw pl2 b1" col="17" cv="&quot;&quot;" id="R6-0-73" row="5" idx="0"><div style="max-height:28px;" heavytd="light"></div></td><td class="fh tac bw pl2 b1" col="18" cv="&quot;&quot;" id="S6-0-73" row="5" idx="0"><div style="max-height:28px;" heavytd="light"></div></td><td class="fh tac bw pl2 b1" col="19" cv="&quot;&quot;" id="T6-0-73" row="5" idx="0"><div style="max-height:28px;" heavytd="light"></div></td><td class="fh tac bw pl2 b1" col="20" cv="{&quot;date_milliseconds&quot;:1788409657000}" id="U6-0-73" row="5" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0"><div style="max-height:28px;" heavytd="light">2026-09-03 12:27:37</div></td><td class="fh tac bw pl2 b1" col="21" cv="&quot;&quot;" id="V6-0-73" row="5" idx="0"><div style="max-height:28px;" heavytd="light"></div></td><td class="fh tac bw pl2 b1" col="22" cv="&quot;&quot;" frs="0" id="W6-0-73" row="5" idx="0"><div style="max-height:28px;" heavytd="light"></div></td><td class="fh tac bw fwb pl2 brw2 brss brcb bb1 bbw1 bbss bbcb bl1 blw1 blss blcb bt0" style="background-color:rgb(255,0,0);" col="23" cv="&quot;否&quot;" id="X6-0-73" row="5" fmt="T" idx="0"><div style="max-height:28px;" heavytd="light">否</div></td><td class="fh tac bw pl2 b1" style="padding-left:0;padding-right:0;" col="24" editor="Y6" cv="&quot;&quot;" widgetwidth="72" widgetheight="29" id="Y6-0-73" row="5" idx="0"><div style="max-height:28px;" heavytd="light"></div></td><td class="fh tac bw pl2 brw2 brss brcb bb1 bbw1 bbss bbcb blw2 blss blcb bt1 btw1 btss btcb" col="25" cv="&quot;&quot;" fm="if(len(W6) &gt; 0, DATESUBDATE(W6, AA6, &quot;m&quot;), &quot;&quot;)" id="Z6-0-73" row="5" idx="0"><div style="max-height:28px;" heavytd="light"></div></td><td class="fh bw pl2 b0" style="display:none;" col="26" cv="{&quot;date_milliseconds&quot;:1788405833000}" frs="0" id="AA6-0-73" row="5" fmt="DTyyyy-MM-dd HH:mm:ss" idx="0"><div style="max-height:29px;" heavytd="light">2026-09-03 11:23:53</div></td><td class="fh tar bw pl2 b0" style="display:none;" col="27" cv="725" id="AB6-0-73" row="5" idx="0"><div style="max-height:29px;" heavytd="light">725</div></td></tr><tr style="height:30px;" tridx="6" id="r-6-0"><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="6" id="G7-0-73" row="6" idx="0"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="7" id="H7-0-73" row="6" idx="0"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="8" id="I7-0-73" row="6" idx="0"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="9" id="J7-0-73" row="6" idx="0"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="10" id="K7-0-73" row="6" idx="0"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="11" id="L7-0-73" row="6" idx="0"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="12" id="M7-0-73" row="6" idx="0"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="13" id="N7-0-73" row="6" idx="0"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="14" id="O7-0-73" row="6" idx="0"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="15" id="P7-0-73" row="6" idx="0"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="16" id="Q7-0-73" row="6" idx="0"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="17" id="R7-0-73" row="6" idx="0"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="18" id="S7-0-73" row="6" idx="0"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="19" id="T7-0-73" row="6" idx="0"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="20" id="U7-0-73" row="6" idx="0"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="21" id="V7-0-73" row="6" idx="0"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="22" id="W7-0-73" row="6" idx="0"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="23" id="X7-0-73" row="6" idx="0"></td><td class="fh bw pl2 br0 bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="24" id="Y7-0-73" row="6" idx="0"></td><td class="fh bw pl2 brw2 brss brcb bbw2 bbss bbcb bl0 bt1 btw1 btss btcb" col="25" id="Z7-0-73" row="6" idx="0"></td><td class="fh bw pl2 b0" style="display:none;" col="26" id="AA7-0-73" row="6"></td><td class="fh bw pl2 b0" style="display:none;" col="27" id="AB7-0-73" row="6"></td></tr></tbody></table></div></td></tr></tbody></table>
-
-<script>
-/* 极简 $ shim：提供 jQuery 常用子集，便于控制台调试（DevTools 自带的 $ 只有 querySelector，没有 .first()） */
-(function(){
-  function wrap(arr){
-    arr.first = function(){ return wrap(arr.slice(0,1)); };
-    arr.last  = function(){ return wrap(arr.slice(-1)); };
-    arr.eq    = function(i){ return wrap([arr[i]]); };
-    arr.get   = function(i){ return arr[i]; };
-    arr.each  = function(fn){ arr.forEach(function(el,i){ fn.call(el,i,el); }); return arr; };
-    arr.click = function(){ arr.forEach(function(el){ el.click(); }); return arr; };
-    arr.attr  = function(n,v){
-      if(v === undefined) return arr[0] && arr[0].getAttribute(n);
-      arr.forEach(function(el){ el.setAttribute(n,v); }); return arr;
-    };
-    arr.text  = function(v){
-      if(v === undefined) return arr[0] && arr[0].textContent;
-      arr.forEach(function(el){ el.textContent = v; }); return arr;
-    };
-    arr.val   = function(v){
-      if(v === undefined){ var e = arr[0]; return (e && e.value !== undefined) ? e.value : ''; }
-      arr.forEach(function(el){ el.value = v; }); return arr;
-    };
-    arr.find  = function(s){
-      var r = [];
-      arr.forEach(function(el){ r = r.concat(Array.prototype.slice.call(el.querySelectorAll(s))); });
-      return wrap(r);
-    };
-    return arr;
-  }
-  window.$ = function(sel, ctx){
-    if(typeof sel === 'string'){
-      return wrap(Array.prototype.slice.call((ctx || document).querySelectorAll(sel)));
-    }
-    if(sel && sel.nodeType) return wrap([sel]);
-    if(sel && sel.length !== undefined) return wrap(Array.prototype.slice.call(sel));
-    return wrap([]);
-  };
-})();
-</script>
-
-<script>
-/* contentPane shim：对齐 FineReport 的 setCellValue(col,row,value) / getCellValue(col,row) */
-window.contentPane = (function(){
-  /* 单元格定位：id 精确匹配 -> id 前缀(B4 -> B4-0-73) -> editor 属性 */
-  function findCell(name){
-    if(!name) return null;
-    var el = document.getElementById(name);
-    if(el) return el;
-    try {
-      el = document.querySelector('[id^="' + name + '-"]');
-      if(el) return el;
-      el = document.querySelector('[editor="' + name + '"]');
-    } catch(e){}
-    return el || null;
-  }
-  return {
-    findCell: findCell,
-    setCellValue: function(col, row, value){
-      if(arguments.length >= 3) value = arguments[2];   /* (col,row,value) */
-      var el = findCell(col);
-      if(el) el.textContent = (value == null ? '' : value);
-      return el;
-    },
-    getCellValue: function(col, row){
-      var el = findCell(col);
-      return el ? el.textContent : null;
-    }
-  };
-})();
-</script>
-
-<script>
-/* 单元格编辑：B4 为股道下拉，其余 editor 单元格为文本输入 */
-(function(){
-  var DROPDOWNS = {
-    'B4': ['1道','2道','3道','4道','5道','6道','7道','8道','9道','10道']
-  };
-  var cur = null;
-
-  var cells = document.querySelectorAll('td[editor]');
-  for (var i = 0; i < cells.length; i++) { cells[i].style.cursor = 'pointer'; }
-
-  function finish(commit){
-    if(!cur) return;
-    var ed = cur.el, td = cur.td, orig = cur.orig, name = cur.name;
-    cur = null;
-    var v = commit ? String(ed.value == null ? '' : ed.value) : '';
-    if(ed.parentNode === td) td.removeChild(ed);
-    td.textContent = (commit && v !== '') ? v : orig;
-    /* 同步一份到 shim，保证 getCellValue 能读到 */
-    if(commit && v !== '' && window.contentPane){
-      try { window.contentPane.setCellValue(name, null, v); } catch(e){}
-    }
-  }
-
-  function open(td){
-    var name = td.getAttribute('editor');
-    var opts = DROPDOWNS[name];
-    var orig = (td.textContent || '').trim();
-    var el;
-
-    if(opts){
-      el = document.createElement('select');
-      var o0 = document.createElement('option'); o0.value = ''; o0.textContent = '';
-      el.appendChild(o0);
-      for (var k = 0; k < opts.length; k++){
-        var o = document.createElement('option');
-        o.value = opts[k]; o.textContent = opts[k];
-        el.appendChild(o);
-      }
-    } else {
-      el = document.createElement('input');
-      el.type = 'text';
-    }
-
-    el.style.width      = (td.getAttribute('widgetwidth')  || 52) + 'px';
-    el.style.height     = (td.getAttribute('widgetheight') || 29) + 'px';
-    el.style.boxSizing  = 'border-box';
-    el.style.font       = 'inherit';
-    el.style.border     = '0';
-    el.style.padding    = '0 2px';
-    el.style.background = 'transparent';
-    el.value = orig;
-
-    td.textContent = '';
-    td.appendChild(el);
-    cur = { el: el, td: td, orig: orig, name: name };
-    el.focus();
-    if(el.select) { try { el.select(); } catch(e){} }
-
-    el.addEventListener('change', function(){ finish(true); });
-    el.addEventListener('blur',   function(){ finish(true); });
-    el.addEventListener('keydown', function(ev){
-      if(ev.keyCode === 13) finish(true);        /* Enter 确认 */
-      else if(ev.keyCode === 27) finish(false);  /* Esc 取消 */
-    });
-  }
-
-  document.addEventListener('click', function(e){
-    var td = (e.target && e.target.closest) ? e.target.closest('td[editor]') : null;
-    if(!td) return;
-    if(cur && cur.td === td) return;   /* 已在本格编辑 */
-    finish(true);                       /* 先提交上一格 */
-    open(td);
-    e.stopPropagation();
-  }, true);
-})();
-</script>
-
-<script type="text/javascript">
-document.addEventListener('click', function(e){
-  var t = e.target;
-  var btn = (t && t.closest) ? t.closest('.fr-btn[widgetname="Submit"]') : null;
-  if(!btn && t && t.classList && t.classList.contains('x-emb-submit')){ btn = t; }
-  if(btn){
-    if(e.stopImmediatePropagation){ e.stopImmediatePropagation(); }
-    if(e.preventDefault){ e.preventDefault(); }
-    if(e.stopPropagation){ e.stopPropagation(); }
-    alert('提交成功');
-  }
-}, true);
-</script>
-
-<!-- ================= 外部填表接口（供股道存车主页面跨标签页调用）=================
-     主页面可用三种方式把「编好」的数据送进来，本页收到后写入 B4/C4/D4/E4/F4：
-       1. BroadcastChannel('zhancun-dep')   —— 同源跨标签页实时推送（首选）
-       2. localStorage 键 zhancun.depFill   —— 同源跨标签页兜底：本页后开/刷新也能取到最后一次数据
-       3. URL 查询参数 ?B4=..&C4=..         —— 跨域也可用（父页 window.open 带参打开本页）
-     注意：1、2 要求本页与主页面同源（同为 http://127.0.0.1:5500 之类）；
-           file:// 打开的页面 origin 为 null，与任何 http 源都不同源，只能走方式 3。 -->
-<script>
-(function () {
-  var CELLS = ['B4', 'C4', 'D4', 'E4', 'F4'];   // 股道 / 车次 / 辆数 / 换长 / 尾车车号
-
-  function setCell(id, val) {
-    var td = document.querySelector('[id^="' + id + '-"]');
-    if (!td) return;
-    if (window.contentPane && typeof window.contentPane.setCellValue === 'function') {
-      try { window.contentPane.setCellValue(id, null, val); return; } catch (e) { /* 退回 DOM 写法 */ }
-    }
-    td.innerHTML = '';
-    var d = document.createElement('div');
-    d.style.maxHeight = '28px';
-    d.textContent = (val == null) ? '' : val;
-    td.appendChild(d);
-  }
-
-  function apply(data) {
-    if (!data) return;
-    for (var i = 0; i < CELLS.length; i++) {
-      var id = CELLS[i];
-      if (Object.prototype.hasOwnProperty.call(data, id)) setCell(id, data[id]);
-    }
-  }
-
-  // 1) BroadcastChannel：只用于「把车次列表回传主页面查重」（见下方 pushCheci），
-  //    不再接收主页面的填表推送——新流程改走扩展桥，本页打开时应为干净空表。
-  var bc = null;
-  try {
-    if (typeof BroadcastChannel !== 'undefined') bc = new BroadcastChannel('zhancun-dep');
-  } catch (e) {}
-
-  /* 反向回传：把本表「编组车次」列（td[col="2"]，不含正在填写的 C4）的车次列表
-     发给主页面，供其做「车次重复」校验（独立标签页模式下主页面读不到本页 DOM）。 */
-  function collectCheci() {
-    var out = [], tds = document.querySelectorAll('td[col="2"]');
-    for (var i = 0; i < tds.length; i++) {
-      var id = tds[i].getAttribute('id') || '';
-      if (id.indexOf('C4-') === 0) continue;                 // 排除当前填写行
-      var t = (tds[i].textContent || '').replace(/\s+/g, '');
-      if (t) out.push(t);
-    }
-    return out;
-  }
-  function pushCheci() {
-    var list = collectCheci();
-    try { if (bc) bc.postMessage({ type: 'checiList', list: list, ts: Date.now() }); } catch (e) {}
-    try { localStorage.setItem('zhancun.depCheci', JSON.stringify(list)); } catch (e) {}
-    // 跨域场景：本页由主页面 window.open 打开时，用 postMessage 回传给 opener（跨域也能收到）
-    try { if (window.opener) window.opener.postMessage({ type: 'checiList', list: list, ts: Date.now() }, '*'); } catch (e) {}
-  }
-  window.addEventListener('load', function () { setTimeout(pushCheci, 300); });
-
-  /* （已移除）localStorage 回填 与 URL 参数填表
-   * 原因：新流程是「主页面点发送 → 扩展桥 → contentPane.setCellValue」，
-   *       本页作为测试用的报表页，每次打开都应是干净的空表；
-   *       旧逻辑会从 localStorage['zhancun.depFill'] 自动回填历史数据，
-   *       导致「还没点发送，输入框里就已经有值」。
-   * 顺带清掉旧版本遗留的键，避免下次打开又被填。 */
-  try { localStorage.removeItem('zhancun.depFill'); } catch (e) {}
-})();
-</script>
-
+  <div class="x-toolbar ui-state-enabled fs-tab-content-top-toolbar"
+    style="height: 28px; border-width: 0px; padding: 0px; left: 0px; top: 0px; width: 708px; position: absolute;">
+    <table cellspacing="0" style="height: 28px;">
+      <tbody>
+        <tr>
+          <td>
+            <div class="fr-btn ui-state-enabled" widgetname="Submit">
+              <div id="fr-btn-Submit" class="fr-btn-up  fr-btn-text-icon"
+                style="height:NaNpx;width:autopx;display:table-cell;">
+                <div class="fr-btn-small fr-btn-icon-small-left"><em unselectable="on"><button unselectable="none"
+                      type="button" data-role="none" class="fr-btn-text x-emb-submit">提交</button></em></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="sep"> </span></td>
+          <td>
+            <div class="fr-btn ui-state-enabled" widgetname="Verify">
+              <div id="fr-btn-Verify" class="fr-btn-up  fr-btn-text-icon"
+                style="height:NaNpx;width:autopx;display:table-cell;">
+                <div class="fr-btn-small fr-btn-icon-small-left"><em unselectable="on"><button unselectable="none"
+                      type="button" data-role="none" class="fr-btn-text x-emb-verify">数据校验</button></em></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="sep"> </span></td>
+          <td>
+            <div class="fr-btn ui-state-enabled" widgetname="NewPrint">
+              <div id="fr-btn-NewPrint" class="fr-btn-up  fr-btn-text-icon"
+                style="height:NaNpx;width:autopx;display:table-cell;">
+                <div class="fr-btn-small fr-btn-icon-small-left"><em unselectable="on"><button unselectable="none"
+                      type="button" data-role="none" class="fr-btn-text x-emb-print">打印</button></em></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="sep"> </span></td>
+          <td>
+            <div class="fr-btn ui-state-enabled" widgetname="Email">
+              <div id="fr-btn-Email" class="fr-btn-up  fr-btn-text-icon"
+                style="height:NaNpx;width:autopx;display:table-cell;">
+                <div class="fr-btn-small fr-btn-icon-small-left"><em unselectable="on"><button unselectable="none"
+                      type="button" data-role="none" class="fr-btn-text x-emb-email">邮件</button></em></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="sep"> </span></td>
+          <td>
+            <div class="fr-btn ui-state-enabled" widgetname="AppendColumnRow">
+              <div id="fr-btn-AppendColumnRow" class="fr-btn-up  fr-btn-text-icon"
+                style="height:NaNpx;width:autopx;display:table-cell;">
+                <div class="fr-btn-small fr-btn-icon-small-left"><em unselectable="on"><button unselectable="none"
+                      type="button" data-role="none" class="fr-btn-text x-emb-appendrow">增加记录</button></em></div>
+              </div>
+            </div>
+          </td>
+          <td><span class="sep"> </span></td>
+          <td>
+            <div class="ui-state-enabled" style="width: 120px; height: 24px; overflow: hidden;">
+              <table cellpadding="0" cellspacing="0"
+                style="table-layout: fixed; width: 120px; height: 24px; text-size-adjust: none;">
+                <tbody>
+                  <tr>
+                    <td>
+                      <pre class="fr-label"
+                        style="font-size: 12px; color: rgb(0, 0, 0); text-decoration: none; text-align: center; font-family: SimSun; overflow-wrap: break-word; white-space: pre-wrap;"></pre>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </td>
+          <td><span class="sep"> </span></td>
+          <td>
+            <div class="fr-btn ui-state-enabled">
+              <div id="fr-btn-" class="fr-btn-up  fr-btn-text-icon"
+                style="height:NaNpx;width:autopx;display:table-cell;">
+                <div class="fr-btn-small fr-btn-icon-small-left"><em unselectable="on" class="fr-btn-arrow"><button
+                      unselectable="none" type="button" data-role="none"
+                      class="fr-btn-text x-emb-export">输出</button></em></div>
+              </div>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div style="position:absolute;left:-1000px;top:-1000px;"><textarea id="cpTextArea" onkeyup="this.blur()"></textarea>
+  </div>
+  <div class="fr-core-window ui-state-enabled"
+    style="width: 200px; height: 80px; position: absolute; display: none; z-index: 8001; left: 745px; top: 383.5px;">
+    <div class="fr-core-panel-body fr-core-panel-body-border fr-core-window-body"
+      style="position: absolute; top: 30px; left: 0px; border-top: none; border-right-width: 1px; border-bottom-width: 1px; border-left-width: 1px; width: 198px; height: 49px;">
+      <div class="fr-core-panel-loading">处理中....</div>
+    </div>
+    <div class="fr-core-panel-header fr-core-panel-style-blue fr-core-window-header"
+      style="position: absolute; top: 0px; left: 0px; width: 200px; height: 30px;">
+      <div class="fr-core-panel-header-inner"
+        style="position: absolute; top: 0px; left: 0px; width: 200px; height: 30px;">
+        <div class="fr-core-panel-title" style="line-height: 30px;">正在加载</div>
+      </div>
+    </div>
+  </div>
+  <div class="fr-core-window-mask" style="z-index: 8000; width: 708px; height: 847px; display: none;"></div>
+  <div class="view-container">
+    <div style="height: 20px; display: none;"></div>
+  </div>
+<script src="dep-shim.js"></script>
 </body>
+
 </html>
