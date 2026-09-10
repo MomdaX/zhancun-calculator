@@ -16,6 +16,11 @@
 
   var COL = global.Aggregate ? global.Aggregate.COL : null;
 
+  /** 待卸纠正的 4 个车种（C/X/P/G）。输入框 id 统一为 `corr<类型>`，
+   *  统一由此常量派生，避免多处硬编码 ['corrC','corrX','corrP','corrG'] */
+  var CORR_TYPES = ['C', 'X', 'P', 'G'];
+  var CORR_IDS = CORR_TYPES.map(function (t) { return 'corr' + t; });
+
   // 默认待装区域来自 track.config.js（YardConfig.defaultAreas）。
   // 它是业务配置：现场新增/调整装卸线时只改配置，不必碰报表逻辑。
   var DEFAULT_AREAS = (global.YardConfig && global.YardConfig.defaultAreas) || {};
@@ -425,10 +430,7 @@
     var inpG = readCorr('corrG', autoDx.G || 0);
 
     // 四个输入都为空 → 不纠正，保持自动值
-    if (Utils.$('corrC').value.trim() === '' &&
-        Utils.$('corrX').value.trim() === '' &&
-        Utils.$('corrP').value.trim() === '' &&
-        Utils.$('corrG').value.trim() === '') return;
+    if (CORR_IDS.every(function (id) { return Utils.$(id).value.trim() === ''; })) return;
 
     var delta = {
       C: inpC - (autoDx.C || 0),
@@ -719,32 +721,8 @@
     // 待装股道：按「大组(作业区) / 子组(线别) / 股道」三层渲染
     var tb = Utils.$('cfgTracks');
 
-    function buildGroup(g) {
-      var box = document.createElement('div');
-      box.className = 'cfg-track-group' + (g.area ? ' is-area' : '');
-
-      var head = document.createElement('div');
-      head.className = 'cfg-group-head';
-      head.innerHTML = '<button type="button" class="cfg-group-btn" data-group="' + g.key + '">' +
-        Utils.escapeHtml(g.name) + '</button>' +
-        '<span class="cfg-group-count" data-count="' + g.key + '">0/' + g.ids.length + '</span>';
-      box.appendChild(head);
-
-      var wrap = document.createElement('div');
-      wrap.className = 'cfg-group-tracks';
-      g.ids.forEach(function (id) {
-        var label = document.createElement('label');
-        label.className = 'cfg-track';
-        label.innerHTML = '<input type="checkbox" id="cfgTrack_' + id + '" data-track="' + id + '">' +
-          Utils.escapeHtml(YardConfig.trackName(id));
-        wrap.appendChild(label);
-      });
-      box.appendChild(wrap);
-      return box;
-    }
-
-    // 仅渲染股道（不含子组标题/按钮），用于单组大组
-    function buildTracksOnly(g) {
+    /** 组内股道复选框容器（带组标题的 buildGroup 与「单组大组」两处共用） */
+    function buildTrackChecks(g) {
       var wrap = document.createElement('div');
       wrap.className = 'cfg-group-tracks';
       g.ids.forEach(function (id) {
@@ -755,6 +733,20 @@
         wrap.appendChild(label);
       });
       return wrap;
+    }
+
+    function buildGroup(g) {
+      var box = document.createElement('div');
+      box.className = 'cfg-track-group' + (g.area ? ' is-area' : '');
+
+      var head = document.createElement('div');
+      head.className = 'cfg-group-head';
+      head.innerHTML = '<button type="button" class="cfg-group-btn" data-group="' + g.key + '">' +
+        Utils.escapeHtml(g.name) + '</button>' +
+        '<span class="cfg-group-count" data-count="' + g.key + '">0/' + g.ids.length + '</span>';
+      box.appendChild(head);
+      box.appendChild(buildTrackChecks(g));
+      return box;
     }
 
     // 配置中存在大组划分时，按「作业区」分段；否则退回扁平单层
@@ -780,7 +772,7 @@
             cnt.setAttribute('data-count', g.key);
             cnt.textContent = '0/' + g.ids.length;
             secHead.appendChild(cnt);
-            secBody.appendChild(buildTracksOnly(g));
+            secBody.appendChild(buildTrackChecks(g));
           }
         } else {
           sec.groups.forEach(function (key) {
@@ -847,7 +839,7 @@
     });
 
     // 纠正输入框：失焦/回车时本地持久记忆
-    ['corrC', 'corrX', 'corrP', 'corrG'].forEach(function (id) {
+    CORR_IDS.forEach(function (id) {
       var el = document.getElementById(id);
       if (!el) return;
       var save = function () {
@@ -1094,7 +1086,7 @@
     // 打开时恢复上次本地持久记忆的纠正输入
     var savedCorr = (global.Store && global.Store.get) ? global.Store.get('corrInputs', {}) : {};
     savedCorr = savedCorr || {};
-    ['corrC', 'corrX', 'corrP', 'corrG'].forEach(function (id) {
+    CORR_IDS.forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.value = (savedCorr[id] != null ? savedCorr[id] : '');
     });

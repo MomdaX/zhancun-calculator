@@ -236,7 +236,7 @@
       if (isNew) label += ' ● NEW';
       return '<option value="' + i + '"' +
              (isNew ? ' style="font-weight:800;color:var(--accent)"' : '') +
-             '>' + label + '</option>';
+             '>' + Utils.escapeHtml(label) + '</option>';   // 文件名可能含 & < " 等，须转义
     }).join('');
 
     if (idx >= 0 && idx < files.length) sel.selectedIndex = idx;

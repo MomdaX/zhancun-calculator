@@ -6,13 +6,12 @@
   var NAMES = ['1调', '2调', '3调'];
   var STORE_KEY = 'productivity';
 
-  function $(id) { return document.getElementById(id); }
+  // 复用 Utils.$（原先本地又重写了一遍 getElementById）
+  var $ = Utils.$;
 
   function todayStr() {
     var d = new Date();
-    return d.getFullYear() + '-' +
-      String(d.getMonth() + 1).padStart(2, '0') + '-' +
-      String(d.getDate()).padStart(2, '0');
+    return d.getFullYear() + '-' + Utils.pad2(d.getMonth() + 1) + '-' + Utils.pad2(d.getDate());
   }
 
   function defaultData() {

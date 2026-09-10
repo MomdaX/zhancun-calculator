@@ -54,6 +54,25 @@
   /* ==================== 字符串首字符 ==================== */
   Utils.firstChar = function (s) { return String(s == null ? '' : s).charAt(0); };
 
+  /* ==================== 通用值处理 ==================== */
+  /** 安全文本：null/undefined → ''，其余 String(v)。渲染拼接 / 取值统一用它 */
+  Utils.text = function (v) { return v == null ? '' : String(v); };
+
+  /** 空值判断：null / undefined / ''（不含 0、false、纯空格串） */
+  Utils.isEmpty = function (v) { return v == null || v === ''; };
+
+  /** 保留 1 位小数（四舍五入）→ number；非有限数返回 0 */
+  Utils.round1 = function (n) {
+    n = +n;
+    return isFinite(n) ? Math.round(n * 10) / 10 : 0;
+  };
+
+  /** 保留 1 位小数（四舍五入）→ 字符串，恒带 1 位（12 → "12.0"） */
+  Utils.fmt1 = function (n) { return Utils.round1(n).toFixed(1); };
+
+  /** 补零到 2 位：1 → "01"（各模块补零统一复用） */
+  Utils.pad2 = pad2;
+
   /* ==================== VBA 函数模拟 ==================== */
 
   /** VBA InStr：找不到返回 0，找到返回 1 基位置；查找空串返回 1 */

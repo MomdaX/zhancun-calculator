@@ -107,6 +107,22 @@
   }
 
   /**
+   * 到站列「显示值」判定（纯函数，不改原始数据；明细抽屉与搜索抽屉共用同一口径）。
+   *
+   *   ① __destIsStation（记事匹配到方向库站名）→ 显示 __dest——原到站是空/钦州港/湛江都一样；
+   *   ② 未匹配 → 保持原到站 __destRaw；原到站为空时才回退 __dest（推算的罐型/车种，沿用原行为）；
+   *   ③ destProcessed=true（搜索抽屉）→ 直接显示处理后的 __dest。
+   *
+   * @returns {{text: string, derived: boolean}} text=显示值；derived=显示值≠原到站（渲染端挂 .derived 斜体）
+   */
+  function destDisplayValue(row, destProcessed) {
+    var rawDest = String(row.__destRaw == null ? '' : row.__destRaw).trim();
+    var dv = row.__dest == null ? '' : String(row.__dest).trim();
+    var show = destProcessed ? dv : (row.__destIsStation ? dv : (rawDest || dv));
+    return { text: show, derived: !!show && show !== rawDest };
+  }
+
+  /**
    * 拼一个车站名 span：class + 可选 station-link（双击开地图用 data-station）。
    * renderDest（到站，含着色/标记）与 renderStationLink（发站，纯链接）共用，
    * 避免两处各拼一遍 class / station-link / data-station。
@@ -166,6 +182,7 @@
   function isStationName(part) { return !!stationOf(part); }
 
   global.renderDest = renderDest;
+  global.destDisplayValue = destDisplayValue;
   global.stationSpan = stationSpan;
   global.renderStationLink = renderStationLink;
   global.isUnloadSpot = isUnloadSpot;

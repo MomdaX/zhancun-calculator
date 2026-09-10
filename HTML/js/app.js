@@ -175,8 +175,11 @@
            '</td></tr>';
   }
 
-  function render() {
-    // 表头
+  /**
+   * 主表表头：构建 <th>、重挂列宽拖拽手柄、同步冻结列宽偏移。
+   * 从 render() 拆出——表头只依赖 COLUMNS / ColResize，与行渲染无耦合。
+   */
+  function renderGridHead() {
     $('headRow').innerHTML = COLUMNS.map(function (c) {
       var cls = c.cls || '';
       // 到站列（表头显示为「车辆信息」）：加 col-flex 类（仅用于允许换行），
@@ -207,6 +210,10 @@
     var gth = grid.querySelector('th.col-b-group');
     if (ath) grid.style.setProperty('--col-a-w', ath.offsetWidth + 'px');
     if (gth) grid.style.setProperty('--col-b-group-w', gth.offsetWidth + 'px');
+  }
+
+  function render() {
+    renderGridHead();
 
     var vis = visibleRows();
     var thr = YardConfig.thresholds;
@@ -293,7 +300,7 @@
           }
           cls += ' num';
         } else {
-          var rawNote = (v == null ? '' : String(v));
+          var rawNote = Utils.text(v);
           // 注意事项列：聚合时已用 \n 分隔各关键词（超71.86吨 / 扣修 …），
           // 转成 <br> 才能逐条换行；方向列同理（render 内已处理）。
           if (c.key === 'note') {
@@ -345,7 +352,12 @@
 
     tbody.innerHTML = html.join('');
 
-    // 合计行（与可见行保持一致，隐藏虚拟股道后合计同步变化）
+    renderGridFoot(vis);
+  }
+
+  /** 主表合计行 + 罐车结存 + 状态栏（render 收口）。
+   *  合计与可见行保持一致：隐藏虚拟股道/空线分组后，合计同步变化。 */
+  function renderGridFoot(vis) {
     var tc = 0, tl = 0, tw = 0, told = 0;
     vis.forEach(function (item) {
       var r = item.r;
@@ -355,8 +367,8 @@
     // 不再需要手工数着补 <td>（原写死 colspan + 固定个数的空 td，加一列就整体错位）。
     var FOOT_VALUES = {
       count: tc,
-      length: (Math.round(tl * 10) / 10).toFixed(1),
-      load: Math.round(tw * 10) / 10,
+      length: Utils.fmt1(tl),
+      load: Utils.round1(tw),
       oldCar: told
     };
     var footCells = [];
@@ -388,8 +400,8 @@
     // 状态栏
     $('stTrack').textContent = vis.filter(function (item) { return item.r.count; }).length;
     $('stCount').textContent = tc;
-    $('stLen').textContent = Math.round(tl * 10) / 10;
-    $('stLoad').textContent = Math.round(tw * 10) / 10;
+    $('stLen').textContent = Utils.round1(tl);
+    $('stLoad').textContent = Utils.round1(tw);
     $('stOld').textContent = told;
 
     // 主表重绘即代表「数据或视图已更新」，统一通知订阅者（供外部模块联动）
@@ -453,12 +465,12 @@
     }
     return {
       count: rows.length,
-      length: Math.round(len * 10) / 10,
-      selfW: Math.round(selfW * 10) / 10,
-      loadW: Math.round(loadW * 10) / 10,
-      estLoad: Math.round(estLoad * 10) / 10,        // 推算载重合计（载重缺失按车型/货物补全）
-      weight: Math.round((selfW + loadW) * 10) / 10, // 总重 = 自重 + 载重
-      calcW: Math.round((selfW + estLoad) * 10) / 10 // 计重 = 自重 + 推算重量（推算载重）
+      length: Utils.round1(len),
+      selfW: Utils.round1(selfW),
+      loadW: Utils.round1(loadW),
+      estLoad: Utils.round1(estLoad),        // 推算载重合计（载重缺失按车型/货物补全）
+      weight: Utils.round1(selfW + loadW),   // 总重 = 自重 + 载重
+      calcW: Utils.round1(selfW + estLoad)   // 计重 = 自重 + 推算重量（推算载重）
     };
   }
   /** 动态刷新抽屉标题：有选中行时按选中行求和，无选中行时恢复为全部行合计 */
@@ -471,14 +483,20 @@
       : list;
     var t = computeTotals(rows, detailEditMode ? detailEditExcluded : null);
     var name = YardConfig.getTrack(r.track);
+    // 超限阈值统一取 YardConfig.thresholds，避免与主表 render() 各写一套魔数
+    var thr = YardConfig.thresholds || { overlong: 70, overloadTons: 5000 };
+    // 总重 / 计重合并为一个 span：默认显示「总重」，双击进入编辑模式后切换显示「计重」。
+    //（warn 按当前显示的数值判定：非编辑看总重是否超限、编辑看计重是否超限。）
+    var showWeight = detailEditMode ? t.calcW : t.weight;
     $('drawerTitle').innerHTML =
       '<span class="dt-name">' + escapeHtml(name ? name.name : r.track) + ' - </span>' +
       '<span class="dt-total">辆数：' + t.count + '</span>' +
-      '<span class="dt-total' + (t.length > 70 ? ' warn' : '') + '">换长：' + t.length.toFixed(1) + '</span>' +
+      '<span class="dt-total' + (t.length > thr.overlong ? ' warn' : '') + '">换长：' + t.length.toFixed(1) + '</span>' +
       '<span class="dt-total">自重：' + t.selfW.toFixed(1) + '</span>' +
       '<span class="dt-total">载重：' + t.loadW.toFixed(1) + '</span>' +
-      '<span class="dt-total dt-weight' + (t.weight > 5000 ? ' warn' : '') + '">总重：' + t.weight.toFixed(1) + '</span>' +
-      '<span class="dt-total dt-weight dt-weight-edit' + (detailEditMode ? ' editing' : '') + (t.calcW > 5000 ? ' warn' : '') + '">计重：' + t.calcW.toFixed(1) + '</span>';
+      '<span class="dt-total dt-weight dt-weight-edit' + (detailEditMode ? ' editing' : '') + (showWeight > thr.overloadTons ? ' warn' : '') + '">' +
+        (detailEditMode ? '计重：' : '总重：') + showWeight.toFixed(1) +
+      '</span>';
   }
   /** 重新渲染当前股道明细（带入 excluded / 编辑态：进入编辑才显示推算值，退出复原为空） */
   function renderCurrentDetail() {
@@ -597,17 +615,12 @@
           if (c.disp === 'raw') {
             return '<td class="dest">' + renderStationLink(raw) + '</td>';
           }
-          // 到站列：显示值由「记事是否匹配到方向库站名」决定（渲染层，不改原始数据）
-          //   ① 匹配到站名（__destIsStation）→ 显示该站名，原到站是空/钦州港/湛江 都一样；
-          //   ② 未匹配到 → 保持原到站；原到站为空时才显示推算的罐型/车种（沿用原行为）。
-          // 显示值 ≠ 原到站 → 视为派生，挂 .derived 斜体（方向色由 renderDest 照常叠加）。
-          var rawDest = String(row.__destRaw == null ? '' : row.__destRaw).trim();
-          var dv = row.__dest == null ? '' : String(row.__dest).trim();
-          var show = opts.destProcessed ? dv
-                   : (row.__destIsStation ? dv : (rawDest || dv));
-          if (show) {
+          // 到站列：显示值判定抽到 dest-color.js 的 destDisplayValue（纯函数），
+          // 明细抽屉与搜索抽屉共用同一口径，避免两处各写一遍、日后悄悄走偏。
+          var dd = destDisplayValue(row, opts.destProcessed);
+          if (dd.text) {
             return '<td class="dest">' +
-                   renderDest(show, true, show !== rawDest ? 'derived' : '') +
+                   renderDest(dd.text, true, dd.derived ? 'derived' : '') +
                    '</td>';
           }
           return '<td class="dest"></td>';
@@ -645,8 +658,8 @@
         }
         // 品名列：汽油/航煤标黄底（对齐 VBA 显示信息.bas）
         if (c.col === COL.GOODS) {
-          var pm = raw == null ? '' : String(raw);
-          var jishi = row[COL.NOTE] == null ? '' : String(row[COL.NOTE]);
+          var pm = Utils.text(raw);
+          var jishi = Utils.text(row[COL.NOTE]);
           if ((pm.indexOf('汽油') !== -1 || pm.indexOf('航煤') !== -1 || jishi.indexOf('汽油') !== -1) && jishi !== '原装汽油') {
             var clsP = c.cls ? c.cls + ' car-yellow-bg' : 'car-yellow-bg';
             return '<td class="' + clsP + '">' + escapeHtml(pm) + '</td>';
@@ -656,25 +669,17 @@
                escapeHtml(raw == null ? '' : raw) + '</td>';
       }).join('');
       var attr = opts.rowAttr ? (opts.rowAttr(row, i) || '') : '';
-      return '<tr' + attr + '>' + tds + '<td class="stay"></td></tr>';
-    }).join('');
-
-    // 停时列：需单独计算
-    // 复用 Utils.parseArriveTime：兼容 Date 实例、"2026/9/2T08:30:00"、"2026年9月2日" 等写法
-    var body = els.body.querySelectorAll('tr');
-    list.forEach(function (row, i) {
+      // 停时列：在拼接阶段直接算好写进 <td>，省掉渲染后的二次全表遍历。
+      // （原实现先 innerHTML 重建，再 querySelectorAll('tr') + 每行 querySelector('td.stay')
+      //   逐个回填——大股道时是 O(n) 次 DOM 查询，且多一轮样式重算。）
+      // 复用 Utils.parseArriveTime：兼容 Date 实例、"2026/9/2T08:30:00"、"2026年9月2日" 等写法
       // 优先复用 aggregate 预处理已缓存的 __arrTime；缺省时回退解析（兼容非聚合来源的行）
-      var d = (row.__arrTime != null) ? row.__arrTime : Utils.parseArriveTime(row[COL.ARRTIME]);
-      var hrs = d ? Math.floor((base - d) / 3600000) : '';
-      var td = body[i] && body[i].querySelector('td.stay');
-      if (td) {
-        td.textContent = hrs;
-        if (hrs !== '' && hrs > YardConfig.thresholds.bigCarHours) {
-          td.style.background = '#fff3cd';
-          td.style.fontWeight = '700';
-        }
-      }
-    });
+      var arrD = (row.__arrTime != null) ? row.__arrTime : Utils.parseArriveTime(row[COL.ARRTIME]);
+      var hrs = arrD ? Math.floor((base - arrD) / 3600000) : '';
+      var stayStyle = (hrs !== '' && hrs > YardConfig.thresholds.bigCarHours)
+        ? ' style="background:#fff3cd;font-weight:700"' : '';
+      return '<tr' + attr + '>' + tds + '<td class="stay"' + stayStyle + '>' + hrs + '</td></tr>';
+    }).join('');
   }
 
   function openDetail(idx) {
@@ -1138,6 +1143,9 @@
      *  用于 iframe 读不到时（跨域或改用独立标签页）仍能查重。 */
     var depRemoteCheci = [];
     function bindDepReceive() {
+      // 直读 localStorage（勿改走 Store）：该键由「独立标签页 / 浏览器扩展」等外部页面写入，
+      // 而 Store 有内存缓存（其设计假设「读写都经 Store」）→ 走 Store 会读到过期值。
+      // 键名集中登记在 Store.KEYS.depCheci，避免拼写漂移。
       try { var s = localStorage.getItem('zhancun.depCheci'); if (s) depRemoteCheci = JSON.parse(s) || []; }
       catch (e) {}
       try {
@@ -1489,10 +1497,11 @@
         gridFontSizeVal.textContent = savedFs + 'px';
         applyTableFontSize(savedFs);
       }
+      // 刻度节点是静态的，缓存一次即可——滑块 input 高频触发，避免每次都 querySelectorAll
+      var tickEls = Array.prototype.slice.call(document.querySelectorAll('.range-ticks .tick'));
       function highlightTick(v) {
-        var ticks = document.querySelectorAll('.range-ticks .tick');
-        for (var i = 0; i < ticks.length; i++) {
-          ticks[i].classList.toggle('active', ticks[i].textContent === v);
+        for (var i = 0; i < tickEls.length; i++) {
+          tickEls[i].classList.toggle('active', tickEls[i].textContent === v);
         }
       }
       // 拖动滑块会高频触发 input，写存储走防抖，避免每次都落盘 localStorage
@@ -1557,23 +1566,40 @@
      * @param storeKey   持久化键（Store.get/set）
      * @param defaultList 未配置时的默认值
      */
+    /**
+     * 读取「列表型」配置：存在且为数组 → 返回；否则 null（调用方 `|| 默认列表` 回落）。
+     * 与 Store.getList 的区别：本函数保留「空数组」语义——存了 [] 就返回 []，不回落默认值。
+     */
+    function readListOrNull(storeKey) {
+      var list = Store.get(storeKey, null);
+      return Array.isArray(list) ? list : null;
+    }
+
+    /**
+     * 生成一个「可删除标签」项（卸车地点 / 黑罐识别 / 货物推算重量 三处列表共用同一结构）。
+     * @param labelHtml 已转义的标签内容（各处内容形态不同，由调用方转义后传入）
+     * @param dataName  该项名称（原样传入，函数内转义后写入 data-name）
+     * @param {string} [title] 可选 title 提示（原样传入，函数内转义）
+     */
+    function spotItemHtml(labelHtml, dataName, title) {
+      return '<span class="spot-item" data-name="' + escapeHtml(dataName) + '"' +
+               (title ? ' title="' + escapeHtml(title) + '"' : '') + '>' +
+               labelHtml +
+               '<button class="spot-del" title="删除" aria-label="删除">×</button>' +
+             '</span>';
+    }
+
     function initSpotConfig(containerId, addBtnId, storeKey, defaultList) {
       var el = $(containerId);
       var addBtn = $(addBtnId);
       if (!el) return;
       var adding = false;
 
-      function getList() {
-        var list = Store.get(storeKey, null);
-        return Array.isArray(list) ? list : null;   // null → 用默认
-      }
+      function getList() { return readListOrNull(storeKey); }
       function renderList() {
         var list = getList() || defaultList;
         var html = list.map(function (name) {
-          return '<span class="spot-item" data-name="' + escapeHtml(name) + '">' +
-                   escapeHtml(name) +
-                   '<button class="spot-del" title="删除" aria-label="删除">×</button>' +
-                 '</span>';
+          return spotItemHtml(escapeHtml(name), name);
         }).join('');
         if (adding) {
           html += '<span class="spot-item spot-editing">' +
@@ -1647,17 +1673,11 @@
       if (!el || !modal) return;
       var editName = null;   // 正在编辑的货物名称（null = 新增）
 
-      function getList() {
-        var list = Store.get(storeKey, null);
-        return Array.isArray(list) ? list : null;   // null → 用默认
-      }
+      function getList() { return readListOrNull(storeKey); }
       function renderList() {
         var list = getList() || defaultList;
         el.innerHTML = list.map(function (item) {
-          return '<span class="spot-item" data-name="' + escapeHtml(item.name) + '" title="双击修改">' +
-                   escapeHtml(item.name) + ':' + escapeHtml(item.weight) +
-                   '<button class="spot-del" title="删除" aria-label="删除">×</button>' +
-                 '</span>';
+          return spotItemHtml(escapeHtml(item.name) + ':' + escapeHtml(item.weight), item.name, '双击修改');
         }).join('');
         if (addBtn) el.appendChild(addBtn);   // 新增按钮保持在末尾
       }
@@ -1677,7 +1697,7 @@
         if (!n && !(w > 0)) { setHint(''); return; }
         if (!n) { setHint('请填写货物名称', 'warn'); return; }
         if (!(w > 0)) { setHint('请填写重量（>0）', 'warn'); return; }
-        setHint(n + ' · ' + (Math.round(w * 10) / 10) + ' 吨');
+        setHint(n + ' · ' + Utils.round1(w) + ' 吨');
       }
       function resetOk() {
         mergeArmed = false;
@@ -1711,7 +1731,7 @@
         if (!name) { setHint('名称不能为空', 'warn'); return; }
         if (!(weight > 0)) { setHint('重量需大于 0', 'warn'); return; }
         var list = (getList() || defaultList).slice();
-        var rounded = Math.round(weight * 10) / 10;
+        var rounded = Utils.round1(weight);
         if (editName == null) {
           // 新增：不允许与已有同名
           if (list.some(function (it) { return it.name === name; })) { setHint(name + ' 已存在', 'warn'); return; }

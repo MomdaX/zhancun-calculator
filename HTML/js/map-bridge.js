@@ -13,7 +13,9 @@
 (function (global) {
   'use strict';
 
-  var POST_ORIGIN = '*';      // file:// 下 origin 为 'null'
+  // 目标 origin：file:// 下只能是 '*'（该协议 origin 为 'null'，无法精确指定）；
+  // http(s) 下收紧为当前页 origin——Map 是同源 iframe，无需放宽为 '*'。
+  var POST_ORIGIN = (location.protocol === 'file:') ? '*' : location.origin;
   var READY_TIMEOUT = 60000;  // Map 初始化超时（毫秒）
 
   var state = {
@@ -91,6 +93,10 @@
 
   /* ---------------- 接收 Map 回传 ---------------- */
   function onMessage(e) {
+    // 只接受「本页地图 iframe」发来的消息。
+    // 不用 e.origin 判定：file:// 下 origin 为 'null'/空、不可靠；e.source 精确指向 iframe 的 window。
+    var frame = $('mapFrame');
+    if (!frame || e.source !== frame.contentWindow) return;
     var m = e.data;
     if (!m || typeof m !== 'object') return;
 

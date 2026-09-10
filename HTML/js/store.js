@@ -200,7 +200,12 @@
     detailCols: 'zhancun.detail.cols.v2',   // 历史列宽记忆键（已带前缀，keyOf 原样返回）
     cfgDzChecked: 'cfgDzChecked',
     corrInputs: 'corrInputs',
-    readyTrains: 'readyTrains'
+    readyTrains: 'readyTrains',
+    // 以下 4 个原为散写的字符串键（未集中登记），补入后调用处统一用 Store.KEYS.xxx
+    depCheci: 'depCheci',                        // 待发股道车次映射；由外部页写入，读取须直连 localStorage（绕过 Store 内存缓存）
+    depModalSize: 'depModalSize',                // 发车作业浮窗尺寸记忆
+    carTypeCfgCollapsed: 'carTypeCfgCollapsed',  // 车型高亮配置表收起状态
+    eyeProtect: 'eyeProtect'                     // 护眼背景色浓度
   };
 
   global.Store = {

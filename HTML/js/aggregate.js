@@ -38,6 +38,12 @@
    * ========================================================================== */
   var vbInStr = Utils.vbInStr;
   var vbVal = Utils.vbVal;
+
+  /* 注意事项「简要提示」关键词字符类（对齐 VBA 显示信息.bas 点后开/重点事项筛选）
+   * 含义：暂 不 走 去 向 点 后 开 列 扣 检 无 计 划 坏 超 偏 未 脏 禁 止 有 洗 排 磨 损
+   * 提到模块级常量：原写在逐组循环内，每个股道都重新构造一次同一正则。 */
+  var NOTE_KEY_RE = /[暂不走去向点后开列扣检无计划坏超偏未脏禁止有洗排磨损]/;
+  var NOTE_EXCLUDE = '不入扣';
   var vbLeft = Utils.vbLeft;
   var vbMid = Utils.vbMid;
   var extractCarType = Utils.extractCarType;
@@ -283,11 +289,6 @@
       var count = 0, totalLen = 0, totalLoad = 0, oldCar = 0;
       var dirSet = [], destMap = {}, typeMap = {}, trainMap = [], noteWordSet = [];
 
-      // 注意事项「简要提示」关键词字符类（对齐 VBA 显示信息.bas 点后开/重点事项筛选）
-      // 含义：暂 不 走 去 向 点 后 开 列 扣 检 无 计 划 坏 超 偏 未 脏 禁 止 有 洗 排 磨 损
-      var NOTE_KEY_RE = /[暂不走去向点后开列扣检无计划坏超偏未脏禁止有洗排磨损]/;
-      var NOTE_EXCLUDE = '不入扣';
-
       for (var m = 0; m < list.length; m++) {
         var row2 = list[m];
         count += 1;
@@ -363,11 +364,11 @@
         direction: dirStr,
         count: count,
         carTypes: typeStr,
-        length: Math.round(totalLen * 10) / 10,
+        length: Utils.round1(totalLen),
         dest: destStr,
         train: trainStr,
         note: noteStr,
-        load: totalLoad > 0 ? Math.round(totalLoad * 10) / 10 : 0,
+        load: totalLoad > 0 ? Utils.round1(totalLoad) : 0,
         oldCar: oldCar > 0 ? oldCar : 0,
         raw: list
       };
