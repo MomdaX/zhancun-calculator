@@ -55,11 +55,6 @@
     };
   }).filter(function (s) { return s.groups.length; });
 
-  /** 取股道显示名（如 "1道"、"H1"） */
-  function trackLabel(id) {
-    return global.YardConfig ? global.YardConfig.trackName(id) : String(id);
-  }
-
   /** 刷新每组标题的选中态与「已选/总数」 */
   function syncGroupState() {
     DZ_GROUPS.forEach(function (g) {
@@ -133,30 +128,11 @@
 
   /* ========================== 工具函数 ========================== */
 
-  /**
-   * 数值取值：统一复用 Utils.vbVal，与主表聚合引擎共用同一套规则。
-   *
-   * 原实现为 parseFloat(trim)。实测两者在常规数据上等价
-   * （parseFloat 同样会取前导数字，"12.5吨"→12.5、"38 吨"→38、全角空格亦被 trim 吃掉），
-   * 本次替换主要收益是消除"两套并存"这一隐患本身。
-   * 唯一实质差异：旧实现遇 "Infinity"/"-Infinity" 会返回 Infinity 并污染合计，
-   * vbVal 返回 0。故此处更稳，且行为变化仅限该极端输入。
-   */
-  var v = Utils.vbVal;
-
-  /** 方向映射：复用 Aggregate 的惰性单例，全局只解析一次 CSV */
-  function getDirMap() {
-    if (!global.Aggregate) return {};
-    return global.Aggregate.getDirectionIndex().map;
-  }
-
-  function isOpenTopBox(row) {
-    var note = String(row[COL.NOTE] || '').toUpperCase();
-    var train = String(row[COL.TRAIN] || '').toUpperCase();
-    if (/敞顶箱|敞车箱/.test(note)) return true;
-    if (/\b(86776|86774|49977|20328|34104)\d*\b/.test(note + train)) return true;
-    return false;
-  }
+  /* 纯计算部分（数值取值 / 方向映射 / 敞顶箱 / 车流属性判定）已拆到 rpt31814-calc.js
+   * ——无 DOM 依赖，可被 HTML/tests/run.js 直接加载做回归测试。 */
+  var RptCalc = global.Rpt31814Calc || {};
+  var v = RptCalc.v;
+  var getDirMap = RptCalc.getDirMap;
 
   /* ========================== 核心：设置车流属性 ==========================
    * 严格对齐 VBA「设置车流属性.bas」的 If / ElseIf 链：
@@ -173,71 +149,7 @@
    *     不是连续子串 "扣修"
    *   · ④ 必须带「载重>25」，否则到站为空的停留车会被误判成沙口/管内/南口
    * ================================================================== */
-  function setCarProperties(rawRows, drrSet, crrSet) {
-    var dirMap = getDirMap();
-    var brr = [];
-
-    rawRows.forEach(function (r) {
-      var track = String(r[COL.TRACK] || '').trim();
-      if (!track) return;
-
-      var carTypeRaw = r[COL.CARTYPE];
-      var carNo = r[COL.CARNO];
-      var load = v(r[COL.LOAD]);
-      var dest = String(r[COL.DEST] || '').trim();
-      var dirCode = String(r[COL.DIR] || '').trim();
-      var goods = String(r[COL.GOODS] == null ? '' : r[COL.GOODS]).trim();  // VBA arr(i,10) 品名
-      var note = String(r[COL.NOTE] || '');
-      var carType = Utils.determineCarType(carTypeRaw, carNo);
-
-      // 等价于 VBA 的 d.Exists(到站)
-      var inDir = dest !== '' && Object.prototype.hasOwnProperty.call(dirMap, dest);
-
-      var status;
-      if (dest === '防城港' && load > 4 && goods.indexOf('空') >= 0) {
-        // ① 防城港排空箱/重车：品名含"空"
-        status = dirMap[dest];
-      } else if (inDir && load > 25) {
-        // ② 到站交口（VBA Like "*[扣修]*" 为字符类：含"扣"或含"修"）
-        status = /[扣修]/.test(note) ? '空车' : dirMap[dest];
-      } else if (inDir && load < 10 && goods === '自备' && carType === 'G') {
-        // ③ 自备罐（品名为"自备"，且车种为 G）
-        status = '自备';
-      } else if (!inDir && load > 25) {
-        // ④ 站名不在方向库时按方向代号识别
-        if (dirCode === '3') status = '南口';
-        else if (dirCode === '2') status = '管内';
-        else status = '沙口';
-      } else {
-        // ⑤ 其余一律空车
-        status = '空车';
-      }
-
-      // 罐车记事含「汽油/航煤」保持原判；敞顶箱统一归为待发候选
-      var isOpen = isOpenTopBox(r);
-
-      var row = {
-        track: track, carType: carType, load: load, dest: dest,
-        dirCode: dirCode, note: note, carNo: String(carNo || ''),
-        status: status, isOpen: isOpen
-      };
-
-      // 待装覆盖
-      if (drrSet[track] && load < 25) {
-        if (carType === 'G' && row.carNo.charAt(0) === '0') row.status = '待装自备罐';
-        else row.status = '待装';
-      }
-
-      // 待发覆盖
-      if (crrSet[track]) {
-        row.status = '待发';
-      }
-
-      brr.push(row);
-    });
-
-    return brr;
-  }
+  var setCarProperties = RptCalc.setCarProperties;
 
   /* ========================== 核心：计算统计 ==========================
    * 性能优化：原实现对每个 type 都全表扫一遍 brr（9 类 ≈ 9 遍），
@@ -824,7 +736,7 @@
         var label = document.createElement('label');
         label.className = 'cfg-track';
         label.innerHTML = '<input type="checkbox" id="cfgTrack_' + id + '" data-track="' + id + '">' +
-          Utils.escapeHtml(trackLabel(id));
+          Utils.escapeHtml(YardConfig.trackName(id));
         wrap.appendChild(label);
       });
       box.appendChild(wrap);
@@ -839,7 +751,7 @@
         var label = document.createElement('label');
         label.className = 'cfg-track';
         label.innerHTML = '<input type="checkbox" id="cfgTrack_' + id + '" data-track="' + id + '">' +
-          Utils.escapeHtml(trackLabel(id));
+          Utils.escapeHtml(YardConfig.trackName(id));
         wrap.appendChild(label);
       });
       return wrap;
@@ -971,7 +883,7 @@
       var label = document.createElement('label');
       label.className = 'cfg-ready-track';
       label.innerHTML = '<input type="checkbox" data-ready="' + Utils.escapeHtml(id) + '"> ' +
-                        '<span class="cfg-ready-name">' + Utils.escapeHtml(trackLabel(id)) + '</span>';
+                        '<span class="cfg-ready-name">' + Utils.escapeHtml(YardConfig.trackName(id)) + '</span>';
 
       // 悬浮出现的「+」按钮（SVG 四方块带加号）
       var addBtn = document.createElement('button');

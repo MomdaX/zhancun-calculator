@@ -7,80 +7,28 @@
  *   - 不支持该 API 的浏览器自动降级为 <input type="file"> 手动选择
  *
  * ============================ 功能区块索引 ============================
- * 本文件约 1016 行，按职责划分为以下区块，便于定位（行号为当前快照，后续可能偏移）：
+ * 本文件（app.js）按职责划分为以下区块，便于定位（行号为当前快照，后续可能偏移）：
  *
- *   [列定义]        L13   COLUMNS / DETAIL_COLS —— 主表与明细表的列元数据
- *   [数据源]        L77   ensurePerm / pickFolder / loadFromDir / readAndRender
- *                        / renderFileSwitcher —— FSA 权限、IndexedDB、目录读取、文件切换
- *                        （最独立、state 引用最少；含浏览器原生 API，改后需手动点验）
- *   [主表渲染]      L302  renderDest / render / computeTotals / renderEmpty
- *                        —— 到站着色、主表 tbody 构建、合计、空态
- *   [明细抽屉]      L564  updateDetailTitle / openDetail / closeDetail / stepDetail
+ *   [列定义]              COLUMNS / DETAIL_COLS / BIANHAO_* —— 已抽到 js/columns.js（纯常量，零依赖）
+ *   [主表渲染]      render / computeTotals / renderEmpty
+ *                        —— 主表 tbody 构建、合计、空态（到站着色 renderDest 已抽到 js/dest-color.js，纯函数零 DOM）
+ *   [明细抽屉]      updateDetailTitle / openDetail / closeDetail / stepDetail
  *                        —— 股道明细抽屉的打开、翻页、标题
- *   [明细多选]      L764  selectRow / renderDrag / endDrag / clearDetailSel
+ *   [明细多选]      selectRow / renderDrag / endDrag / clearDetailSel
  *                        —— 明细行拖拽范围选 + 单击切换（bind 内联，未抽组件）
- *   [事件绑定]      L729  bind —— 全部 DOM 事件绑定
- *   [入口]          L969  init —— 启动编排
- *   [对外接口]      文件末尾  window.YardApp —— 数据 / 配置 / 渲染 / 交互的统一出口，
- *                        新增模块一律通过它复用主表能力（详见该区块注释）
+ *   [事件绑定]      bind —— 全部 DOM 事件绑定
+ *   [入口]          init —— 启动编排（含向 global 注入 state/render/loading/syncPickFolderBtn 桥接）
+ *   [对外接口]      文件末尾  window.YardApp —— 数据 / 配置 / 渲染 / 交互的统一出口
  *
- * 说明：state 为 IIFE 内私有对象（约 51 处引用），故未做文件拆分；
- *       如需拆分，数据源区块（L77-301）耦合最弱，最优先。
+ * 说明：state 为 IIFE 内私有对象，数据源区块（ensurePerm/pickFolder/loadFromDir/
+ *       readAndRender/renderFileSwitcher，原耦合最弱）已抽到 js/data-source.js，
+ *       通过 init 注入的 global 桥接访问私有资源；index.html 中 data-source.js 在 app.js 之前加载。
+ *       另：列定义（COLUMNS/DETAIL_COLS/BIANHAO_*）抽到 js/columns.js，到站着色（renderDest
+ *       等纯函数）抽到 js/dest-color.js；三者均为零 DOM 依赖，可被 node 节点测试覆盖。
  * =====================================================================
  */
 (function (global) {
   'use strict';
-
-  /* ============================ 列定义 ============================ */
-  var COLUMNS = [
-    { key: 'note',      title: '注意事项',       width: 112, cls: 'col-a' },
-    // 分组合并列：在股道列前，按分组跨行合并（rowspan），仅每组首行输出单元格；文字竖排
-    { key: 'group',     title: '',               width: 32,  cls: 'col-b-group' },
-    { key: 'track',     title: '股道',           width: 66,  cls: 'col-b track' },
-    { key: 'direction', title: '方向',           width: 64 },
-    { key: 'count',     title: '车数',           width: 48,  num: true, cls: 'mid' },
-    { key: 'carTypes',  title: '车种',           width: 124 },
-    { key: 'length',    title: '换长',           width: 58,  num: true, cls: 'mid' },
-    { key: 'dest',      title: '车辆信息',       width: 340, dest: true },
-    { key: 'empty',     title: '空箱/空车',      width: 78,  num: true },
-    { key: 'heavy',     title: '重车',           width: 52,  num: true },
-    { key: 'train',     title: '到达车次',       width: 76 },
-    { key: 'load',      title: '载重',           width: 72,  num: true, cls: 'mid' },
-    { key: 'oldCar',    title: '老牌车',         width: 60,  num: true, cls: 'mid' }
-  ];
-
-  /* 「编好」按钮：挂在表头 th[9]（XPath 1 起 → COLUMNS[8] = empty「空箱/空车」）
-   * 的第 1~30 个数据行。选中该单元格后以 ::after 伪元素浮现，点击打开发车作业全流程。
-   * 用 COLUMNS 下标推导而非写死 key：将来增删列时自动跟随。 */
-  var BIANHAO_COL     = COLUMNS[8] ? COLUMNS[8].key : 'empty';
-  /* 生效股道区间（按 track.config.js 的 TRACK_DEFS 顺序取 index 判定）：
-   * 1道(1) … X15，含两端。写股道 id 而非行号——行号会随分组/空线显隐而浮动。 */
-  var BIANHAO_FROM    = '1';
-  var BIANHAO_TO      = 'X15';
-  var BIANHAO_EXCLUDE = ['B1', 'B2'];   // 排除边修线（B1/B2 不参与编好）
-  var BIANHAO_HIT_W   = 36;   // 伪元素命中宽度：自单元格左缘起算（px）
-
-  // fmt: track = 股道显示名（到发线加"道"）  dest = 到站按方向着色
-  // col 取 Aggregate.COL 常量：SMIS 导出列序变动时只需改 aggregate.js 一处。
-  //
-  // 【关于旧注释的更正】此处原写作「aggregate.js 在 app.js 之后才加载，不能在
-  // IIFE 顶部引用 COL，必须做成函数」，与 index.html 的实际加载顺序相反：
-  // aggregate.js（第 207 行）先于 app.js（第 210 行）。且本文件第 67 行的
-  // `var COL = Aggregate.COL;` 本就是顶层引用，早已证明该限制不存在。
-  // 列定义是常量，故直接写成常量数组，无需再包一层函数。
-  var DETAIL_COLS = [
-    { col: Aggregate.COL.TRACK,   t: '股道', w: 54, fmt: 'track' },
-    { col: Aggregate.COL.SEQ,     t: '顺', w: 34 },
-    // 车号在车种之前（现场按车号点车，先找号再看车型）
-    { col: Aggregate.COL.CARNO, t: '车号', w: 78 }, { col: Aggregate.COL.CARTYPE, t: '车种', w: 68 },
-    { col: Aggregate.COL.TARE,    t: '自重', w: 52 }, { col: Aggregate.COL.LEN,   t: '换长', w: 50, cls: 'mid' },
-    { col: Aggregate.COL.LOAD,    t: '载重', w: 56, cls: 'mid' },
-    { col: Aggregate.COL.DEST,    t: '到站', w: 120, disp: 'processed' },
-    { col: Aggregate.COL.DIR,     t: '方向', w: 42 }, { col: Aggregate.COL.GOODS, t: '品名', w: 90 },
-    { col: Aggregate.COL.FROM,    t: '发站', w: 110, disp: 'raw' },
-    { col: Aggregate.COL.NOTE,    t: '记事', w: 170 },
-    { col: Aggregate.COL.TRAIN,   t: '车次', w: 62 }, { col: Aggregate.COL.CONSIGNEE, t: '收货人', w: 100 }, { col: Aggregate.COL.ARRTIME, t: '到达时间', w: 128 }
-  ];
 
   /* ============================ 全局状态 ============================ */
   var state = {
@@ -109,334 +57,7 @@
     $('loading').className = show ? 'loading show' : 'loading';
   }
 
-  /* =================== 目录权限 =================== */
-  function ensurePerm(handle, mode) {
-    var opts = { mode: mode || 'read' };
-    if (!handle.queryPermission) return Promise.resolve(true);
-    return handle.queryPermission(opts).then(function (p) {
-      if (p === 'granted') return true;
-      if (!handle.requestPermission) return false;
-      return handle.requestPermission(opts).then(function (p2) { return p2 === 'granted'; });
-    });
-  }
-
-  /** 列出目录中的 xls 文件，按修改时间倒序（相同则按名称倒序） */
-  function listXlsInDir(dirHandle) {
-    var files = [];
-    if (!dirHandle.entries) return Promise.resolve(files);
-    var it = dirHandle.entries(), readNext;
-    readNext = function () {
-      return it.next().then(function (r) {
-        if (r.done) return files;
-        var entry = r.value;
-        if (!entry) return files;
-        var name = entry[0], h = entry[1];
-        var step = function () { return readNext(); };
-        if (h.kind !== 'file' || !/\.(xls|xlsx)$/i.test(name)) return step();
-        return h.getFile().then(function (f) {
-          files.push({ name: name, handle: h, lastModified: f.lastModified, size: f.size });
-          return step();
-        }).catch(function () { return step(); });
-      });
-    };
-    return readNext().then(function (list) {
-      list.sort(function (a, b) {
-        return (b.lastModified - a.lastModified) || b.name.localeCompare(a.name);
-      });
-      return list;
-    });
-  }
-
-  /* =================== 文件加载入口 =================== */
-
-  /** 记住已选定的数据文件夹名（统一两处写入，避免重复直调 Store） */
-  function rememberFolder(h) {
-    if (h && h.name) Store.set('folderName', h.name);
-  }
-
-  /** 选择文件夹（File System Access API） */
-  function pickFolder() {
-    if (!window.showDirectoryPicker) {
-      // 已直接弹出文件选择器，提示语不必再指向某个不存在的按钮
-      toast('当前浏览器不支持文件夹选择，请在弹出的窗口中选择 xls 文件', 'error');
-      $('fileInputMulti').click();
-      return;
-    }
-    window.showDirectoryPicker({ id: 'yardXls', mode: 'read' })
-      .then(function (h) {
-        rememberFolder(h);
-        syncPickFolderBtn(false);   // 已选定，按钮功成身退
-        return Store.async.set('xlsDir', h).then(function () {
-          state.dirHandle = h;
-          return loadFromDir(h, true);
-        });
-      })
-      .catch(function (e) {
-        if (e && e.name === 'AbortError') return;
-        toast('选择文件夹失败：' + (e && e.message || e), 'error');
-      });
-  }
-
-  /** 从文件夹读取最新 xls；showPicker=true 时若无文件则提示 */
-  function loadFromDir(dirHandle, showPicker) {
-    return ensurePerm(dirHandle, 'read').then(function (ok) {
-      if (!ok) { toast('未获得文件夹读取权限', 'error'); return; }
-      loading(true, '正在扫描文件夹…');
-      return listXlsInDir(dirHandle);
-    }).then(function (files) {
-      if (!files) return;
-      if (!files.length) {
-        loading(false);
-        toast('该文件夹内没有 xls 文件', 'error');
-        return;
-      }
-      // 自动取最新；若多于 1 个，在状态栏提示可切换
-      var target = files[0];
-      state.fileList = files;
-      return readAndRender(target.handle.getFile(), target.name, files);
-    }).catch(function (e) {
-      loading(false);
-      toast('读取失败：' + (e && e.message || e), 'error');
-    });
-  }
-
-  /** 读取 File 对象 → 解析 → 聚合 → 渲染 */
-  function readAndRender(filePromise, fileName, fileList) {
-    loading(true, '正在解析 ' + (fileName || '') + ' …');
-    return Promise.resolve(filePromise)
-      .then(function (file) {
-        return file.arrayBuffer();
-      })
-      .then(function (buf) {
-        // 让出一帧，确保 loading 遮罩先渲染出来再开始同步解析
-        return new Promise(function (resolve) {
-          requestAnimationFrame(function () {
-            requestAnimationFrame(function () { resolve(buf); });
-          });
-        });
-      })
-      .then(function (buf) {
-        var wb = XLSX.read(new Uint8Array(buf), { type: 'array', cellDates: true });
-        var ws = wb.Sheets[wb.SheetNames[0]];
-        var aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
-
-        // 定位表头行（含"股道"）
-        var hIdx = -1;
-        for (var i = 0; i < Math.min(aoa.length, 12); i++) {
-          if (aoa[i] && aoa[i].indexOf('股道') >= 0) { hIdx = i; break; }
-        }
-        if (hIdx < 0) throw new Error('未找到含「股道」的表头行');
-
-        // 提取标题行中的打印日期，作为停时基准
-        var pd = null;
-        for (var j = 0; j < hIdx; j++) {
-          var line = (aoa[j] || []).join(' ');
-          var m = /(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{1,2})/.exec(line);
-          if (m) {
-            pd = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
-            break;
-          }
-        }
-        state.printDate = pd;
-
-        var rows = aoa.slice(hIdx + 1).filter(function (r) {
-          return r && r.some(function (c) { return String(c).trim() !== ''; });
-        });
-
-        state.rawRows = rows;
-        var base = pd || new Date();
-        var agg = Aggregate.aggregate(rows, state.dirIndex.map, state.dirIndex.stations,
-                                      YardConfig.thresholds, base);
-
-        // 按配置清单顺序排列；清单内无数据的股道保留空行（与 Excel 的 92 行框架一致）
-        // 清单外的股道追加在末尾
-        var ordered = [], known = {}, extra = [];
-        YardConfig.tracks.forEach(function (t) {
-          if (agg[t.id]) { ordered.push(agg[t.id]); }
-          else {
-            ordered.push({
-              track: t.id, direction: '', count: 0, carTypes: '', length: 0,
-              dest: '', train: '', load: 0, oldCar: 0, raw: []
-            });
-          }
-          known[t.id] = 1;
-        });
-        Object.keys(agg).forEach(function (k) {
-          if (!known[k]) extra.push(agg[k]);
-        });
-        extra.sort(function (a, b) { return a.track.localeCompare(b.track, 'zh'); });
-        state.rows = ordered.concat(extra);
-
-        state.currentFile = fileName || '手动选择的文件';
-        render();
-        loading(false);
-
-        var extraMsg = extra.length ? '，其中清单外 ' + extra.length + ' 个已追加' : '';
-        var multi = '';
-        if (fileList && fileList.length > 1) {
-          // 只有当加载的确实是列表首项（最新）时才说"已取最新"
-          multi = (fileList[0] && fileList[0].name === state.currentFile)
-            ? '（文件夹内共 ' + fileList.length + ' 个文件，已取最新）'
-            : '（文件夹内共 ' + fileList.length + ' 个文件）';
-        }
-        toast('已加载：' + state.currentFile + multi + extraMsg, 'ok');
-        if (fileList && fileList.length > 1) {
-          renderFileSwitcher(fileList, state.currentFile);
-        }
-      })
-      .catch(function (e) {
-        loading(false);
-        toast('解析失败：' + (e && e.message || e), 'error');
-        console.error(e);
-      });
-  }
-
-  /**
-   * 文件夹内有多个文件时，显示切换列表。
-   * activeName：刚加载完成的文件名，用于重建选项后把下拉框还原到对应项
-   * （innerHTML 重建会令 selectedIndex 归零，不还原会看起来"切换无效"）。
-   */
-  function renderFileSwitcher(files, activeName) {
-    var sel = $('fileSwitcher');
-    if (!sel) {
-      var wrap = document.createElement('span');
-      wrap.innerHTML = '<select id="fileSwitcher" class="btn" style="max-width:236px"></select> ';
-      $('btnReload').parentNode.insertBefore(wrap, $('btnReload'));
-      sel = $('fileSwitcher');
-      sel.addEventListener('change', function () {
-        var f = state.fileList[sel.selectedIndex];
-        if (f) readAndRender(f.handle.getFile(), f.name, state.fileList);
-      });
-    }
-    // 先算出目标选中项，写入 innerHTML 后立即还原
-    var idx = -1;
-    for (var i = 0; i < files.length; i++) {
-      if (files[i].name === activeName) { idx = i; break; }
-    }
-    if (idx < 0) idx = sel.selectedIndex;   // 兜底：保持重建前的选择
-
-    sel.innerHTML = files.map(function (f, i) {
-      var match = f.name.match(/共\s*(\d+)\s*辆/);
-      var count = match ? match[1] : '?';
-      var label = count + '辆-' + Utils.formatDateTime(new Date(f.lastModified));
-      var isNew = (i === 0);
-      if (isNew) label += ' ● NEW';
-      return '<option value="' + i + '"' +
-             (isNew ? ' style="font-weight:800;color:var(--accent)"' : '') +
-             '>' + label + '</option>';
-    }).join('');
-
-    if (idx >= 0 && idx < files.length) sel.selectedIndex = idx;
-  }
-
-  /* =================== 到站富文本着色 =================== */
-  /**
-   * @param {string}  text 到站/发站文本
-   * @param {boolean} clickable 是否标记可双击的车站（仅明细页为 true，
-   *        主表是汇总串如「德保44」，双击无意义，故不加虚线下划线）
-   */
-  /**
-   * 判断片段是否为「卸车地点」（到卸车的细化去向，如 永鑫/货场/天盛/港务局）。
-   * 列表来自 Store.unloadSpots（用户在设置里增删），与 aggregate 段2 共用同一份配置。
-   * 未配置时回落默认 4 个，保证无设置也能正确加粗。
-   *
-   * 到站串片段是"永鑫50"（地点+车数），要先去掉尾部数字再匹配地点词。
-   */
-  function isUnloadSpot(p) {
-    if (!p) return false;
-    var name = String(p).replace(/\d+$/, '');   // 去尾数：永鑫50 → 永鑫
-    if (!name) return false;
-    var list = (Store.get && Store.get('unloadSpots', null)) ||
-               ['永鑫', '货场', '天盛', '港务局'];
-    return list.indexOf(name) >= 0;
-  }
-
-  /**
-   * 判断片段是否为「黑罐细化子类」（G7 罐车按收货人识别，如 中粮/外运）。
-   * 列表来自 Store.blackTankSpots，与 aggregate 段1 共用同一份配置。
-   * 未配置时回落默认 中粮/外运。
-   */
-  function isBlackTankSpot(p) {
-    if (!p) return false;
-    var name = String(p).replace(/\d+$/, '');
-    if (!name) return false;
-    var list = (Store.get && Store.get('blackTankSpots', null)) ||
-               ['中粮', '外运'];
-    return list.indexOf(name) >= 0;
-  }
-
-  /**
-   * 取片段的车型部分：到站串是「分类+车数」，如 "P5" / "DK2" / "YW3"。
-   * 只取前导字母交给车型高亮配置匹配；中文片段（车站名、到卸、黑罐）返回 ''。
-   */
-  function typeKeyOf(p) {
-    var m = /^[A-Za-z]+/.exec(String(p == null ? '' : p));
-    return m ? m[0] : '';
-  }
-
-  function renderDest(text, clickable) {
-    if (!text) return '';
-    var parts = String(text).trim().split(/\s+/).filter(Boolean);
-    var map = state.dirIndex.map;
-    return parts.map(function (p) {
-      var cls = '';
-      // ① 车型高亮（「设置 → 车型高亮」可编辑的颜色/加粗）。
-      //    主表只挂「非平板车」的 ctc 类（颜色=字体色）；平板车（X/NX）的底色
-      //    规则仅作用于明细车种列，主表到站列不挂底色 —— 见用户对齐 VBA 的约束。
-      var tk = typeKeyOf(p);
-      if (tk) {
-        var m = Utils.carTypeMatch(tk);
-        if (m && !m.isFlatbed) cls = Utils.carTypeClass(tk);
-      }
-      // ② 未命中配置 → 回落 VBA 原有规则（显示信息.bas「标记到站方向颜色」：
-      //    YW/D/P → 红加粗，到卸/黑罐 → 黑加粗）。配置里关掉的项会走到这里。
-      if (!cls) {
-        if (/^(YW|D|P)/.test(p)) cls = 'danger';
-        else if (/^(到卸|黑罐)/.test(p)) cls = 'heavy';
-        // 卸车地点（到卸的细化，如 永鑫/货场/天盛/港务局，或用户在设置里增删的）
-        // 与"到卸"同款黑加粗。列表来自 Store.unloadSpots，与 aggregate 段2 一致。
-        else if (isUnloadSpot(p)) cls = 'heavy';
-        // 黑罐细化子类（G7 罐按收货人识别，如 中粮/外运），与"黑罐"同款加粗
-        else if (isBlackTankSpot(p)) cls = 'heavy';
-        else {
-          var m = /[\u4e00-\u9fa5]+/.exec(p);
-          if (m) {
-            var dir = map[m[0]] || '';
-            if (/沙/.test(dir)) cls = 'shakou';
-            else if (/南/.test(dir)) cls = 'nankou';
-            else if (/管内/.test(dir)) cls = 'guanna';
-          }
-        }
-      }
-      // 车站名标记为可点击（双击查看径路）
-      var link = (clickable && isStationName(p)) ? ' station-link' : '';
-      return '<span class="' + cls + link + '" data-station="' +
-             escapeHtml(stationOf(p)) + '">' + escapeHtml(p) + '</span>';
-    }).join(' ');
-  }
-
-  /**
-   * 判断片段是否为车站名。
-   * 方向库仅 583 条，而地图车站库有 7000+ 条，用方向库匹配会大量漏判。
-   * 故改用排除法：非分类词的中文片段即视为车站名。
-   * 若地图侧仍查不到，桥接层会收到失败回执并提示，不影响使用。
-   */
-  var NOT_STATION = {
-    '路罐': 1, '自备罐': 1, '黑罐': 1, '到卸': 1, '空车': 1,
-    '汽油': 1, '柴油': 1, '原装': 1, '卸空': 1, '循环': 1
-  };
-
-  function stationOf(part) {
-    var m = /[\u4e00-\u9fa5]+/.exec(part);
-    if (!m) return '';
-    var name = m[0];
-    if (NOT_STATION[name]) return '';
-    // 车种字母（C/X/P/G/YW/T/B/D/K/N 开头）不是站名
-    if (/^[CXPGYWTBDKN]/.test(name)) return '';
-    return name;
-  }
-
-  function isStationName(part) { return !!stationOf(part); }
+  /* 到站富文本着色 / 车型高亮 / 车站名识别 已抽到 js/dest-color.js（纯函数，挂 global） */
 
   /* =================== 虚拟股道显示/隐藏 =================== */
   /**
@@ -649,8 +270,11 @@
         var v = r[c.key];
         // 股道列用显示名：到发线显示为「1道」，其余保持原样
         if (c.key === 'track' && cfg) v = cfg.name;
+        // 有效长：股道固有属性，按股道 id 查配置（与车辆数据无关，故不在 aggregate 里算）
+        if (c.key === 'effLen') v = YardConfig.trackLength(r.track);
         var cls = c.cls || '';
         var style = '';
+        var attrs = '';
         var inner;
 
         if (c.dest) {
@@ -660,6 +284,10 @@
           // 换长保留 1 位小数（如 0.0）；其余数值列维持原样
           if (c.key === 'length') {
             inner = (v === 0 || v === '' || v == null) ? '' : Number(v).toFixed(1);
+          } else if (c.key === 'effLen') {
+            // 单元格显示「换长」= 有效长 ÷ 11（11m 为 1 换长），保留 1 位、第二位起舍去不进位；
+            // 原始米数挂 title，鼠标悬停可见
+            inner = (v === 0 || v === '' || v == null) ? '' : effLenToChang(v);
           } else {
             inner = (v === 0 || v === '' || v == null) ? '' : escapeHtml(String(v));
           }
@@ -685,7 +313,11 @@
         if (c.key === 'train' && hasOil) cls += ' oil';
         if (c.key === 'train' && String(v || '').charAt(0) === '6') cls += ' train-loop';
         if (c.key === 'track' && isBlank) cls += ' empty-track';
-        if (c.key === 'direction') inner = escapeHtml(v || '').replace(/\n/g, '<br>');
+        // 有效长列：原始米数存入 data-len，由 CSS 在单元格右侧「抽屉抽出」显示
+        // （不用原生 title —— 它固定弹在下方，且无法定制样式与动画）
+        if (c.key === 'effLen' && !(v === 0 || v === '' || v == null)) {
+          attrs = ' data-len="' + escapeHtml(v + 'm') + '"';
+        }
 
         // 分组「合并列」：在股道列之前，按分组跨行合并（rowspan）。
         // 仅每组首行输出带 rowspan 的分组单元格，组内后续行不输出（由 rowspan 覆盖）。
@@ -704,7 +336,7 @@
         /* data-col 记录列 key：分组列用 rowspan 合并后，各行的 td 个数并不一致
          *（非首行少一个分组单元格），td.cellIndex 会整体前移 1 位而不可靠。
          * 因此「编好」等按列定位的逻辑一律用 data-col，禁用 cellIndex。 */
-        cells.push('<td class="' + cls + '" data-col="' + c.key + '"' + style + '>' + inner + '</td>');
+        cells.push('<td class="' + cls + '" data-col="' + c.key + '"' + style + attrs + '>' + inner + '</td>');
       });
 
       html.push('<tr data-idx="' + idx + '" data-track="' + escapeHtml(track) + '"' +
@@ -764,24 +396,69 @@
     notifyDataChange();
   }
 
+  // 货物推算重量默认值（载重缺失时，记事栏命中货物名称 → 用其预设重量）
+  var DEFAULT_EST_GOODS = [
+    { name: '汽油', weight: 60 },
+    { name: '柴油', weight: 60 },
+    { name: '航煤', weight: 60 },
+    { name: '煤油', weight: 60 }
+  ];
+
   /* =================== 明细抽屉 =================== */
+  // 明细「计重」编辑模式：临时删除某行的推算载重（仅影响计重统计，关闭后复原）
+  var detailEditMode = false;
+  var detailEditExcluded = new Set();
+  var detailEvtBound = false;
+  /**
+   * 单行推算载重：载重有值→原值；为空→记事命中货物名称用预设重量，否则车种含70取70、其余61。
+   * 与 computeTotals 共用，保证明细表「载重列」斜体推算值与标题「计重」口径一致。
+   * @param {Array} [goodsList] 可选（循环外取一次传入），缺省从 Store 读取默认列表
+   */
+  function estLoadOf(row, goodsList) {
+    var parseNum = Utils.vbVal;
+    var rawLoad = row[COL.LOAD];
+    if (rawLoad != null && String(rawLoad).trim() !== '') return parseNum(rawLoad);
+    if (!Array.isArray(goodsList)) {
+      goodsList = Store.get(Store.KEYS.estLoadGoods, null);
+      if (!Array.isArray(goodsList)) goodsList = DEFAULT_EST_GOODS;
+    }
+    var note = String(row[COL.NOTE] || '');
+    if (Array.isArray(goodsList)) {
+      for (var gi = 0; gi < goodsList.length; gi++) {
+        if (goodsList[gi] && goodsList[gi].name && note.indexOf(goodsList[gi].name) >= 0) {
+          return parseNum(goodsList[gi].weight);
+        }
+      }
+    }
+    var ct = String(row[COL.CARTYPE] || '');
+    return ct.indexOf('70') >= 0 ? 70 : 61;
+  }
   /** 计算一组明细行的合计：辆数 / 换长 / 总重（总重 = 自重 + 载重，均 1 位小数）。
    *  rows 为 r.raw 的子数组；为空时返回全 0。 */
-  function computeTotals(rows) {
+  function computeTotals(rows, excluded) {
     var parseNum = Utils.vbVal;   // 与聚合引擎同用一套取数规则，保证明细与主表口径一致
-    var len = 0, selfW = 0, loadW = 0;
+    // 推算载重规则（从设置读取，循环外取一次）：载重缺失时，记事命中货物名称 → 用其预设重量；
+    // 否则车种含 70 取 70，其余取 61
+    var goodsList = Store.get(Store.KEYS.estLoadGoods, null);
+    if (!Array.isArray(goodsList)) goodsList = DEFAULT_EST_GOODS;
+    var len = 0, selfW = 0, loadW = 0, estLoad = 0;
     for (var k = 0; k < rows.length; k++) {
       var row = rows[k];
       len += parseNum(row[COL.LEN]);                  // 换长
       selfW += parseNum(row[COL.TARE]);               // 自重
-      loadW += parseNum(row[COL.LOAD]);               // 载重
+      loadW += parseNum(row[COL.LOAD]);               // 载重（按导出原值直接求和）
+      // 编辑模式中被「删除」推算值的行：est 记 0（只影响计重，不动自重/总重）
+      var est = (excluded && excluded.has(row)) ? 0 : estLoadOf(row, goodsList);
+      estLoad += est;
     }
     return {
       count: rows.length,
       length: Math.round(len * 10) / 10,
       selfW: Math.round(selfW * 10) / 10,
       loadW: Math.round(loadW * 10) / 10,
-      weight: Math.round((selfW + loadW) * 10) / 10   // 总重 = 自重 + 载重
+      estLoad: Math.round(estLoad * 10) / 10,        // 推算载重合计（载重缺失按车型/货物补全）
+      weight: Math.round((selfW + loadW) * 10) / 10, // 总重 = 自重 + 载重
+      calcW: Math.round((selfW + estLoad) * 10) / 10 // 计重 = 自重 + 推算重量（推算载重）
     };
   }
   /** 动态刷新抽屉标题：有选中行时按选中行求和，无选中行时恢复为全部行合计 */
@@ -792,7 +469,7 @@
     var rows = (state.detailSel && state.detailSel.size)
       ? list.filter(function (_, i) { return state.detailSel.has(i); })
       : list;
-    var t = computeTotals(rows);
+    var t = computeTotals(rows, detailEditMode ? detailEditExcluded : null);
     var name = YardConfig.getTrack(r.track);
     $('drawerTitle').innerHTML =
       '<span class="dt-name">' + escapeHtml(name ? name.name : r.track) + ' - </span>' +
@@ -800,7 +477,71 @@
       '<span class="dt-total' + (t.length > 70 ? ' warn' : '') + '">换长：' + t.length.toFixed(1) + '</span>' +
       '<span class="dt-total">自重：' + t.selfW.toFixed(1) + '</span>' +
       '<span class="dt-total">载重：' + t.loadW.toFixed(1) + '</span>' +
-      '<span class="dt-total dt-weight' + (t.weight > 5000 ? ' warn' : '') + '">总重：' + t.weight.toFixed(1) + '</span>';
+      '<span class="dt-total dt-weight' + (t.weight > 5000 ? ' warn' : '') + '">总重：' + t.weight.toFixed(1) + '</span>' +
+      '<span class="dt-total dt-weight dt-weight-edit' + (detailEditMode ? ' editing' : '') + (t.calcW > 5000 ? ' warn' : '') + '">计重：' + t.calcW.toFixed(1) + '</span>';
+  }
+  /** 重新渲染当前股道明细（带入 excluded / 编辑态：进入编辑才显示推算值，退出复原为空） */
+  function renderCurrentDetail() {
+    var r = state.rows[state.detailIdx];
+    if (!r) return;
+    renderDetailRows(r.raw || [], {
+      head: $('detailHead'), body: $('detailBody'), table: $('detailTable')
+    }, {
+      // 重渲染会重建 tbody，多选高亮需一并恢复（进入/退出编辑各重渲一次）
+      rowAttr: function (row, i) {
+        return ' data-i="' + i + '"' +
+               (state.detailSel && state.detailSel.has(i) ? ' class="selected"' : '');
+      },
+      excluded: detailEditExcluded,
+      editMode: detailEditMode
+    });
+    updateDetailTitle();
+  }
+  /** 切换「计重」编辑模式：on=true 进入（表格可删推算值），false 退出（清空 excluded 并复原显示） */
+  function setDetailEditMode(on) {
+    detailEditMode = on;
+    var tbl = $('detailTable');
+    if (tbl) tbl.classList.toggle('detail-edit', on);
+    var span = $('drawerTitle') && $('drawerTitle').querySelector('.dt-weight-edit');
+    if (span) span.classList.toggle('editing', on);
+    if (!on) detailEditExcluded.clear();
+    // 进入 / 退出都要重渲：进入才显示载重列推算值（供删除），退出则复原为空
+    renderCurrentDetail();
+  }
+  /** 绑定一次：计重 span 双击进入/退出编辑；编辑模式下点击推算值单元格删除该行推算载重
+   *  注意：委托到 document 根节点，规避 UI.Drawer.open 重建抽屉 DOM 后原监听丢失。
+   *  双击改用「两次 mousedown 间隔检测」实现（不依赖 dblclick，规避部分环境下 dblclick/closest 偶发失效） */
+  function bindDetailEditEvents() {
+    if (detailEvtBound) return;
+    detailEvtBound = true;
+    var _wLastT = 0;
+    document.addEventListener('mousedown', function (e) {
+      if (e.button !== 0) { _wLastT = 0; return; }
+      var t = e.target.closest && e.target.closest('.dt-weight-edit');
+      if (!t) { _wLastT = 0; return; }
+      var now = Date.now();
+      if (_wLastT && (now - _wLastT) < 350) {
+        setDetailEditMode(!detailEditMode);
+        _wLastT = 0;
+      } else {
+        _wLastT = now;
+      }
+    });
+    document.addEventListener('click', function (e) {
+      if (!detailEditMode) return;
+      var td = e.target.closest && e.target.closest('td.derived-est');
+      if (!td) return;
+      var tr = td.closest('tr'); if (!tr) return;
+      var idx = tr.getAttribute('data-i');
+      var r = state.rows[state.detailIdx];
+      var row = (r && r.raw) ? r.raw[idx] : null;
+      if (!row || (detailEditExcluded && detailEditExcluded.has(row))) return;
+      detailEditExcluded.add(row);
+      td.textContent = '';
+      td.classList.remove('derived-est');   // 移除该类 → 编辑态下不再显示「删除」按钮
+      td.classList.add('excluded-cell');
+      updateDetailTitle();   // 重算计重（排除该行推算载重）
+    });
   }
   /** 车种/车号颜色规则（对齐 VBA 显示信息.bas） */
   var carStyle = Utils.carStyle;
@@ -841,38 +582,54 @@
       var cs = carStyle(row);
       var tds = DETAIL_COLS.map(function (c) {
         var raw = row[c.col];
+        // 方向列：只有「轻车/空车」按记事识别到站名时，原方向代码"6"（到卸）才失效；
+        // 重车（载重>=15）的方向对应实际到站（如到「田东」卸车的「6」是有效信息），不能清空。
+        // 仅渲染层，不改数据：31814 统计读 rawRows 的 COL.DIR，不受影响。
+        if (c.col === COL.DIR && row.__destIsStation && row.__load < 15) raw = '';
         if (c.fmt === 'track') {
           var t = YardConfig.getTrack(raw);
           return '<td class="center">' +
                  escapeHtml(t ? t.name : (raw == null ? '' : raw)) + '</td>';
         }
         if (c.disp) {
-          // 到站(disp:'processed')默认显示原始站名，仅当 opts.destProcessed 为真才用处理后的 __dest；
-          // 发站(disp:'raw')永远用原始发站，从根上杜绝被聚合到站（如「货场」）误填。
-          var useProcessed = c.disp === 'processed' && opts.destProcessed;
-          var val = useProcessed && row.__dest != null ? String(row.__dest).trim()
-                  : (raw == null ? '' : String(raw).trim());
-          if (val) return '<td class="dest">' + renderDest(val, true) + '</td>';
-          // 原始站名为空 → 回退派生到站（聚合串，如「三街3 麻尾2」），挂 station-link 供双击开地图
-          var agg = row.__dest == null ? '' : String(row.__dest).trim();
-          if (agg) {
-            var dStation = stationOf(agg);
-            var dCls = dStation ? 'derived station-link' : 'derived';
-            var dAttr = dStation ? ' data-station="' + escapeHtml(dStation) + '"' : '';
-            // 派生字也按方向着色（与 renderDest 一致）：取首站方向 → shakou/nankou/guanna，
-            // 叠加在 .derived 之上。方向色（style.css 中定义于 .derived 之后）覆盖默认灰，
-            // 斜体样式保留，从而「派生斜体 + 方向色」并存。
-            if (dStation) {
-              var ddir = (state.dirIndex && state.dirIndex.map)
-                ? (state.dirIndex.map[dStation] || '') : '';
-              if (/沙/.test(ddir)) dCls += ' shakou';
-              else if (/南/.test(ddir)) dCls += ' nankou';
-              else if (/管内/.test(ddir)) dCls += ' guanna';
-            }
-            return '<td class="dest"><span class="' + dCls + '"' + dAttr + '>' +
-                   escapeHtml(agg) + '</span></td>';
+          // 发站（disp:'raw'）：恒用原始发站——每车必有发站，无需派生回退；
+          // 也不套用到站那套方向色与标记，仅挂 station-link 供双击开地图。
+          if (c.disp === 'raw') {
+            return '<td class="dest">' + renderStationLink(raw) + '</td>';
+          }
+          // 到站列：显示值由「记事是否匹配到方向库站名」决定（渲染层，不改原始数据）
+          //   ① 匹配到站名（__destIsStation）→ 显示该站名，原到站是空/钦州港/湛江 都一样；
+          //   ② 未匹配到 → 保持原到站；原到站为空时才显示推算的罐型/车种（沿用原行为）。
+          // 显示值 ≠ 原到站 → 视为派生，挂 .derived 斜体（方向色由 renderDest 照常叠加）。
+          var rawDest = String(row.__destRaw == null ? '' : row.__destRaw).trim();
+          var dv = row.__dest == null ? '' : String(row.__dest).trim();
+          var show = opts.destProcessed ? dv
+                   : (row.__destIsStation ? dv : (rawDest || dv));
+          if (show) {
+            return '<td class="dest">' +
+                   renderDest(show, true, show !== rawDest ? 'derived' : '') +
+                   '</td>';
           }
           return '<td class="dest"></td>';
+        }
+        // 载重列：原值为空 → 推算值【仅「计重」编辑模式下显示】（供逐行删除），平时留空，
+        // 避免把推算值误当实载；推算规则见 estLoadOf，与计重口径一致
+        if (c.col === COL.LOAD) {
+          var isEmptyLoad = (raw == null || String(raw).trim() === '');
+          if (isEmptyLoad) {
+            if (!opts.editMode) {
+              return '<td' + (c.cls ? ' class="' + c.cls + '"' : '') + '></td>';   // 默认不显示推算值
+            }
+            if (opts.excluded && opts.excluded.has(row)) {
+              return '<td class="mid excluded-cell"></td>';   // 编辑模式内已删除：显示空
+            }
+            var ev = estLoadOf(row);
+            var clsL = [c.cls, 'derived-est'].filter(Boolean).join(' ');
+            return '<td' + (clsL ? ' class="' + clsL + '"' : '') + '>' +
+                   String(Math.round(ev)) + '</td>';
+          }
+          return '<td' + (c.cls ? ' class="' + c.cls + '"' : '') + '>' +
+                 escapeHtml(raw == null ? '' : raw) + '</td>';
         }
         // 车种列
         if (c.col === COL.CARTYPE) {
@@ -925,16 +682,23 @@
     if (!r) return;
     state.detailIdx = idx;
     state.detailSel = new Set();   // 重置多选（每次打开明细都清空选中）
-    updateDetailTitle();           // 初始：按全部行求和（无选中）
+    // 切换股道时退出编辑模式，避免 excluded 残留指向旧股道
+    detailEditMode = false;
+    detailEditExcluded.clear();
+    var tbl = $('detailTable'); if (tbl) tbl.classList.remove('detail-edit');
+    bindDetailEditEvents();
 
     renderDetailRows(r.raw || [], {
       head: $('detailHead'),
       body: $('detailBody'),
       table: $('detailTable')
     }, {
-      rowAttr: function (row, i) { return ' data-i="' + i + '"'; }
+      rowAttr: function (row, i) { return ' data-i="' + i + '"'; },
+      excluded: detailEditExcluded,
+      editMode: detailEditMode   // 打开时已重置为 false：推算值默认不显示
     });
 
+    updateDetailTitle();
     UI.Drawer.open('drawer');
   }
 
@@ -1044,7 +808,7 @@
   function bind() {
     on('fileInputMulti', 'change', function (e) {
       var f = e.target.files[0];
-      if (f) readAndRender(f, f.name, null);
+      if (f) DataSource.readAndRender(f, f.name, null);
       e.target.value = '';
     });
 
@@ -1056,7 +820,7 @@
     on('fileInputSingle', 'change', function (e) {
       var f = e.target.files[0];
       if (!f) { e.target.value = ''; return; }
-      readAndRender(f, f.name, null).then(function () {
+      DataSource.readAndRender(f, f.name, null).then(function () {
         // 以文件方式载入时隐藏文件切换器与刷新（无目录可扫描）
         var sw = $('fileSwitcher');
         if (sw) sw.style.display = 'none';
@@ -1066,13 +830,13 @@
     });
 
     on('btnPickFolder', 'click', function () {
-      pickFolder();
+      DataSource.pickFolder();
     });
 
     on('btnReload', 'click', function () {
-      if (state.dirHandle) loadFromDir(state.dirHandle, false);
+      if (state.dirHandle) DataSource.loadFromDir(state.dirHandle, false);
       else if (state.fileList && state.fileList.length) {
-        readAndRender(state.fileList[0].handle.getFile(), state.fileList[0].name, state.fileList);
+        DataSource.readAndRender(state.fileList[0].handle.getFile(), state.fileList[0].name, state.fileList);
       } else toast('请先选择文件夹或文件');
     });
 
@@ -1103,6 +867,7 @@
       else { state.detailSel.delete(i); if (tr) tr.classList.remove('selected'); }
     }
     function clearDetailSel() {
+      if (detailEditMode) return;   // 编辑模式下禁止清空选中（防止与计重编辑冲突）
       if (state.detailSel) state.detailSel.clear();
       var sels = $('detailBody').querySelectorAll('tr.selected');
       for (var k = 0; k < sels.length; k++) sels[k].classList.remove('selected');
@@ -1126,6 +891,7 @@
       updateDetailTitle();
     }
     on('detailBody', 'mousedown', function (e) {
+      if (detailEditMode) return;   // 编辑模式下禁止拖选行
       var tr = e.target.closest('tr');
       if (!tr || tr.querySelector('td.stay') === e.target) return;
       e.preventDefault();
@@ -1155,6 +921,7 @@
     document.addEventListener('mouseup', endDrag);
     // 单击（未发生拖动）时切换该行选中状态；拖动已在 mouseover 中实时应用
     on('detailBody', 'click', function (e) {
+      if (detailEditMode) return;   // 编辑模式下禁止点选/多选行
       if (dragSel.moved) { dragSel.moved = false; return; }
       var tr = e.target.closest('tr');
       if (!tr || tr.querySelector('td.stay') === e.target) return;
@@ -1641,6 +1408,52 @@
     on('btnCloseDrawer', 'click', closeDetail);
     on('rptClose', 'click', function () { UI.Modal.close('modal31814'); });
     on('btnSettingsClose', 'click', function () { UI.Modal.close('modalSettings'); });
+
+    /* ---- 配置备份：导出 / 导入本地持久化（localStorage）---- */
+    function tsStamp() {
+      var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
+      return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' +
+             p(d.getHours()) + p(d.getMinutes());
+    }
+    function exportConfig() {
+      var map = Store.allSync();
+      var json = ConfigIO.toJson(map, {
+        app: '站存计算器',
+        exportedAt: new Date().toISOString(),
+        note: '仅含浏览器 localStorage 持久化项；数据文件夹句柄需重新选择'
+      });
+      var blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = 'zhancun-config-' + tsStamp() + '.json';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast('配置已导出（' + Object.keys(map).length + ' 项）', 'ok');
+    }
+    on('btnExportConfig', 'click', exportConfig);
+    on('btnImportConfig', 'click', function () { var f = $('importConfigFile'); if (f) f.click(); });
+    on('importConfigFile', 'change', function (e) {
+      var file = e.target.files && e.target.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        try {
+          var map = ConfigIO.parseJson(String(reader.result));
+          var keys = Object.keys(map);
+          if (!keys.length) { toast('文件为空或不是有效的配置文件', 'error'); return; }
+          if (!confirm('导入将覆盖当前本地配置（共 ' + keys.length + ' 项），确定继续？')) return;
+          var n = Store.applySync(map);
+          toast('已导入 ' + n + ' 项配置，即将刷新页面生效', 'ok');
+          setTimeout(function () { location.reload(); }, 700);
+        } catch (err) {
+          toast('导入失败：' + (err && err.message ? err.message : err), 'error');
+        } finally {
+          e.target.value = '';
+        }
+      };
+      reader.onerror = function () { toast('读取文件失败', 'error'); e.target.value = ''; };
+      reader.readAsText(file);
+    });
     on('prodClose', 'click', function () { UI.Modal.close('modalProductivity'); });
     on('depClose', 'click', function () { UI.Modal.close('modalDeparture'); });
     // 原工具栏「发车流程」按钮（btnDepartureFlow）已移除：
@@ -1697,6 +1510,9 @@
       highlightTick(gridFontSize.value);
     }
 
+    // 设置：货物推算重量（载重缺失时按记事栏货物名称匹配预设重量；列表可增删）
+    initGoodsWeightConfig('estLoadGoods', 'btnAddEstLoadGood', Store.KEYS.estLoadGoods, DEFAULT_EST_GOODS);
+
     // 设置：默认文件夹
     var folderPath = $('folderPath');
     var btnSettingFolder = $('btnSettingFolder');
@@ -1710,7 +1526,7 @@
     refreshFolderPath();
     if (btnSettingFolder) {
       btnSettingFolder.addEventListener('click', function () {
-        pickFolder();
+        DataSource.pickFolder();
       });
     }
 
@@ -1812,6 +1628,160 @@
           renderList();
         });
       }
+    }
+
+    /**
+     * 初始化「货物推算重量」配置项：列表项形如 汽油:60，单击×删除，双击打开弹窗修改；
+     * 新增按钮同样打开弹窗。弹窗浮于设置窗口内（#gwModal），确认后写入 Store。
+     * 载重缺失时记事栏命中名称即取该重量；值是 { name, weight } 对象而非纯字符串。
+     */
+    function initGoodsWeightConfig(containerId, addBtnId, storeKey, defaultList) {
+      var el = $(containerId);
+      var addBtn = $(addBtnId);
+      var modal = $('gwModal');
+      var nameInp = $('gwName');
+      var wInp = $('gwWeight');
+      var gwOk = $('gwOk');
+      var hint = $('gwHint');
+      var mergeArmed = false;   // 编辑改名命中已有项时的二次确认态
+      if (!el || !modal) return;
+      var editName = null;   // 正在编辑的货物名称（null = 新增）
+
+      function getList() {
+        var list = Store.get(storeKey, null);
+        return Array.isArray(list) ? list : null;   // null → 用默认
+      }
+      function renderList() {
+        var list = getList() || defaultList;
+        el.innerHTML = list.map(function (item) {
+          return '<span class="spot-item" data-name="' + escapeHtml(item.name) + '" title="双击修改">' +
+                   escapeHtml(item.name) + ':' + escapeHtml(item.weight) +
+                   '<button class="spot-del" title="删除" aria-label="删除">×</button>' +
+                 '</span>';
+        }).join('');
+        if (addBtn) el.appendChild(addBtn);   // 新增按钮保持在末尾
+      }
+      function setHint(txt, cls) {
+        if (!hint) return;
+        hint.textContent = txt || '';
+        hint.className = 'gw-hint' + (cls ? ' ' + cls : '');
+        // 重启淡入动画，使每次提示都"冒泡"出现
+        hint.style.animation = 'none';
+        void hint.offsetWidth;
+        hint.style.animation = '';
+      }
+      function updateHint() {
+        if (mergeArmed) return;   // 武装态由 commit 设置冲突提示，不覆盖
+        var n = nameInp.value.trim();
+        var w = Utils.vbVal(wInp.value);
+        if (!n && !(w > 0)) { setHint(''); return; }
+        if (!n) { setHint('请填写货物名称', 'warn'); return; }
+        if (!(w > 0)) { setHint('请填写重量（>0）', 'warn'); return; }
+        setHint(n + ' · ' + (Math.round(w * 10) / 10) + ' 吨');
+      }
+      function resetOk() {
+        mergeArmed = false;
+        if (gwOk) { gwOk.textContent = '确定'; gwOk.classList.remove('merge'); }
+      }
+      function openModal(name) {
+        editName = (name == null ? null : name);
+        var cur = (getList() || defaultList).filter(function (it) { return it.name === name; })[0];
+        nameInp.value = name != null ? name : '';
+        wInp.value = (cur && name != null) ? cur.weight : '';
+        modal.hidden = false;
+        nameInp.focus();
+        resetOk();
+        updateHint();
+      }
+      function finish(list) {
+        Store.set(storeKey, list);
+        renderList();
+        closeModal();
+        if (state.detailIdx != null) updateDetailTitle();   // 刷新明细计重
+      }
+      function closeModal() {
+        modal.hidden = true;
+        editName = null;
+        resetOk();
+        setHint('');
+      }
+      function commit() {
+        var name = nameInp.value.trim();
+        var weight = Utils.vbVal(wInp.value);
+        if (!name) { setHint('名称不能为空', 'warn'); return; }
+        if (!(weight > 0)) { setHint('重量需大于 0', 'warn'); return; }
+        var list = (getList() || defaultList).slice();
+        var rounded = Math.round(weight * 10) / 10;
+        if (editName == null) {
+          // 新增：不允许与已有同名
+          if (list.some(function (it) { return it.name === name; })) { setHint(name + ' 已存在', 'warn'); return; }
+          list.push({ name: name, weight: rounded });
+          finish(list);
+        } else {
+          var idx = -1, same = -1;
+          for (var i = 0; i < list.length; i++) {
+            if (list[i].name === editName) idx = i;
+            if (list[i].name === name) same = i;
+          }
+          if (same >= 0 && same !== idx) {
+            // 编辑改名命中已有项 → 二次确认：确定按钮变「合并」，点它才合并
+            if (!mergeArmed) {
+              setHint('「' + name + '」已存在，点“合并”将覆盖其重量并移除「' + editName + '」', 'warn');
+              mergeArmed = true;
+              if (gwOk) { gwOk.textContent = '合并'; gwOk.classList.add('merge'); }
+              return;
+            }
+            list[same].weight = rounded;
+            list.splice(idx, 1);
+            finish(list);
+          } else if (idx < 0) {
+            // 旧项已不在（并发删除等情况），当作 upsert 处理
+            if (same >= 0) { list[same].weight = rounded; }
+            else { list.push({ name: name, weight: rounded }); }
+            finish(list);
+          } else {
+            // 改名或仅改重（同名命中自己也在此分支）
+            list[idx].name = name;
+            list[idx].weight = rounded;
+            finish(list);
+          }
+        }
+      }
+
+      renderList();
+
+      // 双击标签项 → 打开弹窗并预填（修改内容）；双击×不触发
+      el.addEventListener('dblclick', function (e) {
+        if (e.target.closest && e.target.closest('.spot-del')) return;
+        var item = e.target.closest ? e.target.closest('.spot-item') : null;
+        if (item) openModal(item.getAttribute('data-name'));
+      });
+      // 单击删除按钮
+      el.addEventListener('click', function (e) {
+        var del = e.target.closest ? e.target.closest('.spot-del') : null;
+        if (!del) return;
+        var name = del.parentNode.getAttribute('data-name');
+        var list = (getList() || defaultList).filter(function (it) { return it.name !== name; });
+        Store.set(storeKey, list);
+        renderList();
+        if (state.detailIdx != null) updateDetailTitle();
+      });
+      if (addBtn) addBtn.addEventListener('click', function () { openModal(null); });
+      $('gwClose').addEventListener('click', closeModal);
+      $('gwCancel').addEventListener('click', closeModal);
+      $('gwOk').addEventListener('click', commit);
+      // 输入变化 → 刷新左侧预览，并解除「合并」武装态（恢复确定按钮）
+      nameInp.addEventListener('input', function () { resetOk(); updateHint(); });
+      wInp.addEventListener('input', function () { resetOk(); updateHint(); });
+      modal.querySelector('.gw-modal-mask').addEventListener('click', closeModal);
+      nameInp.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        else if (e.key === 'Escape') { e.preventDefault(); closeModal(); }
+      });
+      wInp.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        else if (e.key === 'Escape') { e.preventDefault(); closeModal(); }
+      });
     }
 
     // 车型高亮：基于 Utils.getCarTypeConfig 在设置面板渲染可编辑列表
@@ -1964,12 +1934,10 @@
       }
     }
 
-    // 卸车地点（aggregate 段2 读取，默认 永鑫/货场/天盛/港务局）
-    initSpotConfig('unloadSpots', 'btnAddUnloadSpot', 'unloadSpots',
-                   ['永鑫', '货场', '天盛', '港务局']);
-    // 黑罐识别（aggregate 段1 G7 罐按收货人识别，默认 中粮/外运）
-    initSpotConfig('blackTankSpots', 'btnAddBlackTankSpot', 'blackTankSpots',
-                   ['中粮', '外运']);
+    // 卸车地点（aggregate 段2 读取）
+    initSpotConfig('unloadSpots', 'btnAddUnloadSpot', 'unloadSpots', DEFAULT_UNLOAD_SPOTS);
+    // 黑罐识别（aggregate 段1 G7 罐按收货人识别）
+    initSpotConfig('blackTankSpots', 'btnAddBlackTankSpot', 'blackTankSpots', DEFAULT_BLACK_TANK_SPOTS);
 
     // 车型高亮配置（对齐 VBA 显示信息.bas）
     initCarTypeConfig();
@@ -2117,6 +2085,13 @@
 
   /* =================== 初始化 =================== */
   function init() {
+    // 桥接：把私有共享物挂到 global，供已抽出的 data-source.js 通过全局名访问
+    // （state 为 IIFE 私有对象，data-source 仅读取/修改其属性，不重赋值，故引用稳定）
+    global.state = state;
+    global.render = render;
+    global.loading = loading;
+    global.syncPickFolderBtn = syncPickFolderBtn;
+
     initModalDrag();
     initModalResize();
     // 方向库（惰性单例：全局只解析一次，报表模块共用同一份实例）
@@ -2172,15 +2147,15 @@
       }
       syncPickFolderBtn(false);  // 已记住文件夹，按钮收起
       state.dirHandle = h;
-      rememberFolder(h);
+      DataSource.rememberFolder(h);
       // 静默恢复：权限未授予时不弹窗，等用户点击
       if (h.queryPermission) {
         return h.queryPermission({ mode: 'read' }).then(function (p) {
-          if (p === 'granted') return loadFromDir(h, false);
+          if (p === 'granted') return DataSource.loadFromDir(h, false);
           $('stMsg').textContent = '已记住数据文件夹，点「重新读取」以载入';
         });
       }
-      return loadFromDir(h, false);
+      return DataSource.loadFromDir(h, false);
     }).catch(function () {
       $('stMsg').textContent = '读取上次的文件夹失败，请点「选择数据文件夹」重新选择';
       syncPickFolderBtn(true);   // 句柄不可用，重新亮出入口

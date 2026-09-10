@@ -216,6 +216,48 @@
           </div>
         </div>
       </div>
+      <div class="setting-divider"></div>
+      <div class="setting-row setting-row-col">
+        <label class="setting-label">货物推算重量
+          <span class="setting-hint">载重缺失时：记事栏命中货物名称 → 用其预设重量；否则车种含70按70，其余按61</span>
+        </label>
+        <div class="unload-spots" id="estLoadGoods">
+          <button class="btn add-spot-btn" id="btnAddEstLoadGood" title="新增货物推算重量">
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+              <line x1="8" y1="3" x2="8" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <line x1="3" y1="8" x2="13" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <span>新增</span>
+          </button>
+        </div>
+      </div>
+      <div class="setting-divider"></div>
+      <div class="setting-row">
+        <label class="setting-label">配置备份</label>
+        <div class="setting-folder">
+          <button class="btn" id="btnExportConfig">导出配置</button>
+          <button class="btn" id="btnImportConfig">导入配置</button>
+          <input type="file" id="importConfigFile" accept=".ini" style="display:none">
+        </div>
+      </div>
+      <!-- 货物推算重量：弹窗式编辑浮层（盖在设置窗口内） -->
+      <div class="gw-modal" id="gwModal" hidden>
+        <div class="gw-modal-mask"></div>
+        <div class="gw-modal-panel">
+          <div class="gw-edit-head">预设货物重量
+            <button class="spot-del gw-close" id="gwClose" title="关闭" aria-label="关闭">×</button>
+          </div>
+          <div class="gw-body">
+            <div class="gw-edit-row"><label>货物名称</label><input class="gw-name" id="gwName" type="text" maxlength="20" placeholder="如 汽油" autocomplete="off"></div>
+            <div class="gw-edit-row"><label>预设重量</label><input class="gw-weight" id="gwWeight" type="number" min="0" max="150" step="1" placeholder="吨"></div>
+          </div>
+          <div class="gw-edit-actions">
+            <span class="gw-hint" id="gwHint"></span>
+            <button class="btn gw-cancel" id="gwCancel" type="button">取消</button>
+            <button class="btn gw-ok" id="gwOk" type="button">确定</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -431,9 +473,14 @@
 <script src="js/direction.data.js" charset="utf-8"></script>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="js/aggregate.js" charset="utf-8"></script>
+<script src="js/columns.js" charset="utf-8"></script>
+<script src="js/dest-color.js" charset="utf-8"></script>
+<script src="js/rpt31814-calc.js" charset="utf-8"></script>
 <script src="js/map-bridge.js" charset="utf-8"></script>
 <script src="js/report31814.js" charset="utf-8"></script>
 <script src="js/productivity.js" charset="utf-8"></script>
+<script src="js/data-source.js" charset="utf-8"></script>
+<script src="js/config-io.js" charset="utf-8"></script>
 <script src="js/app.js" charset="utf-8"></script>
 <script src="js/search.js" charset="utf-8"></script>
 

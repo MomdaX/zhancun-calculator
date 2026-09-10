@@ -70,6 +70,18 @@
     }
   }
 
+  /**
+   * 读取「列表型」配置（如 卸车地点 / 黑罐识别 词表）。
+   * 统一处理三种回落：无 Store 环境、未设置、值不是非空数组 → 返回 defaults。
+   * 消除调用处各自写 `(Store.get && Store.get(k, null)) || DEFAULTS` 的重复。
+   * @param {string} key      键名
+   * @param {Array}  defaults 回落默认列表
+   */
+  function getList(key, defaults) {
+    var v = get(key, null);
+    return (Array.isArray(v) && v.length) ? v : (defaults || []);
+  }
+
   /** 写入设置项（内部 JSON 序列化，读取时自动还原） */
   function set(key, val) {
     var k = keyOf(key);
@@ -86,6 +98,38 @@
     var k = keyOf(key);
     try { localStorage.removeItem(k); } catch (e) {}
     delete _mem[k];   // 同步失效内存缓存
+  }
+
+  /** 导出：收集所有同步持久化键（zhancun. 前缀）的 JS 值。
+   *  返回 { fullKey: value }（value 为 JSON.parse 后的对象/数组/标量，兼容旧版原始字符串）。
+   *  IndexedDB 句柄（xlsDir）不可序列化，不在此列。 */
+  function allSync() {
+    var out = {};
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (!k || k.indexOf(PREFIX) !== 0) continue;
+        var raw = localStorage.getItem(k);
+        try { out[k] = JSON.parse(raw); }      // 现代数据：已 JSON 序列化
+        catch (e) { out[k] = raw; }             // 兼容升级前直接存原始字符串的旧数据
+      }
+    } catch (e) {}
+    return out;
+  }
+
+  /** 导入：把 { fullKey: value } 经 Store.set 写回（自动补前缀 + JSON 序列化）。
+   *  与逐项 localStorage.setItem 等价，但复用 Store 的内存缓存同步逻辑；返回实际写入条数。 */
+  function applySync(map) {
+    var n = 0;
+    if (!map || typeof map !== 'object') return n;
+    for (var key in map) {
+      if (!Object.prototype.hasOwnProperty.call(map, key)) continue;
+      try {
+        set(key, map[key]);   // keyOf + JSON.stringify + 更新 _mem
+        n++;
+      } catch (e) {}
+    }
+    return n;
   }
 
   /* ==================== 异步：IndexedDB（可存句柄等不可序列化的值） ==================== */
@@ -151,6 +195,7 @@
     unloadSpots: 'unloadSpots',
     blackTankSpots: 'blackTankSpots',
     carTypeStyle: 'carTypeStyle',
+    estLoadGoods: 'estLoadGoods',     // 货物推算重量：[{ name, weight }] 列表（载重缺失时记事命中 name → 用 weight）
     xlsDir: 'xlsDir',
     detailCols: 'zhancun.detail.cols.v2',   // 历史列宽记忆键（已带前缀，keyOf 原样返回）
     cfgDzChecked: 'cfgDzChecked',
@@ -161,8 +206,11 @@
   global.Store = {
     KEYS: KEYS,
     get: get,
+    getList: getList,
     set: set,
     remove: remove,
+    allSync: allSync,
+    applySync: applySync,
     async: {
       get: idbGet,
       set: idbSet,

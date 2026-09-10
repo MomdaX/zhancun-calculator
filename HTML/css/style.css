@@ -1009,6 +1009,90 @@ table.detail tbody tr.selected td:first-child {
   box-shadow: inset 3px 0 0 #1864ab;
 }
 table.detail td.mid { text-align: center; font-variant-numeric: tabular-nums; }
+table.detail td.derived-est { font-style: italic; color: #8395a7; }   /* 载重缺失 → 推算值（斜体，色同 span.derived 灰） */
+
+/* 计重 span：双击进入/退出编辑模式；hover 提示与编辑图标统一在左上角 */
+.drawer-head h3 .dt-weight-edit { position: relative; cursor: pointer; }
+/* hover 文字提示「双击编辑」 */
+.drawer-head h3 .dt-weight-edit:hover::after {
+  content: '双击编辑';
+  position: absolute;
+  left: -6px; top: -26px;
+  padding: 2px 7px;
+  font-size: 11px;
+  line-height: 1;
+  color: #fff;
+  background: #3b82f6;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+}
+.drawer-head h3 .dt-weight-edit.editing { border-color: #3b82f6; background: #eaf2ff; }
+/* 编辑图标（铅笔）：hover 预览 + 编辑常驻，统一左上角 */
+.drawer-head h3 .dt-weight-edit:hover::before {
+  content: '✎';
+  position: absolute;
+  left: -6px; top: -6px;
+  width: 14px; height: 14px;
+  font-size: 9px; line-height: 14px; text-align: center;
+  color: #fff;
+  background: #3b82f6;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
+  z-index: 10;
+}
+/* 编辑中：铅笔变红（与删除按钮同色，提示「危险/退出」语义） */
+.drawer-head h3 .dt-weight-edit.editing::before {
+  content: '✎';
+  position: absolute;
+  left: -6px; top: -6px;
+  width: 14px; height: 14px;
+  font-size: 9px; line-height: 14px; text-align: center;
+  color: #fff;
+  background: #e5484d;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
+  z-index: 10;
+}
+.drawer-head h3 .dt-weight-edit.editing:hover::after { content: '双击退出'; background: #e5484d; }
+
+/* 编辑模式：推算值单元格 hover「滑出」红色删除标签
+   用 transform + opacity 做滑入（不依赖宽度动画，最稳）
+   点击命中 td → JS 清空该单元并移除 derived-est 类 → 伪元素随之消失 */
+table.detail.detail-edit td.derived-est {
+  position: relative;
+  cursor: pointer;
+  overflow: visible;
+  padding-right: 44px;
+  background: #fff8e1;          /* 浅黄底：标记编辑模式下的可点击推算值 */
+  transition: background .18s ease;
+}
+table.detail.detail-edit td.derived-est:hover {
+  background: #ffe9a0;          /* hover 加深黄 */
+}
+table.detail.detail-edit td.derived-est::after {
+  content: '删除';
+  position: absolute;
+  right: 4px; top: 50%;
+  padding: 0 8px;
+  font-size: 11px; line-height: 20px;
+  color: #fff;
+  background: #e5484d;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-50%) translateX(14px);
+  transition: opacity .16s ease, transform .16s ease;
+  z-index: 5;
+}
+table.detail.detail-edit td.derived-est:hover::after {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(-50%) translateX(0);
+}
+td.excluded-cell { color: #c0c4cc; }
 /* 车号列：鼠标形态提示「可双击复制」 */
 table.detail tbody td[data-col="carno"] { cursor: copy; }
 
@@ -1176,14 +1260,48 @@ table.detail.measuring th, table.detail.measuring td {
   color: var(--text-dim);
 }
 
-/* 可点击的车站名（明细里双击可看径路） */
+/* 可点击的车站名（明细里双击可看径路）—— 不挂虚线/高亮，仅保留手型光标 */
 td.dest span.station-link {
   cursor: pointer;
-  border-bottom: 1px dotted currentColor;
 }
-td.dest span.station-link:hover {
-  background: #ffe9b8;
-  border-bottom-style: solid;
+
+/* 有效长列：悬停时在同一行右侧「抽屉抽出」显示原始有效长
+   用 [data-len] 限定——未登记有效长的股道无该属性，不会生成空提示条 */
+/* 注意：table.grid td 默认 overflow:hidden（防内容撑破列宽），会把向右抽出的提示裁掉，
+   故此处显式 overflow:visible；选择器须带 table.grid 才能压过那条规则的特异性 */
+table.grid td[data-col="effLen"] {
+  position: relative;
+  overflow: visible;
+}
+table.grid td[data-col="effLen"][data-len]::after {
+  content: attr(data-len);
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  z-index: 6;
+  box-sizing: border-box;
+  max-width: 0;
+  padding: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(-50%) translateX(-8px);
+  background: linear-gradient(90deg, #2b5cb0, #3d8bd6);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 22px;        /* 与主表单元格行高（line-height:1.45 ≈ 22px）一致 */
+  border-radius: 0 4px 4px 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+  transition: max-width .22s ease, padding .22s ease,
+              opacity .18s ease, transform .22s cubic-bezier(.22, .61, .36, 1);
+}
+table.grid td[data-col="effLen"][data-len]:hover::after {
+  max-width: 140px;
+  padding: 0 8px;
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
 }
 
 /* 加载遮罩 */
@@ -1660,6 +1778,144 @@ td.dest span.station-link:hover {
   width: 72px;
   padding: 0;
 }
+
+/* 货物推算重量：弹窗式编辑浮层（盖在设置窗口内，不内嵌列表） */
+#modalSettings .modal-content { position: relative; }
+.gw-modal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  animation: gw-fade .14s ease;
+}
+.gw-modal[hidden] { display: none; }
+@keyframes gw-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.gw-modal-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, .35);
+  backdrop-filter: blur(1.5px);
+}
+
+.gw-modal-panel {
+  position: relative;
+  z-index: 1;
+  width: 288px;
+  background: #fff;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 24px 56px rgba(15, 23, 42, .30);
+  animation: gw-pop .18s cubic-bezier(.2, .8, .3, 1.05);
+}
+@keyframes gw-pop {
+  from { transform: translateY(10px) scale(.95); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+/* 标题栏 */
+.gw-edit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+.gw-edit-head .gw-close {
+  position: static;
+  opacity: 1;
+  width: 24px;
+  height: 24px;
+  line-height: 22px;
+  font-size: 16px;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  transition: background .12s, color .12s;
+}
+.gw-edit-head .gw-close:hover { background: #f1f3f5; color: #e5484d; }
+
+/* 表单区 */
+.gw-body { padding: 16px; }
+.gw-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.gw-edit-row:last-child { margin-bottom: 0; }
+.gw-edit-row label {
+  width: 64px;
+  flex: none;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.gw-edit-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 11px;
+  font-size: 13px;
+  color: var(--text);
+  background: #fff;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  font-family: inherit;
+  transition: border-color .12s, box-shadow .12s;
+}
+.gw-edit-row input:focus {
+  outline: none;
+  border-color: var(--accent, #3b82f6);
+  box-shadow: 0 0 0 3px rgba(110, 168, 254, .22);
+}
+
+/* 底部按钮 */
+.gw-edit-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 13px 16px;
+  border-top: 1px solid var(--border);
+  background: #fafbfc;
+}
+/* 左侧冒泡提示：实时预览「名称 · 重量」或冲突警告 */
+.gw-hint {
+  margin-right: auto;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-dim);
+  animation: gw-hint-in .16s ease;
+}
+.gw-hint.warn { color: #e5484d; font-weight: 600; }
+@keyframes gw-hint-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+.gw-edit-actions .btn {
+  padding: 7px 18px;
+  font-size: 13px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.gw-edit-actions .gw-ok {
+  background: var(--accent, #3b82f6);
+  color: #fff;
+  border-color: var(--accent, #3b82f6);
+}
+.gw-edit-actions .gw-ok:hover { background: var(--accent-dark, #2563eb); border-color: var(--accent-dark, #2563eb); }
+/* 合并态：提示用户这是覆盖/合并操作，按钮变红 */
+.gw-edit-actions .gw-ok.merge {
+  background: #e5484d;
+  border-color: #e5484d;
+}
+.gw-edit-actions .gw-ok.merge:hover { background: #d23b40; border-color: #d23b40; }
 
 .add-spot-btn {
   align-self: flex-start;

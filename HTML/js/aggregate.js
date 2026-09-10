@@ -65,8 +65,8 @@
      * "黑罐"识别为具体子类（中粮/外运）。列表来自 Store.blackTankSpots，可在设置增删。
      * 取「首个命中」的词（收货人列无"转"改写法，按列表顺序即可）。 */
     function resolveBlackTank(text) {
-      var list = (global.Store && global.Store.get)
-        ? (global.Store.get('blackTankSpots', null) || DEFAULT_BLACK_TANK_SPOTS)
+      var list = (global.Store && global.Store.getList)
+        ? global.Store.getList('blackTankSpots', DEFAULT_BLACK_TANK_SPOTS)
         : DEFAULT_BLACK_TANK_SPOTS;
       if (!text) return '';
       for (var i = 0; i < list.length; i++) {
@@ -86,8 +86,12 @@
       return extractCarType(carType);
     }
 
-    // 段1：载重<15 且 (到站为空 或 含"钦州港") 且 记事非空
-    if (load < 15 && (dest === '' || dest.indexOf('钦州港') >= 0) && note !== '') {
+    // 段1：载重<15 且 记事非空 —— 到站不再限制
+    // 【2026-09 口径变更】原 VBA 写作 `到站 Like "*[钦州港]*"`，Like 里的 [钦州港]
+    // 是字符类（匹配 钦/州/港 任一字），属误用；其本意「到站=钦州港」只是识别
+    // 「到达卸车」的情形之一。现按业务口径：只要轻车/空车且记事非空，一律按记事
+    // 识别目的地——到站可以是空、钦州港，也可以是湛江/温泉等出发车的原到站。
+    if (load < 15 && note !== '') {
       /* 先在记事中收集所有命中的站名，再取「最长」的那个。
        * 不能按方向库顺序取第一个命中：库里短名常排在长名之前
        * （如 防城@1 先于 防城港@4、贵阳 先于 贵阳南、昭通 先于 昭通北），
@@ -180,8 +184,8 @@
        *  - 普通多词（"永鑫货场"）：取记事里【首个】出现的地点词。
        *  - 含"转"的改卸写法（"货场转永鑫"）："转"表示改卸，取【转之后】那段里的
        *    首个地点词（永鑫），忽略转之前的部分。 */
-      var UNLOAD_SPOTS = (global.Store && global.Store.get)
-        ? (global.Store.get('unloadSpots', null) || DEFAULT_UNLOAD_SPOTS)
+      var UNLOAD_SPOTS = (global.Store && global.Store.getList)
+        ? global.Store.getList('unloadSpots', DEFAULT_UNLOAD_SPOTS)
         : DEFAULT_UNLOAD_SPOTS;
       var scan = note;
       var zhuan = vbInStr(note, '转');
@@ -243,17 +247,17 @@
 
       // __dest：聚合后的到站分类（可能是车站名，也可能是 路罐/自备罐/黑罐/车种）
       row.__dest = resolveDest(work, dirStations, now, _dirIndexForResolve && _dirIndexForResolve.firstCharIndex);
-      // 写回到站列（raw）的硬约束：识别出的 __dest 必须是「方向库车站名」。
-      // 仅段1 在记事中命中 direction.data.js 站名时满足；其余一律不改写「到站」列：
-      //   - 段2 的卸车地点（永鑫/货场/中油…，来自设置）与「到卸」分类 → 不写回；
-      //   - 段1/段3 未命中站名时回落的 路罐/自备罐/黑罐/车种 分类 → 不写回；
-      //   - 原始到站为空、回退派生的车 → 不写回（保留 raw 空，走 .derived 斜体分支）。
-      // 卸车地点 / 到卸 / 车种分类只用于方向统计与明细加粗，不应污染车站名列。
-      if (r[COL.DEST] != null && r[COL.DEST] !== '' &&
-          row.__dest != null && row.__dest !== '' && row.__dest !== r[COL.DEST] &&
-          dirStations.indexOf(row.__dest) >= 0) {
-        row[COL.DEST] = row.__dest;
-      }
+      // 【不回写原始到站列】明细的到站显示属渲染层：__dest（推断值）只在渲染时决定
+      // 是否显示，绝不改写 row[COL.DEST]，也不触碰原始数据
+      // （31814 统计走 getRawRows() 读 COL.DEST/COL.DIR，不受影响）。
+      // __destIsStation：__dest 是否为方向库车站名（即段1 在记事中匹配成功）。
+      // 渲染层据此 ① 显示识别站名（派生斜体）② 清空该行方向列（原方向代码已失效）。
+      row.__destIsStation = row.__dest != null && row.__dest !== '' &&
+                            dirStations.indexOf(row.__dest) >= 0;
+      // __load：原始载重（数值）。供 app.js 决定是否清空方向列——
+      // 只有轻车/空车（__load<15）按记事识别到站名时，原方向代码"6"（到卸，基于钦州港）
+      // 才失效需清空；重车（__load>=15）的方向代码对应实际到站，不应清空。
+      row.__load = vbVal(r[COL.LOAD]);
       row.__carType = extractCarType(r[COL.CARTYPE]);
       row.__track = track;
       // 派生：到达时间解析一次缓存到行，聚合循环与明细/搜索渲染复用（见 app.js renderRows），
