@@ -101,6 +101,16 @@ function isReport(url) {
   } catch (e) { return false; }
 }
 
+/** 消息是否来自「地图页本身」（chinamap.html 所在的 frame）。
+ *  content.js 注入在所有页面（<all_urls>）并会无条件转发页面的 postMessage，
+ *  而扩展代发请求用的是 host_permissions + 已保存的 token —— 不做来源校验的话，
+ *  任意网页只要知道协议就能借这条通道读内网接口、甚至套取 token。
+ *  这里只放行 URL 里带 chinamap.html 的 frame，其它一律拒绝。 */
+function isMapFrame(sender) {
+  var u = (sender && sender.url) || '';
+  return /chinamap\.html(\?|#|$)/i.test(u);
+}
+
 /* ====== 工具栏图标颜色：已连接(报表页≥1)绿，未连接灰 ====== */
 function makeIcon(rgb) {
   var s = 32, data = new Uint8ClampedArray(s * s * 4);
@@ -161,6 +171,21 @@ function broadcastMapToken(token) {
   });
 }
 
+/** token 是否已过期或即将过期（剩余 < 5 分钟）。
+ *  地图 token 有效期只有 8 小时，若不判断，每次打开地图都会先拿一个必然 401 的旧 token
+ *  试一次（虽然后续会自动续期，但白等一个往返）。解析不出 exp（非标准 JWT）则视为不过期。 */
+function jwtExpiringSoon(token) {
+  try {
+    var parts = String(token).split('.');
+    if (parts.length < 2) return false;
+    var b = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (b.length % 4) b += '=';
+    var payload = JSON.parse(atob(b));
+    if (!payload || !payload.exp) return false;
+    return (payload.exp * 1000) < (Date.now() + 5 * 60 * 1000);
+  } catch (e) { return false; }
+}
+
 /** 带 401 自动重试的 fetch 封装
  *  读取 storage 中的 depRetryEnabled / depRetryCount 决定是否重试 */
 function fetchWithRetry(url, options, cb) {
@@ -197,12 +222,114 @@ function fetchWithRetry(url, options, cb) {
   });
 }
 
+/* ====== 地图后端接口代理（map-api） ======================================
+ * 为什么需要：地图页（chinamap.html）以 file:// 打开，origin 为 null，
+ *   1. 带 Authorization 自定义头 → 触发 CORS 预检，而后端不处理 OPTIONS，
+ *      预检返回非 2xx → 请求被浏览器拦下；
+ *   2. file:// 页面发出的请求 Referer 恒为空（forbidden header，页面改不了）。
+ * 因此地图的全部后端接口改由扩展代发：扩展有 host_permissions，既不受 CORS
+ * 限制，也能在 fetch 上直接补 Referer / Authorization。
+ *   map-api-proxy.js（页面）→ content.js → 本段 → fetch 真实后端
+ *   → { type:'map-api-result' } 回传页面，由页面按 jQuery 语义唤起回调。
+ * ======================================================================== */
+var MAP_API_PATHS = [
+  '/getToken', '/getReleaseVersionData',
+  '/getMapDftPoint', '/getMapDlnPoint', '/getMapDndPoint',
+  '/getMidStationByLj', '/getNode', '/getJl'
+];
+
+/** 把 {a:1,b:'x'} 拼成 a=1&b=x（与原 jQuery 的编码方式一致） */
+function buildQuery(data) {
+  if (!data || typeof data !== 'object') return '';
+  return Object.keys(data).map(function (k) {
+    var v = data[k];
+    if (v == null) return '';
+    return encodeURIComponent(k) + '=' + encodeURIComponent(String(v));
+  }).filter(function (s) { return s; }).join('&');
+}
+
+/** 代发一次地图接口请求；401 时自动续期 token 并重试一次 */
+function proxyMapApi(payload, fromTabId) {
+  var reqId = payload.reqId || '';
+  var base = String(payload.base || '').replace(/\/+$/, '');
+  var path = String(payload.path || '');
+  var reqBase = { type: 'map-api-result', reqId: reqId, ok: false, status: 0, contentType: '', body: '' };
+
+  function reply(extra) {
+    if (fromTabId == null) return;
+    send(fromTabId, Object.assign({}, reqBase, extra || {}));
+  }
+
+  // 白名单 + 合法 base，避免被页面拿去打任意地址
+  if (MAP_API_PATHS.indexOf(path) < 0 || !/^https?:\/\//i.test(base)) {
+    reply({ error: '非法代理请求：' + base + path });
+    return;
+  }
+
+  var qs = buildQuery(payload.data);
+  var url = base + path + (qs ? ('?' + qs) : '');
+  // Referer：后端认的值是 http://10.208.2.72:8080/cljl（见 map_data 下抓包样张）。
+  // 优先用 popup 里配置的 depTokenReferer；没配就按 base + '/cljl' 兜底，保证非空且正确。
+  var referer = mapTokenCfg.referer || (base + '/cljl');
+
+  chrome.storage.local.get(['authorization'], function (r) {
+    var token = (payload.token && String(payload.token).trim()) || ((r && r.authorization) || '').trim();
+    if (token === '3231212') token = '';         // 兜底假 token 不下发
+    doApiFetch(url, token, false);
+  });
+
+  function doApiFetch(u, token, retried) {
+    var headers = { 'X-Requested-With': 'XMLHttpRequest', 'Referer': referer };
+    if (token) headers['Authorization'] = token;
+
+    fetch(u, { method: payload.method || 'GET', headers: headers, credentials: 'omit', cache: 'no-store' })
+      .then(function (resp) {
+        if (resp.status === 401 && !retried) {
+          // token 过期：重新取一次、广播给页面，再用新 token 重试
+          fetchMapToken(function (err, newToken) {
+            if (err || !newToken) {
+              reply({ ok: false, status: 401, error: 'token 续期失败：' + (err || 'empty') });
+              return;
+            }
+            broadcastMapToken(newToken);
+            doApiFetch(u, newToken, true);
+          });
+          return;
+        }
+        return resp.text().then(function (body) {
+          reply({
+            ok: resp.ok,
+            status: resp.status,
+            contentType: resp.headers.get('content-type') || '',
+            body: body
+          });
+        });
+      })
+      .catch(function (e) {
+        reply({ ok: false, status: 0, error: (e && e.message) || String(e) });
+      });
+  }
+}
+
 chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
   if (!msg || msg.channel !== CHANNEL) {
     // content.js 开局取已保存的 token（写进页面 sessionStorage 用）
     if (msg && msg.type === 'getStoredToken') {
+      // 只有地图页能取 token（content.js 本身也只在地图页调用，这里再校验一次来源做深度防御）
+      if (!isMapFrame(sender)) {
+        console.warn('[dep-bridge] 拒绝非地图页取 token，来源：' + ((sender && sender.url) || '(空)'));
+        sendResponse({ token: '', ts: 0 });
+        return;
+      }
       chrome.storage.local.get(['authorization', 'authorizationTs'], function (r) {
-        sendResponse({ token: (r && r.authorization) || '', ts: (r && r.authorizationTs) || 0 });
+        var t = (r && r.authorization) || '';
+        // 过期/将过期的 token 不注入：让页面自己去 /getToken 取新的（经 map-api 代理），
+        // 保证「先取 token → 再取版本号 → 再请求径路」这条链上用的都是有效 token。
+        if (t && jwtExpiringSoon(t)) {
+          console.log('[dep-bridge] 本地保存的 token 已过期或即将过期，跳过注入，改由页面重新获取');
+          t = '';
+        }
+        sendResponse({ token: t, ts: (r && r.authorizationTs) || 0 });
       });
       return true;
     }
@@ -259,12 +386,27 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
   var payload = msg.payload || {};
   var fromTabId = sender.tab ? sender.tab.id : null;
 
+  // ===== 以下两类消息只允许「地图页」发起（避免其它网页借扩展的权限读内网接口）=====
+  if (payload.type === 'map-need-token' || payload.type === 'map-api') {
+    if (!isMapFrame(sender)) {
+      console.warn('[dep-bridge] 拒绝非地图页的 ' + payload.type + ' 请求，来源：' +
+                   ((sender && sender.url) || '(空)'));
+      return;
+    }
+  }
+
   // 地图页索要 token：扩展去真实后端取，取到后回发该标签页（含其中的 iframe）
   if (payload.type === 'map-need-token') {
     fetchMapToken(function (err, token) {
       if (err || !token) return;
       if (fromTabId != null) send(fromTabId, { type: 'map-token', token: token });
     });
+    return;
+  }
+
+  // 地图接口代理：扩展代发后端请求（绕过 file:// 的 CORS 预检与空 Referer）
+  if (payload.type === 'map-api') {
+    proxyMapApi(payload, fromTabId);
     return;
   }
 

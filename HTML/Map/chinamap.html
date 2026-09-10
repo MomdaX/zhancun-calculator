@@ -78,6 +78,8 @@
             }
         });
     </script>
+    <!-- 接口代理：必须紧跟 jQuery / getApiBase 定义之后（覆盖 $.ajax，把后端请求交给扩展代发） -->
+    <script src="./js/map-api-proxy.js"></script>
     <script src="./js/getToken.js"></script>
     <!--    <script th:src="@{/js/nostalgic.js(v=1.4)}"></script>-->
     <!--    <script th:src="@{/DataTables-1.10.21/jquery.dataTables.js(v=1.1)}"></script>-->
@@ -502,6 +504,8 @@
 
     <!-- 对外集成接口：供外部页面通过 postMessage 调用径路功能（唯一新增行） -->
     <script src="./js/integration.js"></script>
+    <!-- 版本升级标记：后端版本 ≠ 本地兜底数据版本时，在右下角版本号前显示升级图标 -->
+    <script src="./js/map-version-badge.js"></script>
 </body>
 
 </html>
