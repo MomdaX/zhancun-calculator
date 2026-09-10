@@ -29,3 +29,6 @@ node_modules/
 # 测试数据来源（xlsdata/ 为本地测试样本，不入版本库）
 xlsdata/
 HTML/xlsdata/
+
+# 日志文件（可能含内网/调试信息，不入版本库）
+*.log
