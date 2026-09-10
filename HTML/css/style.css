@@ -211,6 +211,45 @@ body {
   min-width: 520px;
 }
 
+/* ================= 作业区示意图浮窗 ================= */
+/* 不给浮窗设固定宽高：让它由图片撑开（图片多大窗口多大），
+ * 避免「固定大框 + 图片等比缩放」在上下/左右留下大片留白。 */
+.areamap-body {
+  padding: 10px;
+  min-width: 0;                      /* 覆盖 .modal-body 的 min-width:520px */
+  background: #f4f6f8;
+  text-align: center;
+  user-select: none;                 /* 拖动图片时不顺带选中内容 */
+}
+/* 尺寸完全由 JS 控制（app.js: applyAreaZoom 设置 style.width）：
+ * 这里不能设 max-width/max-height，否则会把放大结果截断。
+ * 首屏尺寸 = 原始像素 × areaFitRatio()，等价于「适应窗口」，所以窗口依然贴着图片、无留白。 */
+#areamapImg {
+  display: block;
+  margin: 0 auto;
+  cursor: zoom-in;                   /* 未超出容器：提示可滚轮 / 点击缩放 */
+}
+/* 图片超出容器后可拖动：平时 grab，按住时 grabbing。
+ * 拖动中光标可能移到图片之外，所以容器上也挂一份 grabbing。 */
+#areamapImg.can-drag { cursor: grab; }
+#areamapBody.dragging,
+#areamapBody.dragging #areamapImg { cursor: grabbing; }
+/* 必须显式处理：上面的 display:block 特异性高于 [hidden] 的 UA 规则，否则 hidden 失效 */
+#areamapImg[hidden], .areamap-empty[hidden] { display: none; }
+.areamap-empty {
+  /* 空态没有图片撑宽，单独给个合理宽度（否则 .modal-body 的 min-width 已归零，
+     提示文字会被挤成一列或拉得过宽） */
+  min-width: 340px;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 26px 16px;
+  color: var(--text-dim, #636e72);
+  font-size: 14px;
+  line-height: 1.9;
+  text-align: center;
+  white-space: pre-line;              /* 保留提示文案里的 \n 换行 */
+}
+
 /* 站存计算器 = 无遮罩浮窗：背景透明、容器点击穿透，主表保持可操作。
  * 区别于其它 modal 的半透明全屏遮罩；面板内容自身仍可交互，
  * 标题栏拖动/内部按钮/勾选均不受影响。 */
@@ -858,6 +897,21 @@ table.grid tbody tr.area-banner .area-banner-text {
   /* letter-spacing 会在末字后也留一份间距，致居中偏左；负 margin 抵消，保持真正居中 */
   margin-right: -8px;
 }
+/* 横幅上的路徽图标：点击查看该作业区站场示意图。
+ * 与文字同处 sticky 的 .area-banner-text 内，横向滚动时一起移动、不分离。 */
+table.grid tbody tr.area-banner .area-banner-icon {
+  width: 18px;
+  height: 18px;
+  vertical-align: -4px;
+  margin-right: 10px;
+  cursor: pointer;
+  opacity: .85;
+  transition: opacity .12s, transform .12s;
+}
+table.grid tbody tr.area-banner .area-banner-icon:hover {
+  opacity: 1;
+  transform: scale(1.12);
+}
 tr.blank td.track { color: #8395a7; }
 
 /* 循环车（车次 6 开头）标色 */
@@ -994,6 +1048,16 @@ table.detail thead th {
   position: relative;
   background: var(--head-bg);
   text-align: center;
+}
+/* 明细抽屉标题「股道」名前的小路徽图标。
+   源图是白底 jpg，用 multiply 让白底融入标题背景，避免出现白方块。 */
+.drawer-head h3 .dt-name .detail-emblem {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  vertical-align: -3px;
+  margin-right: 4px;
+  mix-blend-mode: multiply;
 }
 table.detail tbody tr:hover td { background: var(--row-hover); }
 table.detail tbody tr { cursor: pointer; }

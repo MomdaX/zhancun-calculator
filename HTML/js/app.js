@@ -167,12 +167,134 @@
     return slots;
   }
 
-  /** 作业区横幅行：通栏单行，仅作分段标识，不参与选中 / 明细 / 合计 */
+  /* 作业区 → 站场示意图。键 = 横幅上的作业区名，值 = HTML/images/ 下的文件名。
+   * 新增或替换示意图：把图片放进 HTML/images/，再在这里登记一行即可，不必改其它代码。
+   * 未登记的作业区点图标会提示「暂无示意图」，不会出现破图。 */
+  var AREA_IMAGES = {
+    '货场作业区': 'images/货场作业区.png',
+    '勒沟作业区': 'images/勒沟作业区.png',
+    '鹰岭作业区': 'images/鹰岭作业区.png',
+    '中油作业区': 'images/中油作业区.png'
+  };
+
+  /** 作业区横幅行：通栏单行，仅作分段标识，不参与选中 / 明细 / 合计。
+   *  名字前挂一枚路徽图标（点击 → openAreaMap 打开该作业区示意图）。
+   *  图标放在 .area-banner-text 内部：与文字共用同一 sticky 定位，
+   *  横向滚动时不会与文字分离（放 td 里但 span 外就会分离）。 */
   function bannerRow(a) {
-    return '<tr class="area-banner" data-area="' + escapeHtml(a.name) + '">' +
+    var name = escapeHtml(a.name);
+    return '<tr class="area-banner" data-area="' + name + '">' +
            '<td colspan="' + COLUMNS.length + '" style="background:' + (a.color || '#2b5cb0') + '">' +
-           '<span class="area-banner-text">' + escapeHtml(a.name) + '</span>' +
+           '<span class="area-banner-text">' +
+             '<img class="area-banner-icon" src="images/lihui.png" alt="" ' +
+                  'data-area="' + name + '" title="查看「' + name + '」示意图">' +
+             name +
+           '</span>' +
            '</td></tr>';
+  }
+
+  /* ---- 作业区示意图缩放 ----
+   * areaView.cur：图片显示宽度 ÷ 原始像素宽度（1 = 1:1 原始尺寸）。
+   * areaView.fit：「适应窗口」比例——按视口算出的最大不超出比例，上限 1（小图不放大）。
+   * 缩放全程由 JS 设定 img.style.width 实现（所以 CSS 里不设 max-width/max-height，
+   * 否则会截断放大结果），高度交给 height:auto 按原比例走。
+   * 滚轮 = 自由缩放（以鼠标位置为锚点）；点图片 = 在「适应窗口」与「1:1」间切换。 */
+  var AREA_ZOOM_MIN = 0.2;      // 最小缩到 fit 的 20%
+  var AREA_ZOOM_MAX = 8;        // 最大 8 倍（位图再放大就糊了）
+  var areaView = { fit: 1, cur: 1 };
+
+  /** 「适应窗口」比例：与浮窗尺寸约束对应（94vw/92vh 减去内边距与标题栏） */
+  function areaFitRatio(nw, nh) {
+    if (!nw || !nh) return 1;
+    var availW = window.innerWidth * 0.94 - 20;
+    var availH = window.innerHeight * 0.92 - 80;
+    return Math.min(availW / nw, availH / nh, 1);
+  }
+
+  /** 应用缩放。给了鼠标坐标就保持该点不动（滚轮缩放手感的来源）。 */
+  function applyAreaZoom(z, clientX, clientY) {
+    var img = $('areamapImg'), body = $('areamapBody');
+    if (!img || !body || !img.naturalWidth) return;
+
+    var nw = img.naturalWidth;
+    z = Math.max(areaView.fit * AREA_ZOOM_MIN, Math.min(AREA_ZOOM_MAX, z));
+
+    // 记录鼠标指向的是「原图上的哪个像素」（在老尺寸下换算）
+    var r0 = null, px = 0, py = 0;
+    if (clientX != null) {
+      r0 = img.getBoundingClientRect();
+      px = (clientX - r0.left) / (r0.width / nw);
+      py = (clientY - r0.top) / (r0.height / img.naturalHeight);
+    }
+
+    img.style.width = (nw * z) + 'px';
+    areaView.cur = z;
+
+    if (r0) {
+      // 缩放后该像素点跑到新位置，用滚动条把它拉回鼠标底下
+      var r1 = img.getBoundingClientRect();
+      body.scrollLeft += (r1.left + px * z) - clientX;
+      body.scrollTop += (r1.top + py * z) - clientY;
+    }
+
+    updateAreaDragState();
+  }
+
+  /** 只有图片超出容器才「可拖拽」，据此切换光标（grab / zoom-in）。
+   *  缩放后立即调用，光标才能跟着状态走。
+   *  注：浮窗未打开时容器 clientWidth/scrollWidth 都是 0，判定为不可拖拽，不会误标。 */
+  function updateAreaDragState() {
+    var img = $('areamapImg'), body = $('areamapBody');
+    if (!img || !body) return;
+    var can = !img.hidden &&
+              (body.scrollWidth > body.clientWidth + 1 ||
+               body.scrollHeight > body.clientHeight + 1);
+    img.classList.toggle('can-drag', can);
+  }
+
+  /** 打开「作业区示意图」浮窗：按作业区名取 images/ 下登记的图片。
+   *  未登记 / 加载失败都在浮窗内给出文字提示，不弹破图。 */
+  function openAreaMap(areaName) {
+    var title = $('areamapTitle'), img = $('areamapImg'), empty = $('areamapEmpty');
+    if (!title || !img || !empty) return;
+
+    var src = AREA_IMAGES[areaName];
+    title.textContent = areaName + '示意图';
+
+    // 复位：先摘掉上一张的 src 与尺寸，避免残留旧图闪一下
+    img.onload = img.onerror = null;
+    img.removeAttribute('src');
+    img.style.width = '';
+    img.hidden = true;
+    empty.hidden = true;
+
+    if (!src) {
+      empty.hidden = false;
+      empty.textContent = '暂无「' + areaName + '」的示意图。\n' +
+                          '把图片放入 HTML/images/ 并在 AREA_IMAGES 中登记即可。';
+      UI.Modal.open('modalAreaMap');
+      return;
+    }
+
+    img.onload = function () {
+      var nw = img.naturalWidth, nh = img.naturalHeight;
+      areaView.fit = areaFitRatio(nw, nh);
+      img.style.width = (nw * areaView.fit) + 'px';   // 先按「适应窗口」显示
+      areaView.cur = areaView.fit;
+      img.hidden = false;
+      img.title = '滚轮缩放 · 按住拖动 · 点击切换 1:1';
+      title.textContent = areaName + '示意图（' + nw + '×' + nh + '）';
+      updateAreaDragState();
+    };
+    img.onerror = function () {
+      img.onerror = null;                    // 先解绑，避免下面移除 src 时再次触发
+      img.hidden = true;
+      img.removeAttribute('src');            // 清掉，下次点击可重新尝试加载
+      empty.hidden = false;
+      empty.textContent = '图片加载失败：' + src + '\n请确认文件已放入 HTML/images/ 目录。';
+    };
+    img.src = src;
+    UI.Modal.open('modalAreaMap');
   }
 
   /**
@@ -489,7 +611,9 @@
     //（warn 按当前显示的数值判定：非编辑看总重是否超限、编辑看计重是否超限。）
     var showWeight = detailEditMode ? t.calcW : t.weight;
     $('drawerTitle').innerHTML =
-      '<span class="dt-name">' + escapeHtml(name ? name.name : r.track) + ' - </span>' +
+      // 「股道」名前挂路徽小图标（与工具栏路徽呼应）
+      '<span class="dt-name"><img class="detail-emblem" src="images/luhui.jpg" alt="">' +
+        escapeHtml(name ? name.name : r.track) + ' - </span>' +
       '<span class="dt-total">辆数：' + t.count + '</span>' +
       '<span class="dt-total' + (t.length > thr.overlong ? ' warn' : '') + '">换长：' + t.length.toFixed(1) + '</span>' +
       '<span class="dt-total">自重：' + t.selfW.toFixed(1) + '</span>' +
@@ -856,6 +980,88 @@
       var tr = e.target.closest('tr');
       if (!tr || tr.classList.contains('area-banner')) return;
       openDetail(+tr.getAttribute('data-idx'));
+    });
+
+    /* 作业区横幅上的路徽图标 → 打开该作业区的站场示意图。
+     * 横幅行由 render() 用 innerHTML 重建，不能逐个绑，故委托到 tbody。
+     * 行选中/双击的处理里对 .area-banner 都是直接 return，这里不必阻断冒泡。 */
+    on('tbody', 'click', function (e) {
+      var icon = e.target.closest && e.target.closest('.area-banner-icon');
+      if (!icon) return;
+      e.preventDefault();
+      openAreaMap(icon.getAttribute('data-area'));
+    });
+
+    /* 示意图缩放：滚轮自由缩放（以鼠标位置为锚点），点图片在「适应窗口」与 1:1 间切换。
+     * wheel 必须用 { passive:false } 才能 preventDefault（吃掉容器的原生滚动），
+     * 而 Utils.on 不支持传 addEventListener 的 options，故这里手动绑。 */
+    var areaBody = $('areamapBody');
+    if (areaBody) {
+      areaBody.addEventListener('wheel', function (e) {
+        var img = $('areamapImg');
+        if (!img || img.hidden || !img.naturalWidth) return;
+        e.preventDefault();
+        // 指数步长：滚轮一格与触控板小幅滑动都能得到顺手的缩放量
+        applyAreaZoom(areaView.cur * Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY);
+      }, { passive: false });
+    }
+
+    /* ---- 示意图拖拽平移 ----
+     * 抓图拖动 = 反向滚动容器。mouseup 把「本次是否真拖动过」留给 click 消费，
+     * 否则拖完松手会顺带触发「适应窗口 / 1:1」切换。
+     * mousedown 里 preventDefault：挡掉 <img> 的原生拖拽（会拖出半透明鬼影）与文本选择。 */
+    var areaDrag = null;
+    var areaDragMoved = false;
+
+    on('areamapImg', 'mousedown', function (e) {
+      if (e.button !== 0 || !this.naturalWidth) return;      // 只响应左键
+      var body = $('areamapBody');
+      if (!body) return;
+      e.preventDefault();
+      areaDragMoved = false;
+      areaDrag = {
+        startX: e.clientX, startY: e.clientY,
+        sl: body.scrollLeft, st: body.scrollTop,
+        moved: false
+      };
+      body.classList.add('dragging');
+    });
+
+    document.addEventListener('mousemove', function (e) {
+      if (!areaDrag) return;
+      var body = $('areamapBody');
+      if (!body) return;
+      var dx = e.clientX - areaDrag.startX;
+      var dy = e.clientY - areaDrag.startY;
+      // 超过 4px 才算拖动，用于区分「拖动」与「点击」
+      if (!areaDrag.moved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) areaDrag.moved = true;
+      body.scrollLeft = areaDrag.sl - dx;                    // 鼠标右移 → 内容左移
+      body.scrollTop  = areaDrag.st - dy;
+    });
+
+    document.addEventListener('mouseup', function () {
+      if (!areaDrag) return;
+      areaDragMoved = areaDrag.moved;                        // 交给 click 判断
+      areaDrag = null;
+      var body = $('areamapBody');
+      if (body) body.classList.remove('dragging');
+    });
+
+    on('areamapImg', 'click', function (e) {
+      if (areaDragMoved) { areaDragMoved = false; return; }  // 刚才是拖动，不是点击
+      if (!this.naturalWidth) return;
+      // 当前在「适应窗口」→ 切到 1:1；否则切回「适应窗口」
+      var atFit = Math.abs(areaView.cur - areaView.fit) < 1e-6;
+      applyAreaZoom(atFit ? 1 : areaView.fit, e.clientX, e.clientY);
+    });
+
+    // 窗口尺寸变化：只在「适应窗口」态跟随重算，已经手动缩放过的保持不动
+    window.addEventListener('resize', function () {
+      var img = $('areamapImg');
+      if (!img || img.hidden || !img.naturalWidth) return;
+      var wasFit = Math.abs(areaView.cur - areaView.fit) < 1e-6;
+      areaView.fit = areaFitRatio(img.naturalWidth, img.naturalHeight);
+      if (wasFit) applyAreaZoom(areaView.fit);
     });
 
     // 明细表：双击车站名→地图、双击车号→复制车号（通用交互，见 bindCarRowEvents）
@@ -1409,6 +1615,7 @@
     UI.Modal.register('modalSettings', { onOpen: refreshFolderPath });
     UI.Modal.register('modalProductivity');
     UI.Modal.register('modalDeparture');
+    UI.Modal.register('modalAreaMap');
     UI.Drawer.register('drawer', { maskId: 'drawerMask' });
     UI.Drawer.register('searchDrawer', { maskId: 'searchMask' });
 
@@ -1416,6 +1623,7 @@
     on('btnCloseDrawer', 'click', closeDetail);
     on('rptClose', 'click', function () { UI.Modal.close('modal31814'); });
     on('btnSettingsClose', 'click', function () { UI.Modal.close('modalSettings'); });
+    on('areamapClose', 'click', function () { UI.Modal.close('modalAreaMap'); });
 
     /* ---- 配置备份：导出 / 导入本地持久化（localStorage）---- */
     function tsStamp() {
