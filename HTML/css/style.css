@@ -1050,7 +1050,7 @@ table.detail thead th {
   text-align: center;
 }
 /* 明细抽屉标题「股道」名前的小路徽图标。
-   源图是白底 jpg，用 multiply 让白底融入标题背景，避免出现白方块。 */
+   源图是白底 jpeg，用 multiply 让白底融入标题背景，避免出现白方块。 */
 .drawer-head h3 .dt-name .detail-emblem {
   width: 16px;
   height: 16px;

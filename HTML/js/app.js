@@ -186,7 +186,7 @@
     return '<tr class="area-banner" data-area="' + name + '">' +
            '<td colspan="' + COLUMNS.length + '" style="background:' + (a.color || '#2b5cb0') + '">' +
            '<span class="area-banner-text">' +
-             '<img class="area-banner-icon" src="images/lihui.png" alt="" ' +
+             '<img class="area-banner-icon" src="images/luhui.png" alt="" ' +
                   'data-area="' + name + '" title="查看「' + name + '」示意图">' +
              name +
            '</span>' +
@@ -612,7 +612,7 @@
     var showWeight = detailEditMode ? t.calcW : t.weight;
     $('drawerTitle').innerHTML =
       // 「股道」名前挂路徽小图标（与工具栏路徽呼应）
-      '<span class="dt-name"><img class="detail-emblem" src="images/luhui.jpg" alt="">' +
+      '<span class="dt-name"><img class="detail-emblem" src="images/luhui.jpeg" alt="">' +
         escapeHtml(name ? name.name : r.track) + ' - </span>' +
       '<span class="dt-total">辆数：' + t.count + '</span>' +
       '<span class="dt-total' + (t.length > thr.overlong ? ' warn' : '') + '">换长：' + t.length.toFixed(1) + '</span>' +
