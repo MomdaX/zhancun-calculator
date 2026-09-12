@@ -1523,6 +1523,23 @@
     var depSendBtns = document.querySelectorAll('.dep-send-btns .btn-send');
     var depLastTrack = '';   // 最近一次发送所用的股道（道号），用于回执提示
     var depActiveStrategy = 'fs_tab_toolbar';
+    /* 一次发送会收到「多个 frame」的回执（每个 frame 的 page-fill 都会各自回传），
+     * 采「成功优先 + 窗口聚合」：窗口内保留最佳结果，全成功或窗口结束才展示，
+     * 避免后到的失败回执把已经成功的提示覆盖成「编好失败」。 */
+    var depFillBest = null;
+    var depFillTimer = null;
+    function showFillResult(res) {
+      if (!res) return;
+      var total = 5, ok = res.ok || 0;
+      var track = depLastTrack ? depLastTrack + '道' : '';
+      var msg;
+      if (ok >= total)      msg = track + '编好';
+      else if (ok > 0)      msg = track + '编好（部分 ' + ok + '/' + total + '）';
+      else                  msg = track + '编好失败';
+      if (res.error) msg += ' · 原因：' + res.error;
+      else if (res.failed && res.failed.length) msg += ' · 未写入：' + res.failed.join('、');
+      showDepStatus(msg, ok > 0 ? 'ok' : 'warn');
+    }
     function setActiveStrategy(btn) {
       for (var k = 0; k < depSendBtns.length; k++) depSendBtns[k].classList.remove('active');
       btn.classList.add('active');
@@ -1544,6 +1561,10 @@
       var cells = getDepCells();
       if (!cells.C4) { showDepStatus('请先输入车次', 'warn'); return; }
       depLastTrack = cells.B4;
+      // 重置回执聚合窗口：本次发送的最佳结果由 showFillResult 统一展示
+      depFillBest = null;
+      if (depFillTimer) clearTimeout(depFillTimer);
+      depFillTimer = setTimeout(function () { showFillResult(depFillBest); }, 900);
       try {
         window.postMessage({
           channel: DEP_BRIDGE,
@@ -1584,15 +1605,15 @@
         return;
       }
       if (d.type === 'filled' && d.strategy) {
-        var ok = d.ok || 0, total = 5;
-        var track = depLastTrack ? depLastTrack + '道' : '';
-        var msg;
-        if (ok >= total)      msg = track + '编好';
-        else if (ok > 0)      msg = track + '编好（部分 ' + ok + '/' + total + '）';
-        else                  msg = track + '编好失败';
-        if (d.error)  msg += ' · 原因：' + d.error;
-        if (d.failed && d.failed.length) msg += ' · 未写入：' + d.failed.join('、');
-        showDepStatus(msg, ok > 0 ? 'ok' : 'warn');
+        // 多 frame 回执聚合：保留最佳（ok 最大）结果，全成功立即展示，否则等窗口结束再展示
+        var ok = d.ok || 0;
+        if (!depFillBest || ok > depFillBest.ok) {
+          depFillBest = { ok: ok, error: d.error, failed: d.failed };
+        }
+        if (ok >= 5) {
+          if (depFillTimer) { clearTimeout(depFillTimer); depFillTimer = null; }
+          showFillResult(depFillBest);
+        }
       }
     });
 

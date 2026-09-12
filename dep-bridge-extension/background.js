@@ -429,40 +429,173 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
     return;
   }
 
+  /* 发车填表：直接用 chrome.scripting.executeScript 注入 MAIN world 执行。
+   * 不再走「常驻 content script + postMessage 转发」那条 5 跳链路
+   * （计算器页 → content → background → 报表页 content → page-fill），
+   * 任一刻断开都只能静默失败、且难以定位。
+   * executeScript 一次性注入，并把每个 frame 的返回值直接带回，链路最短、结果最确定。 */
+  if (payload.type === 'fill' || payload.type === 'fillByStrategy') {
+    fillByExecute(payload, fromTabId);
+    return;
+  }
+
+  // 其余类型（checiList / filled / reloadResult 等回传）：只发给非报表页（即计算器页面）
   chrome.tabs.query({}, function (tabs) {
-    var hitReport = 0;
     (tabs || []).forEach(function (t) {
       if (t.id === fromTabId) return;               // 不发回来源标签页，避免回环
-      if (payload.type === 'fill' || payload.type === 'fillByStrategy') {
-        // 填表指令：优先发给「匹配 popup 配置的报表页」
-        if (isReport(t.url)) { hitReport++; send(t.id, payload); }
-      } else {
-        // checiList / filled 等回传：只发给非报表页（即计算器页面）
-        if (!isReport(t.url)) send(t.id, payload);
-      }
+      if (!isReport(t.url)) send(t.id, payload);
     });
-
-    /* 兜底广播：popup 没配地址、或配的地址与当前实际页面不符
-     * （例如配了 10.190.136.28 但实际开着 127.0.0.1 的测试页）时，
-     * 上面精确匹配会一个都命中不了。此时广播给所有标签页，
-     * 由各页面的 page-fill 自行判断「本页有没有 contentPane」：
-     *   有 → 填表；没有 → 静默跳过。不会误填无关页面。 */
-    if ((payload.type === 'fill' || payload.type === 'fillByStrategy') && hitReport === 0 && !cfg.broadcast) {
-      console.log('[dep-bridge] 未匹配到报表页，且「广播兜底」已关闭 → 不发送。' +
-                  '请在 popup 里检查报表地址，或打开广播兜底开关。');
-    }
-
-    if ((payload.type === 'fill' || payload.type === 'fillByStrategy') && hitReport === 0 && cfg.broadcast) {
-      console.log('[dep-bridge] 未匹配到报表页，广播兜底（由页面自行判断 contentPane）');
-      (tabs || []).forEach(function (t) {
-        if (t.id === fromTabId) return;
-        // 跳过内置页（chrome:// / edge:// / about: 等）：扩展无法向它们注入
-        // content script，发了也收不到，纯属浪费
-        if (!t.url || /^(chrome|chrome-extension|edge|about|devtools|view-source|file):/i.test(t.url)) {
-          return;
-        }
-        send(t.id, payload);
-      });
-    }
   });
 });
+
+/* ====== 发车填表：MAIN world 注入执行 =====================================
+ * depFillFunc 会被 chrome.scripting.executeScript 序列化后注入目标页面执行，
+ * 所以它【必须自包含】——不能引用本文件作用域里的任何变量（CHANNEL / cfg 等）。
+ * 注入到 MAIN world 才能访问 iframe.contentWindow.contentPane（帆软运行时对象）。 */
+function depFillFunc(cells, strategy) {
+  /** 元素是 iframe 且其 contentWindow 上有可用的帆软 contentPane → 返回该 contentWindow */
+  function paneWin(el) {
+    try {
+      var w = el && el.contentWindow;
+      if (!w) return null;
+      var cp = w.contentPane;
+      if (cp && typeof cp.setCellValue === 'function') return w;
+    } catch (e) { /* 跨域访问 contentWindow.contentPane 会抛错 */ }
+    return null;
+  }
+  /** 探测候选：元素本身是 iframe，或它内部（一层）的 iframe */
+  function probe(el) {
+    var own = paneWin(el);
+    if (own) return own;
+    try {
+      var inner = el.querySelectorAll('iframe');
+      for (var i = 0; i < inner.length; i++) {
+        var w2 = paneWin(inner[i]);
+        if (w2) return w2;
+      }
+    } catch (e) {}
+    return null;
+  }
+  var SELECTORS = {
+    fs_tab_toolbar: ['.fs-tab-content-item.fs-tab-content-toolbar', 'iframe.fs-tab-content-toolbar'],
+    fs_tab_id:      ['iframe[id^="fs_tab"]'],
+    first_iframe:   ['iframe'],
+    fs_tab_class:   ['.fs-tab-content-item', 'iframe.fs-tab-content-item'],
+    name_fs_tab:    ['iframe[name^="fs_tab"]'],
+    all:            ['.fs-tab-content-item.fs-tab-content-toolbar', 'iframe.fs-tab-content-toolbar',
+                     'iframe[id^="fs_tab"]', 'iframe[name^="fs_tab"]', '.fs-tab-content-item', 'iframe']
+  };
+  function writeInto(win, label) {
+    var ok = 0, failed = [];
+    for (var id in cells) {
+      if (!Object.prototype.hasOwnProperty.call(cells, id)) continue;
+      try {
+        win.contentPane.setCellValue(id, null, cells[id]);
+        ok++;
+      } catch (e) { failed.push(id + ':' + (e.message || e)); }
+    }
+    return { ok: ok, failed: failed, target: label, url: location.href };
+  }
+
+  // ①「自身」：本 frame 自己就是帆软报表 frame（有 contentPane）
+  if (strategy === 'self') {
+    if (window.contentPane && typeof window.contentPane.setCellValue === 'function') {
+      return writeInto(window, 'self');
+    }
+    return { ok: 0, skip: true, target: 'self', url: location.href, error: '本 frame 无 contentPane' };
+  }
+
+  // ② 其余策略：在本 frame 的 document 里找带 contentPane 的报表 iframe
+  var sels = SELECTORS[strategy] || SELECTORS.all;
+  for (var s = 0; s < sels.length; s++) {
+    var list;
+    try { list = document.querySelectorAll(sels[s]); } catch (e) { continue; }
+    for (var i2 = 0; i2 < list.length; i2++) {
+      var w = probe(list[i2]);
+      if (w) return writeInto(w, sels[s] + '[' + i2 + ']');
+    }
+  }
+
+  // ③ 兜底：本 frame 自己就是帆软报表页 → 直接写本帧。
+  //   典型场景：不经平台外壳、直接打开报表页本身（如直接打开 departure_flow.html），
+  //   此时页面里根本没有 .fs-tab-* 这类 iframe，找 iframe 必然落空，用本帧 contentPane 才对。
+  if (window.contentPane && typeof window.contentPane.setCellValue === 'function') {
+    return writeInto(window, 'self(本页即报表页)');
+  }
+
+  // 本 frame 没有可用目标：无 iframe 的 frame 标记 skip（由调用方忽略，避免多 frame 互相覆盖）
+  var hasIframe = false;
+  try { hasIframe = !!document.querySelector('iframe'); } catch (e) {}
+  return {
+    ok: 0, skip: !hasIframe, target: '', url: location.href,
+    error: hasIframe
+      ? '本 frame 的 iframe 里没有 contentPane（报表可能未加载完，请刷新报表页后重试）'
+      : '本 frame 无 iframe'
+  };
+}
+
+/** 向所有候选标签页的「所有 frame」注入 depFillFunc（MAIN world），取最佳结果回传计算器页 */
+function fillByExecute(payload, fromTabId) {
+  var cells = payload.cells || {};
+  var strategy = payload.strategy || 'all';
+
+  function reply(obj) { if (fromTabId != null) send(fromTabId, obj); }
+
+  chrome.tabs.query({}, function (tabs) {
+    // 优先「匹配 popup 报表地址」的标签页；一个都没匹配且开着广播兜底时，注入所有普通标签页
+    var targets = (tabs || []).filter(function (t) { return isReport(t.url); });
+    if (!targets.length && cfg.broadcast) {
+      targets = (tabs || []).filter(function (t) {
+        if (t.id === fromTabId) return false;
+        if (!t.url || /^(chrome|chrome-extension|edge|about|devtools|view-source|file):/i.test(t.url)) return false;
+        return true;
+      });
+      console.log('[dep-bridge] 未匹配报表页，兜底注入所有普通标签页（' + targets.length + ' 个）');
+    }
+    if (!targets.length) {
+      console.log('[dep-bridge] 无可用目标标签页（报表地址：' + (cfg.reportUrl || '未配置') + '）');
+      reply({ type: 'filled', ok: 0, strategy: strategy,
+              error: '未找到报表标签页：请检查 popup 里的「报表地址」是否与已打开的页面一致' });
+      return;
+    }
+
+    var pending = targets.length;
+    var best = null;
+    function settle() {
+      if (--pending > 0) return;
+      console.log('[dep-bridge] 注入完成：ok=' + (best ? best.ok : 0) + ' target=' + (best ? best.target : '(无)'));
+      reply({
+        type: 'filled',
+        ok: best ? best.ok : 0,
+        failed: best && best.failed,
+        error: best ? best.error : '注入后没有任何 frame 返回结果',
+        strategy: strategy,
+        target: best ? best.target : ''
+      });
+    }
+
+    targets.forEach(function (t) {
+      try {
+        chrome.scripting.executeScript({
+          target: { tabId: t.id, allFrames: true },
+          world: 'MAIN',
+          func: depFillFunc,
+          args: [cells, strategy]
+        }, function (results) {
+          if (chrome.runtime.lastError) {
+            console.log('[dep-bridge] 注入失败 tab ' + t.id + '：' + chrome.runtime.lastError.message);
+          }
+          (results || []).forEach(function (r) {
+            var v = r && r.result;
+            if (!v) return;
+            if (!best || (v.ok || 0) > (best.ok || 0)) best = v;   // 取「写得最多」的那个 frame 的结果
+          });
+          settle();
+        });
+      } catch (e) {
+        console.log('[dep-bridge] 注入异常 tab ' + t.id + '：' + (e && e.message || e));
+        settle();
+      }
+    });
+  });
+}

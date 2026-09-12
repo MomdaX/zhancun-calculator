@@ -138,15 +138,27 @@
        * 帧角色判定避免多 frame 重复执行 setCellValue。 */
       var strategy = d.strategy || 'all';
 
+      /* 本页是「站存计算器」自身（指令发起方）→ 直接静默跳过。
+       * 计算器页自己也带 iframe（#mapFrame），会被兜底广播扫到，但它不可能是
+       * 报表平台页——跑一遍定位只会打出一条容易被误判成"失败"的日志。
+       * 用计算器页独有的元素判定（发送按钮 / 明细表）；报表页不会有这些。 */
+      if (document.getElementById('btnSendCurrent') || document.getElementById('detailTable')) {
+        return;
+      }
+
       /* 前置过滤：本页如果没有「报表平台特征」的 iframe，就不是 FS 平台页，直接静默跳过。
        * 注意不能只看「有没有 iframe」——计算器页自己也带一个 <iframe id="mapFrame">（about:blank），
        * 广播兜底会误发到它，导致刷一堆 "no match"。这里按报表特征判断才准。 */
       if (strategy !== 'self') {
-        var reportIframes = document.querySelectorAll(
-          '.fs-tab-content-item, .fs-tab-content-toolbar, iframe[id^="fs_tab"], iframe[name^="fs_tab"]'
-        );
-        if (reportIframes.length === 0) {
-          console.log('[dep-bridge] ⊘ 跳过：本页无报表平台 iframe（strategy=' + strategy + '）');
+        // 两个放行条件，满足其一就继续（最终以「能否拿到 contentPane」为准）：
+        //   ① 本帧有 iframe —— 可能是平台页，报表 iframe 就在里面；
+        //   ② 本帧自带 contentPane —— 直接打开报表页本身（无平台外壳、也无 iframe）。
+        // 两者都不满足 → 与报表无关，静默跳过（不回执，避免覆盖别的 frame 的成功回执）。
+        var anyIframe = false;
+        try { anyIframe = !!document.querySelector('iframe'); } catch (e) {}
+        var selfPane = !!(window.contentPane && typeof window.contentPane.setCellValue === 'function');
+        if (!anyIframe && !selfPane) {
+          console.log('[dep-bridge] ⊘ 跳过：本 frame 无 iframe 也无 contentPane（strategy=' + strategy + '）');
           return;
         }
       }
@@ -163,89 +175,108 @@
        * 必须遍历而不是只取第一个：FS 平台页里有 2 个 iframe，
        * 第 1 个是 display:none 的首页占位（formlet=demo/homepage/finereport.frm，无 contentPane），
        * 第 2 个才是报表（id/name=fs_tab_xxx，class 多了 fs-tab-content-toolbar）。 */
+      /** 元素是 iframe 且其 contentWindow 上有可用的帆软 contentPane → 返回该 contentWindow，否则 null */
+      function paneWin(el) {
+        try {
+          var w = el && el.contentWindow;
+          if (!w) return null;
+          var cp = w.contentPane;
+          if (cp && typeof cp.setCellValue === 'function') return w;
+        } catch (e) { /* 跨域访问 contentWindow.contentPane 会抛错 */ }
+        return null;
+      }
+
       function trySelect(selector, label) {
         try {
           var list = document.querySelectorAll(selector);
           console.log('[dep-bridge] trySelect "' + selector + '" → 匹配到 ' + list.length + ' 个');
           for (var k = 0; k < list.length; k++) {
             var f = list[k];
-            try {
-              var cwOk = !!(f && f.contentWindow);
-              var cpOk = !!(cwOk && f.contentWindow.contentPane &&
-                            typeof f.contentWindow.contentPane.setCellValue === 'function');
-              console.log('[dep-bridge]   [' + k + '] src="' + String(f.src || '').slice(0, 70) +
-                          '" contentWindow=' + (cwOk ? 'yes' : 'no') +
-                          ' contentPane=' + (cpOk ? 'yes' : 'no') +
-                          ' display=' + (f.style && f.style.display ? f.style.display : '(visible)'));
-              if (cpOk) {
-                targetWin = f.contentWindow;
-                targetLabel = label + '[' + k + ']';
-                return true;
-              }
-            } catch (e) {
-              console.log('[dep-bridge]   [' + k + '] 访问抛错（多半是跨域）：' + (e.message || e));
+            var win = paneWin(f);
+            if (win) {
+              console.log('[dep-bridge]   [' + k + '] ✓ 命中（本身是 iframe）');
+              targetWin = win;
+              targetLabel = label + '[' + k + ']';
+              return true;
             }
+            // 命中的可能是「容器元素」（帆软有的版本用 div 包 iframe），
+            // 在它内部一层找 iframe 再探测；用户实测的选择器就不带 iframe 前缀。
+            try {
+              var inner = f.querySelectorAll('iframe');
+              for (var q = 0; q < inner.length; q++) {
+                var w2 = paneWin(inner[q]);
+                if (w2) {
+                  console.log('[dep-bridge]   [' + k + '] ✓ 命中（容器内 iframe[' + q + ']）');
+                  targetWin = w2;
+                  targetLabel = label + '[' + k + ']>iframe[' + q + ']';
+                  return true;
+                }
+              }
+            } catch (e2) {}
           }
         } catch (e) {}
         return false;
       }
 
       if (strategy === 'self') {
-        if (window !== window.top && window.contentPane &&
-            typeof window.contentPane.setCellValue === 'function') {
+        // 「自身」：本 frame 自己就是帆软报表 frame（有 contentPane），不必再找 iframe
+        if (window.contentPane && typeof window.contentPane.setCellValue === 'function') {
           targetWin = window;
           targetLabel = 'self';
         } else {
-          isSkip = true;      // 顶层 frame 没有 contentPane，self 策略本就不归它处理
+          isSkip = true;      // 本 frame 不是报表 frame，self 策略不归它处理
           skipReason = 'self: this frame has no contentPane';
         }
       } else if (strategy === 'all') {
-        // 兜底只在顶层 frame 跑（避免和 self 重复）；按「报表 iframe 特征」优先级从高到低逐个试
-        if (window === window.top) {
-          if (!trySelect('iframe.fs-tab-content-toolbar', 'iframe.fs-tab-content-toolbar') &&
-              !trySelect('iframe[id^="fs_tab"]', 'iframe[id^="fs_tab"]') &&
-              !trySelect('iframe[name^="fs_tab"]', 'iframe[name^="fs_tab"]') &&
-              !trySelect('iframe.fs-tab-content-item', 'iframe.fs-tab-content-item') &&
-              !trySelect('iframe', 'querySelector("iframe")')) {
-            skipReason = 'all: no contentPane iframe found';
-          }
-        } else {
-          isSkip = true;
-          skipReason = 'all: only top frame handles';
+        /* 兜底：在本 frame 里按「报表 iframe 特征」优先级从高到低逐个试。
+         * ★ 不再限制 window === window.top：帆软平台页(op=fs_main)常把报表 iframe 嵌在
+         *   中间层 frame 内，顶层 document 里根本没有它——原来非顶层 frame 一律 isSkip，
+         *   导致 7 个模式全部落空。放开后「谁在自己的 document 里找得到，谁就负责写」，
+         *   找到的 frame 唯一，不会重复。 */
+        if (!trySelect('.fs-tab-content-item.fs-tab-content-toolbar', 'cfg') &&
+            !trySelect('iframe.fs-tab-content-toolbar', 'iframe.fs-tab-content-toolbar') &&
+            !trySelect('iframe[id^="fs_tab"]', 'iframe[id^="fs_tab"]') &&
+            !trySelect('iframe[name^="fs_tab"]', 'iframe[name^="fs_tab"]') &&
+            !trySelect('.fs-tab-content-item', '.fs-tab-content-item') &&
+            !trySelect('iframe', 'querySelector("iframe")')) {
+          skipReason = 'all: no contentPane iframe found';
         }
       } else if (strategy === 'fs_tab_toolbar') {
-        // 报表 iframe 独有的 class（第 1 个首页占位 iframe 没有这个 class），最精准
-        if (window === window.top) {
-          if (!trySelect('iframe.fs-tab-content-toolbar', 'iframe.fs-tab-content-toolbar')) {
-            skipReason = 'fs_tab_toolbar: no match';
-          }
-        } else { isSkip = true; skipReason = 'fs_tab_toolbar: only top frame handles'; }
+        // 用户实测最准：两个类同时具备的选择器（不带 iframe 前缀；命中的若为容器，
+        // trySelect 会自动在其内部找 iframe）
+        if (!trySelect('.fs-tab-content-item.fs-tab-content-toolbar', 'fs_tab_toolbar') &&
+            !trySelect('iframe.fs-tab-content-toolbar', 'fs_tab_toolbar')) {
+          skipReason = 'fs_tab_toolbar: no match';
+        }
       } else if (strategy === 'fs_tab_id') {
-        if (window === window.top) {
-          if (!trySelect('iframe[id^="fs_tab"]', 'iframe[id^="fs_tab"]')) {
-            skipReason = 'fs_tab_id: no match';
-          }
-        } else { isSkip = true; skipReason = 'fs_tab_id: only top frame handles'; }
+        if (!trySelect('iframe[id^="fs_tab"]', 'fs_tab_id')) {
+          skipReason = 'fs_tab_id: no match';
+        }
       } else if (strategy === 'first_iframe') {
-        if (window === window.top) {
-          if (!trySelect('iframe', 'querySelector("iframe")')) {
-            skipReason = 'first_iframe: no match';
-          }
-        } else { isSkip = true; skipReason = 'first_iframe: only top frame handles'; }
+        if (!trySelect('iframe', 'first_iframe')) {
+          skipReason = 'first_iframe: no match';
+        }
       } else if (strategy === 'fs_tab_class') {
-        if (window === window.top) {
-          if (!trySelect('iframe.fs-tab-content-item', 'iframe.fs-tab-content-item')) {
-            skipReason = 'fs_tab_class: no match';
-          }
-        } else { isSkip = true; skipReason = 'fs_tab_class: only top frame handles'; }
+        if (!trySelect('.fs-tab-content-item', 'fs_tab_class') &&
+            !trySelect('iframe.fs-tab-content-item', 'fs_tab_class')) {
+          skipReason = 'fs_tab_class: no match';
+        }
       } else if (strategy === 'name_fs_tab') {
-        if (window === window.top) {
-          if (!trySelect('iframe[name^="fs_tab"]', 'iframe[name^="fs_tab"]')) {
-            skipReason = 'name_fs_tab: no match';
-          }
-        } else { isSkip = true; skipReason = 'name_fs_tab: only top frame handles'; }
+        if (!trySelect('iframe[name^="fs_tab"]', 'name_fs_tab')) {
+          skipReason = 'name_fs_tab: no match';
+        }
       } else {
         skipReason = 'unknown strategy: ' + strategy;
+      }
+
+      /* 兜底：本 frame 自己就是帆软报表页 → 直接写本帧。
+       * 场景：不经平台外壳、直接打开报表页本身（如直接打开 departure_flow.html），
+       * 此时页面里没有 .fs-tab-* 这类 iframe，按选择器找必然落空，
+       * 但本帧就有 contentPane，直接写才对。（写入逻辑在下面对 targetWin 统一处理。） */
+      if (!targetWin && strategy !== 'self' &&
+          window.contentPane && typeof window.contentPane.setCellValue === 'function') {
+        targetWin = window;
+        targetLabel = 'self(本页即报表页)';
       }
 
       if (!targetWin) {
@@ -261,7 +292,9 @@
           return;
         }
         // 走到这里才是真问题：本页有 iframe，但里面没有带 contentPane 的报表
-        console.log('[dep-bridge] ✗ 没找到目标：' + (skipReason || 'no target') + '（strategy=' + strategy + '）');
+        console.log('[dep-bridge] ⨯ 本 frame 有 iframe，但里面没有带 contentPane 的帆软报表：' +
+          (skipReason || 'no target') + '（strategy=' + strategy + '，本 frame=' + location.href + '）' +
+          ' —— 若这不是报表标签页，属正常（兜底广播会打扰无关页面）；若是报表页，请刷新报表页后重试。');
         post({ type: 'filled', ok: 0, url: location.href, strategy: strategy, target: targetLabel, error: skipReason || 'no target' });
         return;
       }
