@@ -7,7 +7,7 @@
  *   - window.contentPane  setCellValue / getCellValue（插件靠它写入单元格）
  *   - window.$            jQuery 子集（供下面的单元格编辑脚本使用）
  *   - 单元格编辑           点 B4 出股道下拉，C4~F4 出输入框
- *   - 提交按钮             alert 提示，不发起任何服务器请求
+ *   - 提交按钮             在 #r-4-0 上方插入一行提交记录（左半同步插一条对齐行），不弹窗、不发请求
  *
  * 注意：
  *   1. 这是测试替身，不是真实帆软。真实报表的 contentPane 由 finereport.js
@@ -162,7 +162,7 @@ window.contentPane = (function () {
   }, true);
 })();
 
-/* ---------- 提交按钮：仅提示，绝不发起服务器请求 ---------- */
+/* ---------- 提交按钮：向主数据区追加一条记录，不弹窗、绝不发起服务器请求 ---------- */
 document.addEventListener('click', function (e) {
   var t = e.target;
   var btn = (t && t.closest) ? t.closest('.fr-btn[widgetname="Submit"]') : null;
@@ -171,6 +171,138 @@ document.addEventListener('click', function (e) {
     if (e.stopImmediatePropagation) { e.stopImmediatePropagation(); }
     if (e.preventDefault) { e.preventDefault(); }
     if (e.stopPropagation) { e.stopPropagation(); }
-    alert('提交成功（本地测试，不会真的提交到服务器）');
+    appendSubmitRecord();                                   /* ★ 唯一反馈：加一行记录，不再 alert */
   }
 }, true);
+
+/**
+ * 提交后插入一条记录（不弹窗、不发请求、不做持久化）。
+ *
+ * 插入位置：#r-4-0 的「上方」—— 即第一条数据行之前（不是追加到末尾）。
+ *
+ * 冻结表 tr:nth-child(2) 里是左右两个「可滚动数据区」，行必须成对插，否则会错行：
+ *   · 左半 #frozen-west   —— 冻结列（col 1~5 = 股道 / 编组车次 / 辆数 / 换长 / 尾车车号）
+ *   · 右半 #frozen-center —— 主数据区（col 6~25 = 编成列车 / 通知商检 / …）
+ *   （表头和编辑行在 tr:nth-child(1) 的 #frozen-corner / #frozen-north 里，是固定的，不动）
+ *
+ * 两区里第一条数据行的 id 都是 r-4-0，各自插到它上方即可保持左右对齐。
+ * 新行由现有行 clone 而来，保留列宽 / 边框 / 行高（30px），只清掉 id、editor、
+ * 帆软超链接和编辑态高亮；左半那条写入本次 B4~F4 的值作为记录内容。
+ */
+function appendSubmitRecord() {
+  var host = document.querySelector('#content-container > div > table > tbody > tr:nth-child(2)');
+  if (!host) { return; }
+
+  var westTbody = findTbody(host, '#frozen-west');      /* 左半：冻结列数据 */
+  var centerTbody = findTbody(host, '#frozen-center');  /* 右半：主数据 */
+  var westAnchor = pickAnchor(westTbody);
+  var centerAnchor = pickAnchor(centerTbody);
+  if (!westAnchor && !centerAnchor) { return; }
+
+  var cols = ['B4', 'C4', 'D4', 'E4', 'F4'];        /* 股道 / 编组车次 / 辆数 / 换长 / 尾车车号 */
+  var vals = [];
+  for (var i = 0; i < cols.length; i++) { vals.push(readCell(cols[i])); }
+
+  /* ① 左半：克隆首条数据行 → 写入本次提交的值 → 插到 #r-4-0 上方 */
+  var leftTr = null;
+  if (westTbody && westAnchor) {
+    leftTr = westAnchor.cloneNode(true);
+    cleanRow(leftTr);
+    var tds = leftTr.querySelectorAll('td[col]');
+    for (var j = 0; j < tds.length; j++) {
+      var idx = parseInt(tds[j].getAttribute('col'), 10) - 1;   /* col 1~5 → B4~F4 */
+      if (idx >= 0 && idx < vals.length) { writeCell(tds[j], vals[idx]); }
+    }
+    westTbody.insertBefore(leftTr, westAnchor);
+  }
+
+  /* ② 右半：克隆首条数据行 → 插到 #r-4-0 上方 */
+  var rightTr = null;
+  if (centerTbody && centerAnchor) {
+    rightTr = centerAnchor.cloneNode(true);
+    cleanRow(rightTr);
+    centerTbody.insertBefore(rightTr, centerAnchor);
+  }
+
+  flash(rightTr, leftTr);       /* 闪一下黄底 = 提交成功的反馈（替代原来的弹窗） */
+}
+
+/* 插入锚点：优先 id="r-4-0"（第一条数据行），取不到就退回该区第一行 */
+function pickAnchor(tbody) {
+  if (!tbody) { return null; }
+  return tbody.querySelector('tr#r-4-0') || tbody.rows[0] || null;
+}
+
+/* ---------- 提交记录用的小工具 ---------- */
+
+/* 在 host 内按区域选择器找该区域的 x-table > tbody */
+function findTbody(host, boxSel) {
+  var box = host.querySelector(boxSel);
+  if (!box) { return null; }
+  return box.querySelector('table.x-table > tbody') || box.querySelector('tbody');
+}
+
+/* 读单元格文本：id 精确 → id 前缀（B4 → B4-0-55），与 contentPane.findCell 口径一致 */
+function readCell(id) {
+  var el = document.getElementById(id);
+  if (!el) { el = document.querySelector('[id^="' + id + '-"]'); }
+  return el ? (el.textContent || '').trim() : '';
+}
+
+/* 写单元格：优先写已有的内层 div，保持帆软 td > div 的结构 */
+function writeCell(td, text) {
+  var div = td.querySelector('div');
+  if (div) { div.textContent = text; } else { td.textContent = text; }
+  td.setAttribute('cv', '"' + text + '"');
+}
+
+/* clone 来的行要「去身份」：清掉 id / editor / 帆软超链接 / 编辑态高亮，避免与原行撞车 */
+function cleanRow(tr) {
+  var i, list;
+  tr.removeAttribute('id');
+  list = tr.querySelectorAll('[id]');
+  for (i = 0; i < list.length; i++) { list[i].removeAttribute('id'); }
+  list = tr.querySelectorAll('[editor]');
+  for (i = 0; i < list.length; i++) {
+    list[i].removeAttribute('editor');
+    list[i].style.cursor = '';
+  }
+  /* 冻结列的数据格里带帆软超链接（onclick="_g().stopEditing(),eval(...)"），
+     测试页没有 FR / _g，留着的话点新行会抛错，这里直接摘掉 */
+  list = tr.querySelectorAll('span.linkspan');
+  for (i = 0; i < list.length; i++) {
+    list[i].removeAttribute('onclick');
+    list[i].removeAttribute('link');
+    list[i].style.cursor = '';
+  }
+  tr.classList.remove('cur-tr-bg');
+  list = tr.querySelectorAll('td');
+  for (i = 0; i < list.length; i++) {
+    list[i].classList.remove('cur-tr-bg');
+    /* 只清可编辑行的浅绿底 rgb(204,255,204)，保留主数据区红色的「否」等原有底色 */
+    if (/rgb\(\s*204\s*,\s*255\s*,\s*204\s*\)/.test(list[i].style.backgroundColor || '')) {
+      list[i].style.backgroundColor = '';
+    }
+  }
+}
+
+/* 新增行闪一下黄底；结束时还原各自原有底色，不破坏主数据区原有的红色等 */
+function flash() {
+  var rows = arguments, items = [], i, j, k;
+  for (i = 0; i < rows.length; i++) {
+    if (!rows[i]) { continue; }
+    var list = rows[i].querySelectorAll('td');
+    for (j = 0; j < list.length; j++) {
+      items.push({ el: list[j], bg: list[j].style.backgroundColor || '' });
+    }
+  }
+  for (k = 0; k < items.length; k++) {
+    items[k].el.style.transition = 'background-color .45s ease';
+    items[k].el.style.backgroundColor = '#ffd666';
+  }
+  window.setTimeout(function () {
+    for (var m = 0; m < items.length; m++) {
+      items[m].el.style.backgroundColor = items[m].bg;    /* 还原原有底色 */
+    }
+  }, 450);
+}

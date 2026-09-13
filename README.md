@@ -23,6 +23,13 @@
 │   └── 钦州车务段接发车作业全流程追踪_files/
 ├── 站存计算器-(2026.6.6版).xlsm  # VBA 版主程序（Excel 启用宏工作簿，纳入版本库）
 ├── 站存计算器-(2026.6.6版)/      # VBA 工程源码导出（.bas / .cls / .frm / .frx）
+├── dep-bridge-extension/         # 发车流程填表桥（MV3 扩展，见下「发车作业全流程填表桥」）
+│   ├── manifest.json
+│   ├── content.js                # ISOLATED world：页面 ↔ background 双向转发
+│   ├── background.js             # 路由 + executeScript 注入填表 / 读表
+│   ├── page-fill.js              # MAIN world：早期常驻填表脚本（新流程改由 executeScript 注入）
+│   ├── popup.html                # 报表地址配置 / token 调试
+│   └── 技术总结报告.md
 └── HTML/                         # 纯前端网页版
     ├── index.html                # 股道存车主页面（含脚本加载顺序）
     ├── css/
@@ -180,6 +187,114 @@ C[__] X[__] P[__] G[__]  [待卸校对]
 ### 接发车作业全流程追踪（离线快照）
 
 `接发车作业全流程追踪/` 目录存放的是「钦州车务段接发车作业全流程追踪」决策系统的**离线另存快照**（帆软 WebReport，含发车/到达作业全流程追踪与查询表单）。该页面需连接原内部报表服务器才能渲染业务数据，**不属于本站纯前端模块**，仅作界面与接入参考。
+
+## 发车作业全流程填表桥（dep-bridge-extension)
+
+把计算器里录入的 5 个值（股道 / 编组车次 / 辆数 / 换长 / 尾车车号）写入「发车作业全流程」报表页，并读回报表表格。
+
+- **目录**：`dep-bridge-extension/`（MV3 扩展：`manifest.json` / `content.js` / `background.js` / `page-fill.js` / `popup.html`）
+- **跨域**：消息全部由扩展中转，页面与报表页无需同源
+- **浮窗入口**：主表「空箱/空车」列（表头 `th[9]`）的「编好」伪元素按钮
+
+### 通信链路
+
+| 环节 | 通道 | world |
+|---|---|---|
+| 计算器页 → `content.js` | `window.postMessage({channel:'__DEP_BRIDGE__', ...})` | MAIN → ISOLATED |
+| `content.js` → SW | `chrome.runtime.sendMessage({channel, payload})` | ISOLATED |
+| SW → 报表页 | `chrome.scripting.executeScript`（注入 `depFillFunc` / `depReadFunc`） | MAIN |
+| SW → `content.js` | `chrome.tabs.sendMessage(tabId, {channel, payload})` | ISOLATED |
+| `content.js` → 页面 | `window.postMessage(...)` | ISOLATED → MAIN |
+
+**指令一览**（页面 → SW）：
+
+| type | 作用 | 回执 type |
+|---|---|---|
+| `readTable` | **只读**报表表格（与填表/提交完全解耦，独立同步） | `tableData` |
+| `fillByStrategy` | 写入 B4~F4（`autoSubmit` 为真时再代点报表「提交」） | `filled`（含 `table`） |
+| `readCheci` | 读「编组车次」列，用于车次重复校验 | `checiList` |
+| `reloadReport` | 刷新匹配「报表地址」的报表标签页 | `reloadResult` |
+
+**发送目标定位**（浮窗内固定下发 `fs_tab_toolbar`）：
+
+扩展侧**先逐级匹配**报表 iframe（`.fs-tab-content-item.fs-tab-content-toolbar` → `iframe[id^="fs_tab"]` → `iframe`），取第一个带 `contentPane` 的；**全部落空则兜底写本帧** —— 所以**单一策略即覆盖两种场景**：
+
+| 场景 | 命中路径 |
+|---|---|
+| 报表挂在平台页 iframe 里 | 逐级匹配命中 |
+| 直接打开报表页本身（本帧即报表） | 走「本帧即报表页」兜底 |
+
+> 原「② 直接打开报表页」（`self`）按钮**已移除** —— 它做的事与上面那个兜底**完全相同**，属冗余。
+> 旧参数值（`self` / `all` / `fs_tab_id` 等）在扩展侧一律按同一套逻辑处理，调用方无需改动。
+
+### ⚠️ 踩坑记录（2026-09 实测）
+
+#### 1. `content.js` 回传时**必须回填 `channel`** —— 最隐蔽的一个
+
+```js
+// ✗ 错误：只带 payload，页面侧全部丢弃
+window.postMessage(Object.assign({}, msg.payload, { __from: 'dep-bridge-content' }), '*');
+
+// ✓ 正确：补回 channel
+window.postMessage(Object.assign({}, msg.payload, { channel: CHANNEL, __from: 'dep-bridge-content' }), '*');
+```
+
+**原因**：页面侧的第一道过滤全是 `if (d.channel !== '__DEP_BRIDGE__') return;`（`app.js` 的 `filled`/`tableData` 处理、`page-fill.js` 都是），漏了 `channel` 就会被静默丢弃。
+
+**症状很有迷惑性**：**填表能成功**（下行不需要补 channel），但**「编好」回执和报表表格永远读不回来** —— 因为**上行**方向缺字段。只看"数据写进去了"会误判成扩展没问题。
+
+#### 2. `window` 变量在两个 world 之间**不共享**，`postMessage` 共享
+
+- `content.js` 在 **ISOLATED** world，`page-fill.js` 在 **MAIN** world（`manifest.json` 里 `world: "MAIN"`）
+- 两者的 `window` 是**不同的 JS 对象** —— 所以 `x.__foo` 在页面里读不到 ISOLATED 的标记（`__depBridgeInstalled` 恒为 `false` 属**正常**，不是故障信号）
+- 但 `window.postMessage` / `document.dispatchEvent` 走**浏览器事件系统**，**跨 world 是通的**
+- **`chrome.*` API 只有 ISOLATED 有**：MAIN world 里 `chrome.runtime` 为 `undefined`，所以「页面 ↔ 扩展」的转发**必须**由 `content.js` 承担，不能写进 `page-fill.js`
+
+#### 3. 「填表成功」**不能**证明扩展是新版
+
+`fillByStrategy` 是旧版就有的指令，旧版 SW 照样能写值。要验证扩展是否加载了最新代码，得用**新版才有的指令**（如 `readTable`）自测 —— 旧版不认识它会走最后那个"其余类型广播给非报表页"分支，**什么都不返回**，页面就一直等。
+
+**最快的判定方法**：`edge://extensions` → 点扩展卡片的**「服务工作进程」** → 开 Console → 触发一次「编好」，看有没有 `[dep-bridge] 读表完成：N 行`。
+
+#### 4. 改扩展代码后**必须重载扩展**，刷新页面无效
+
+刷新页面只会重新加载页面脚本（`app.js` 等）；扩展的 `background.js` / `content.js` 改动**必须**在 `edge://extensions` 点 **⟳ 重载**（或关掉全部浏览器窗口重开）才生效。手动"加载已解压的扩展"时重载偶发不生效，可删除后重新加载。
+
+#### 5. 命令行加载扩展：**Edge 可以，Chrome 137+ 已废弃**
+
+- **Edge**：`--load-extension="<目录>"` 正常工作（配合 `--disable-extensions-except` 更干净）
+- **Chrome 153**：`--load-extension` 被忽略，加 `--enable-unsafe-extension-debugging`、`--disable-features=DisableLoadExtensionCommandLineSwitch` **均无效**，只能手动加载
+- 调试端口（`--remote-debugging-port=9222`）**只能在浏览器启动时开启**，对已运行的实例无法附加；且不要用 `--user-data-dir` 指向日常配置目录
+
+### 跨进程通信问题的排查方法论
+
+这类"某一跳断了"的问题，靠猜没用，按**逐环节装探针**的方式能一次定位：
+
+1. **先确认终点状态**：目标页面的结果区/数据到底有没有变
+2. **逐环节验证**，每一跳单独测：
+   - 页面侧 `window.addEventListener('message')` 装探针 → 确认指令**发出**
+   - 目标 world 装 `chrome.runtime.onMessage` 探针 → 确认 SW**收到并处理**（SW 的 `console.log` 要在**服务工作进程的 Console** 里看，不是页面 Console）
+   - 反向再装一遍 → 确认回执**送回**
+3. **用 CDP 直连 service worker**，跳过"MCP 工具只操作页面"的限制：
+   ```js
+   // 通过 http://localhost:9222/json/list 找到 service_worker 的 webSocketDebuggerUrl
+   // Runtime.evaluate 即可在 SW 上下文里查函数、手动跑流程、读 console
+   ```
+   > 注意：**SW 里没有 `window`**，要用 `globalThis`；`puppeteer` 的 `browser.targets()` 默认**不列** service worker，需走原生 WebSocket
+4. **hook 关键函数**验证调用与参数：
+   ```js
+   var orig = chrome.tabs.sendMessage.bind(chrome.tabs);
+   chrome.tabs.sendMessage = function (tabId, msg) {
+     console.log('[HOOK] tabId=' + tabId + ' type=' + (msg && msg.payload && msg.payload.type));
+     return orig.apply(null, arguments);
+   };
+   ```
+5. **配对 `frameId` 再比较 world**：页面里的 `<iframe id="mapFrame">` 也有自己的 MAIN/ISOLATED context，拿"主 frame 的 MAIN"和"iframe 的 ISOLATED"对比必然不通 —— 用 `Runtime.executionContextCreated` 事件里的 `auxData.frameId` **配对到同一 frame** 再测
+
+### 相关环境问题
+
+- **`node` 必须进 PATH**：否则所有 `command: "npx"` 的 MCP 全部报 `node 不是内部或外部命令`。另外子进程启动时 `shell:false` 无法直接执行 `npx`（无扩展名）与 `npx.cmd`（EINVAL），需写成 `command: "cmd"` + `args: ["/c","npx",...]`
+- **`npx` 缓存**：在 `%LOCALAPPDATA%\npm-cache\_npx`，若被清理工具删残（目录在但包内文件缺失）会报 `Cannot find package ...`，整个目录删掉重新下载即可
 
 ## 测试与质量
 
