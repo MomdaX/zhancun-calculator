@@ -595,6 +595,32 @@
       calcW: Utils.round1(selfW + estLoad)   // 计重 = 自重 + 推算重量（推算载重）
     };
   }
+  /** 生成「辆数 / 换长 / 自重 / 载重 / 总重」五个统计 span。
+   *  明细抽屉与推演面板共用同一口径，避免两处各写一套、日后悄悄走偏。
+   * @param {Object} t    computeTotals() 的结果
+   * @param {Object} [opts]
+   *        calc:true     显示「计重」而非「总重」（明细编辑模式）
+   *        editable:true 挂 dt-weight-edit 类（支持双击进入计重编辑）
+   *        editing:true  编辑态样式
+   */
+  function totalsSpansHtml(t, opts) {
+    opts = opts || {};
+    // 超限阈值统一取 YardConfig.thresholds，避免与主表 render() 各写一套魔数
+    var thr = YardConfig.thresholds || { overlong: 70, overloadTons: 5000 };
+    // 总重 / 计重合并为一个 span：默认显示「总重」，双击进入编辑模式后切换显示「计重」。
+    //（warn 按当前显示的数值判定：非编辑看总重是否超限、编辑看计重是否超限。）
+    var showWeight = opts.calc ? t.calcW : t.weight;
+    return '<span class="dt-total">辆数：' + t.count + '</span>' +
+      '<span class="dt-total' + (t.length > thr.overlong ? ' warn' : '') + '">换长：' + t.length.toFixed(1) + '</span>' +
+      '<span class="dt-total">自重：' + t.selfW.toFixed(1) + '</span>' +
+      '<span class="dt-total">载重：' + t.loadW.toFixed(1) + '</span>' +
+      '<span class="dt-total dt-weight' + (opts.editable ? ' dt-weight-edit' : '') +
+        (opts.editing ? ' editing' : '') +
+        (showWeight > thr.overloadTons ? ' warn' : '') + '">' +
+        (opts.calc ? '计重：' : '总重：') + showWeight.toFixed(1) +
+      '</span>';
+  }
+
   /** 动态刷新抽屉标题：有选中行时按选中行求和，无选中行时恢复为全部行合计 */
   function updateDetailTitle() {
     var r = state.rows[state.detailIdx];
@@ -605,22 +631,11 @@
       : list;
     var t = computeTotals(rows, detailEditMode ? detailEditExcluded : null);
     var name = YardConfig.getTrack(r.track);
-    // 超限阈值统一取 YardConfig.thresholds，避免与主表 render() 各写一套魔数
-    var thr = YardConfig.thresholds || { overlong: 70, overloadTons: 5000 };
-    // 总重 / 计重合并为一个 span：默认显示「总重」，双击进入编辑模式后切换显示「计重」。
-    //（warn 按当前显示的数值判定：非编辑看总重是否超限、编辑看计重是否超限。）
-    var showWeight = detailEditMode ? t.calcW : t.weight;
     $('drawerTitle').innerHTML =
       // 「股道」名前挂路徽小图标（与工具栏路徽呼应）
       '<span class="dt-name"><img class="detail-emblem" src="images/luhui.jpeg" alt="">' +
         escapeHtml(name ? name.name : r.track) + ' - </span>' +
-      '<span class="dt-total">辆数：' + t.count + '</span>' +
-      '<span class="dt-total' + (t.length > thr.overlong ? ' warn' : '') + '">换长：' + t.length.toFixed(1) + '</span>' +
-      '<span class="dt-total">自重：' + t.selfW.toFixed(1) + '</span>' +
-      '<span class="dt-total">载重：' + t.loadW.toFixed(1) + '</span>' +
-      '<span class="dt-total dt-weight dt-weight-edit' + (detailEditMode ? ' editing' : '') + (showWeight > thr.overloadTons ? ' warn' : '') + '">' +
-        (detailEditMode ? '计重：' : '总重：') + showWeight.toFixed(1) +
-      '</span>';
+      totalsSpansHtml(t, { calc: detailEditMode, editable: true, editing: detailEditMode });
   }
   /** 重新渲染当前股道明细（带入 excluded / 编辑态：进入编辑才显示推算值，退出复原为空） */
   function renderCurrentDetail() {
@@ -656,23 +671,42 @@
   function bindDetailEditEvents() {
     if (detailEvtBound) return;
     detailEvtBound = true;
-    var _wLastT = 0;
+    var _wLast = { t: 0, sim: false };   // 双击检测：上次点击时间 + 目标归属（明细 / 推演）
     document.addEventListener('mousedown', function (e) {
-      if (e.button !== 0) { _wLastT = 0; return; }
+      if (e.button !== 0) { _wLast.t = 0; return; }
       var t = e.target.closest && e.target.closest('.dt-weight-edit');
-      if (!t) { _wLastT = 0; return; }
+      if (!t) { _wLast.t = 0; return; }
+      // 明细标题与推演标题各有一个 .dt-weight-edit，按归属分发，互不串扰
+      var isSim = !!(t.closest && t.closest('#simTitle'));
       var now = Date.now();
-      if (_wLastT && (now - _wLastT) < 350) {
-        setDetailEditMode(!detailEditMode);
-        _wLastT = 0;
+      if (_wLast.t && (now - _wLast.t) < 350 && _wLast.sim === isSim) {
+        if (isSim) setSimEditMode(!simEditMode);
+        else setDetailEditMode(!detailEditMode);
+        _wLast.t = 0;
       } else {
-        _wLastT = now;
+        _wLast.t = now;
+        _wLast.sim = isSim;
       }
     });
     document.addEventListener('click', function (e) {
-      if (!detailEditMode) return;
       var td = e.target.closest && e.target.closest('td.derived-est');
       if (!td) return;
+      // 明细与推演是两张表，各自的编辑态只作用于各自的推算值单元格，
+      // 否则一张表开着编辑、点另一张表的推算值会拿错行。
+      if (td.closest('#simTable')) {
+        if (!simEditMode) return;
+        var trS = td.closest('tr'); if (!trS) return;
+        var rowS = simRows[+trS.getAttribute('data-i')];
+        if (!rowS || simEditExcluded.has(rowS)) return;
+        simEditExcluded.add(rowS);
+        td.textContent = '';
+        td.classList.remove('derived-est');   // 移除该类 → 编辑态下不再显示「删除」按钮
+        td.classList.add('excluded-cell');
+        updateSimTitle();   // 重算计重（排除该行推算载重）
+        return;
+      }
+      if (!detailEditMode) return;
+      if (!td.closest('#detailTable')) return;
       var tr = td.closest('tr'); if (!tr) return;
       var idx = tr.getAttribute('data-i');
       var r = state.rows[state.detailIdx];
@@ -728,6 +762,12 @@
         // 重车（载重>=15）的方向对应实际到站（如到「田东」卸车的「6」是有效信息），不能清空。
         // 仅渲染层，不改数据：31814 统计读 rawRows 的 COL.DIR，不受影响。
         if (c.col === COL.DIR && row.__destIsStation && row.__load < 15) raw = '';
+        // 「顺」列可被覆盖：推演面板要显示「本板序号」(1、2、3…)，
+        // 而车辆在原股道里的顺位跨股道凑车时没有意义（会出现 3、7、12、2…）。
+        if (c.col === COL.SEQ && opts.seqText) {
+          return '<td' + (c.cls ? ' class="' + c.cls + '"' : '') + '>' +
+                 escapeHtml(opts.seqText(row, i)) + '</td>';
+        }
         if (c.fmt === 'track') {
           var t = YardConfig.getTrack(raw);
           return '<td class="center">' +
@@ -829,6 +869,8 @@
 
     updateDetailTitle();
     UI.Drawer.open('drawer');
+    // 之前点过「主页」：本次打开明细时把推演面板一起带回来（内容保留）
+    if (simResume) { simResume = false; openSim(); }
   }
 
   /**
@@ -847,6 +889,7 @@
   }
 
   function closeDetail() {
+    closeSim();                 // 关闭明细时同时收起推演面板（内容保留，只有「重置」才清空）
     UI.Drawer.close('drawer');
   }
 
@@ -875,6 +918,161 @@
       return;
     }
     openDetail(vis[next]);
+  }
+
+  /* =================== 推演面板（明细抽屉的"分身"） ===================
+   * 从左侧滑出，与明细左右分栏（宽度由 CSS 变量 --sim-w 控制，中间分隔条可拖动）。
+   * 数据模型：
+   *   simRows  推演面板中的车辆（与明细同源的行对象引用，可跨股道累加）
+   *   simKeys  车号去重集合
+   *   simSel   面板内选中的行下标（供「-」删除）
+   * 渲染与统计直接复用 renderDetailRows / computeTotals / totalsSpansHtml，与明细保持同一口径。
+   * 生命周期：内容只由「重置」清空；X 关闭、ESC、关闭明细都只是收起，内容保留。 */
+
+  var simRows = [];            // 推演面板中的车辆
+  var simKeys = {};            // 车号去重：key → true
+  var simSel = new Set();      // 推演面板内选中的行下标
+  var simOpen = false;
+  var simResume = false;       // 「主页」隐藏过 → 下次打开明细时把推演面板一起带回来
+  var simEditMode = false;     // 推演面板「计重」编辑态（与明细同一套交互）
+  var simEditExcluded = new Set();   // 编辑态中被删除推算载重的行
+  var simDrag = { active: false, moved: false, anchor: -1, snap: null, mode: 'add' };
+
+  /** 车辆去重键：以车号为准；车号为空时用「股道#顺位」兜底，保证仍能加入且可去重 */
+  function simKeyOf(row) {
+    var no = String(row[COL.CARNO] == null ? '' : row[COL.CARNO]).trim();
+    if (no) return no;
+    return '@' + (row.__track || row[COL.TRACK] || '') + '#' + (row[COL.SEQ] == null ? '' : row[COL.SEQ]);
+  }
+
+  /** 重渲推演面板表格（复用明细同一套列定义与渲染函数）。
+   *  simRows 本身就是「加入先后」顺序（每次「+」按选中顺序追加，新的一批排在已有内容之后），
+   *  所以不需要任何排序：序号列直接取下标 +1 即为「本板序号」，删除后自动重排。 */
+  function renderSim() {
+    renderDetailRows(simRows, {
+      head: $('simHead'), body: $('simBody'), table: $('simTable')
+    }, {
+      // 序号 = 推演面板内的顺序，而非车辆在原股道明细中的顺位
+      seqText: function (row, i) { return String(i + 1); },
+      rowAttr: function (row, i) {
+        return ' data-i="' + i + '"' + (simSel.has(i) ? ' class="selected"' : '');
+      },
+      // 「计重」编辑：进入编辑才显示载重列推算值（供删除），与明细同一套渲染分支
+      excluded: simEditExcluded,
+      editMode: simEditMode
+    });
+    updateSimTitle();
+  }
+
+  /** 刷新推演面板标题：股道名恒为「X道」（推演区标志，非真实股道），统计随内容变化。
+   *  总重复用明细的「计重」机制：双击总重进入编辑，点推算值单元格删除该行推算载重。 */
+  function updateSimTitle() {
+    var t = computeTotals(simRows, simEditMode ? simEditExcluded : null);
+    $('simTitle').innerHTML =
+      '<span class="dt-name">X道 - </span>' +
+      totalsSpansHtml(t, { calc: simEditMode, editable: true, editing: simEditMode });
+  }
+
+  /** 切换推演面板「计重」编辑模式：与明细 setDetailEditMode 完全同构 */
+  function setSimEditMode(on) {
+    // 面板为空时没有可编辑的推算值，直接提示，不进入编辑态
+    if (on && !simRows.length) { toast('推演面板为空', 'error'); return; }
+    simEditMode = on;
+    var tbl = $('simTable');
+    if (tbl) tbl.classList.toggle('detail-edit', on);
+    var span = $('simTitle') && $('simTitle').querySelector('.dt-weight-edit');
+    if (span) span.classList.toggle('editing', on);
+    if (!on) simEditExcluded.clear();
+    // 进入 / 退出都要重渲：进入才显示载重列推算值，退出则复原为空
+    renderSim();
+  }
+
+  /** 打开推演面板：明细让出左侧空间，触发按钮变为「+」 */
+  function openSim() {
+    simOpen = true;
+    document.body.classList.add('sim-open');
+    UI.Drawer.open('simDrawer');
+    var b = $('btnSim');
+    if (b) {
+      b.textContent = '+';
+      b.title = '把明细中选中的车辆加入推演面板';
+      b.classList.add('btn-sim-add');
+    }
+    renderSim();
+  }
+
+  /** 收起推演面板。真正的状态复位放在 UI.Drawer 的 onClose 里，
+   *  这样 X 按钮、ESC、关闭明细三条路径都会走同一套复位逻辑。 */
+  function closeSim() { UI.Drawer.close('simDrawer'); }
+
+  /** 把明细抽屉当前选中的行加入推演面板（按车号去重，整组插入）。没选任何行 → 不动作。
+   *  插入方向由标题栏下拉决定（与"升序/降序"无关，是插在已有内容的上方还是下方）：
+   *    S（默认）= 从下方插入 → 追加到末尾
+   *    W        = 从上方插入 → 插到最前面
+   *  两种都是「整组」插入：本批内部保持选中先后，不拆散、不重排已有内容；
+   *  序号是下标 +1，插入后自动重排。 */
+  function addSelectedToSim() {
+    var r = state.rows[state.detailIdx];
+    if (!r || !state.detailSel || !state.detailSel.size) {
+      toast('未选择车辆', 'error');
+      return;
+    }
+    var list = r.raw || [];
+    var added = 0, skip = 0;
+    var batch = [];                           // 本批要加入的车（保持选中先后）
+    state.detailSel.forEach(function (i) {
+      var row = list[i];
+      if (!row) return;
+      var k = simKeyOf(row);
+      if (simKeys[k]) { skip++; return; }     // 已存在：按车号去重，不重复加入
+      simKeys[k] = true;
+      batch.push(row);
+      added++;
+    });
+    var dir = ($('simDir') && $('simDir').value) || 'S';
+    simRows = (dir === 'W') ? batch.concat(simRows) : simRows.concat(batch);
+    state.detailSel.clear();                  // 加入后取消明细选中，方便接着挑下一批
+    renderCurrentDetail();
+    renderSim();
+    if (added || skip) {
+      toast('推演面板：已从' + (dir === 'W' ? '上方' : '下方') + '加入 ' + added + ' 辆' +
+        (skip ? '，跳过重复 ' + skip + ' 辆' : ''), added ? 'ok' : 'error');
+    }
+  }
+
+  /** 「主页」：同时隐藏推演面板与明细，回到主表挑另一股道。
+   *  只是临时隐藏——记住推演面板此前是否开着，下次 openDetail 时把它一起带回来（内容保留）。 */
+  function goHomeFromSim() {
+    simResume = simOpen;
+    closeDetail();                            // 内部已含 closeSim()
+  }
+
+  /** 删除推演面板中选中的车辆（「-」按钮） */
+  function removeSelectedFromSim() {
+    if (!simSel.size) return;
+    var keep = [];
+    for (var i = 0; i < simRows.length; i++) {
+      if (simSel.has(i)) {
+        var row = simRows[i];
+        delete simKeys[simKeyOf(row)];
+        simEditExcluded.delete(row);   // 同步清理计重编辑态里的残留
+      } else keep.push(simRows[i]);
+    }
+    simRows = keep;
+    simSel.clear();
+    renderSim();
+  }
+
+  /** 重置：清空推演面板全部内容（同时退出计重编辑态） */
+  function resetSim() {
+    if (!simRows.length) return;
+    simRows = [];
+    simKeys = {};
+    simSel.clear();
+    simEditExcluded.clear();
+    if (simEditMode) setSimEditMode(false);   // 内部会重渲
+    else renderSim();
+    toast('推演面板已重置', 'ok');
   }
 
   /* =================== 地图径路 =================== */
@@ -1147,6 +1345,9 @@
     document.addEventListener('mousedown', function (e) {
       // 正在拖动表格内选择时不触发清空
       if (dragSel.active) return;
+      // 推演面板（及分隔条、面板按钮）内的操作不清空明细选中：
+      // 否则在推演里点一下，刚挑好的一批车就没了，「+」会读不到选中。
+      if (e.target.closest && e.target.closest('#simDrawer, #simSplitter, #btnSim')) return;
       var dt = $('detailTable');
       if (dt && !dt.contains(e.target)) clearDetailSel();
     });
@@ -1725,6 +1926,98 @@
     on('btnPrevTrack', 'click', function () { stepDetail(-1); });
     on('btnNextTrack', 'click', function () { stepDetail(1); });
 
+    /* ---- 推演面板：按钮 + 面板内行选中（供「-」删除）+ 分隔条拖动 ---- */
+    // 推演面板与分隔条的按钮都不能让「点表格外清空选中」生效（见上方 mousedown 处理），
+    // 这里再 stopPropagation 一次，挡住 .drawer-head 上的清空监听（btnSim 就挂在明细标题栏里）。
+    ['btnSim', 'btnSimHome', 'btnSimDel', 'btnSimReset', 'btnSimClose'].forEach(function (id) {
+      var el = $(id);
+      if (!el) return;
+      el.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+      el.addEventListener('click', function (e) { e.stopPropagation(); });
+    });
+    on('btnSim', 'click', function () { if (simOpen) addSelectedToSim(); else openSim(); });
+    on('btnSimHome', 'click', goHomeFromSim);
+    on('btnSimDel', 'click', removeSelectedFromSim);
+    on('btnSimReset', 'click', resetSim);
+    on('btnSimClose', 'click', closeSim);
+
+    /** 推演面板内单行选中状态切换（与明细同样用 .selected 高亮） */
+    function simToggleRow(i, add) {
+      if (add) simSel.add(i); else simSel.delete(i);
+      var tr = $('simBody') && $('simBody').querySelector('tr[data-i="' + i + '"]');
+      if (tr) tr.classList.toggle('selected', add);
+    }
+    /** 拖选：以按下行为锚点，按快照 + 区间重算，避免"拖出去的行"残留选中 */
+    function simApplyDrag(i) {
+      simSel = new Set(simDrag.snap);
+      var a = Math.min(simDrag.anchor, i), b = Math.max(simDrag.anchor, i);
+      for (var j = a; j <= b; j++) {
+        if (simDrag.mode === 'add') simSel.add(j); else simSel.delete(j);
+      }
+      var trs = $('simBody') ? $('simBody').querySelectorAll('tr') : [];
+      for (var k = 0; k < trs.length; k++) {
+        trs[k].classList.toggle('selected', simSel.has(+trs[k].getAttribute('data-i')));
+      }
+    }
+    on('simBody', 'mousedown', function (e) {
+      if (!simOpen) return;
+      var tr = e.target.closest('tr');
+      if (!tr || tr.querySelector('td.stay') === e.target) return;
+      e.preventDefault();
+      simDrag.active = true;
+      simDrag.moved = false;
+      simDrag.anchor = +tr.getAttribute('data-i');
+      simDrag.snap = new Set(simSel);
+      // 起点已选中 → 取消模式；否则 → 加入模式
+      simDrag.mode = simSel.has(simDrag.anchor) ? 'del' : 'add';
+    });
+    on('simBody', 'mouseover', function (e) {
+      if (!simDrag.active) return;
+      var tr = e.target.closest('tr');
+      if (!tr) return;
+      simDrag.moved = true;
+      simApplyDrag(+tr.getAttribute('data-i'));
+    });
+    document.addEventListener('mouseup', function () {
+      if (!simDrag.active) return;
+      simDrag.active = false;
+      simDrag.snap = null;
+    });
+    on('simBody', 'click', function (e) {
+      if (!simOpen) return;
+      if (simDrag.moved) { simDrag.moved = false; return; }   // 拖动已实时应用，click 不重复处理
+      var tr = e.target.closest('tr');
+      if (!tr || tr.querySelector('td.stay') === e.target) return;
+      var i = +tr.getAttribute('data-i');
+      simToggleRow(i, !simSel.has(i));
+    });
+
+    // 拖动分隔条调整推演面板宽度（改 --sim-w，明细自动占剩余）
+    (function bindSimSplitter() {
+      var sp = $('simSplitter');
+      if (!sp) return;
+      sp.addEventListener('mousedown', function (e) {
+        if (!simOpen) return;
+        e.preventDefault();
+        e.stopPropagation();
+        sp.classList.add('dragging');
+        // 下限：推演至少 260px（或 20%）；上限：明细至少留 360px（或 30%）
+        var minW = Math.max(260, window.innerWidth * 0.2);
+        var maxW = window.innerWidth - Math.max(360, window.innerWidth * 0.3);
+        function move(ev) {
+          var w = Math.min(Math.max(ev.clientX, minW), maxW);
+          document.body.style.setProperty('--sim-w', w + 'px');
+        }
+        function up() {
+          sp.classList.remove('dragging');
+          document.removeEventListener('mousemove', move);
+          document.removeEventListener('mouseup', up);
+        }
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', up);
+      });
+    })();
+
     /* ---- 浮窗 / 抽屉 / 下拉菜单 -----
      * 注册后自动获得「点空白处关闭 + ESC 关栈顶」，新增面板无需再改 ESC 处理。 */
     UI.Modal.register('modal31814');
@@ -1737,6 +2030,21 @@
     UI.Modal.register('modalAreaMap');
     UI.Drawer.register('drawer', { maskId: 'drawerMask' });
     UI.Drawer.register('searchDrawer', { maskId: 'searchMask' });
+    // 推演面板不配遮罩：它与明细拼起来铺满视口，点哪一侧都是有效区域。
+    // onClose 统一做状态复位，保证 X 按钮 / ESC / 关闭明细 三条路径行为一致。
+    UI.Drawer.register('simDrawer', {
+      onClose: function () {
+        if (!simOpen) return;
+        simOpen = false;
+        document.body.classList.remove('sim-open');
+        var b = $('btnSim');
+        if (b) {
+          b.textContent = '推演面板';
+          b.title = '打开推演面板';
+          b.classList.remove('btn-sim-add');
+        }
+      }
+    });
 
     // 各面板的关闭按钮
     on('btnCloseDrawer', 'click', closeDetail);

@@ -985,6 +985,48 @@ td.train-loop { background: #ffe0b2 !important; font-weight: 600; }
 #drawerMask { z-index: 60; }
 #drawer { z-index: 61; }
 
+/* ============ 推演面板（明细抽屉的"分身"） ============ */
+/* 与明细左右分栏：推演在左（宽 --sim-w），明细在右（占剩余空间）。
+   两者拼起来正好铺满视口，因此不需要遮罩；ESC 由 UI.Drawer 的栈保证「先关推演，再关明细」。
+   默认 40% / 60%，中间分隔条可拖动（拖动时 JS 把 --sim-w 改成 px）。 */
+.drawer-sim {
+  position: fixed;
+  top: 0; bottom: 0; left: 0;
+  width: var(--sim-w, 40%);
+  background: var(--panel);
+  box-shadow: 3px 0 14px rgba(0,0,0,.18);
+  transform: translateX(-100%);
+  transition: transform .22s ease;
+  z-index: 62;
+  display: flex;
+  flex-direction: column;
+}
+.drawer-sim.show { transform: translateX(0); }
+/* 推演打开时覆盖明细默认的 90% / max-width:1400px，改为「视口 - 推演宽」 */
+body.sim-open #drawer { width: calc(100% - var(--sim-w, 40%)); max-width: none; }
+/* 两栏之间的可拖动分隔条：命中区 6px，视觉为 2px 细线 */
+.sim-splitter {
+  position: fixed;
+  top: 0; bottom: 0;
+  left: var(--sim-w, 40%);
+  width: 6px; margin-left: -3px;
+  cursor: col-resize;
+  z-index: 63;
+  display: none;
+}
+.sim-splitter::before {
+  content: ''; position: absolute; left: 2px; top: 0; bottom: 0;
+  width: 2px; background: var(--border);
+}
+.sim-splitter:hover::before, .sim-splitter.dragging::before { background: #1f6feb; }
+body.sim-open .sim-splitter { display: block; }
+/* 「+」态按钮：加入选中车辆 */
+.drawer-head .btn-sim-add { min-width: 34px; font-weight: 700; }
+/* 加入方向下拉：与 .btn 同款外框，宽度收紧到刚好放下 S / W */
+.drawer-head .sim-dir { padding: 4px 6px; min-width: 46px; }
+/* 推演面板标题栏按钮间距收紧（明细抽屉保持 10px 不变） */
+.drawer-sim .drawer-head { gap: 4px; }
+
 .search-count { font-size: 12px; color: var(--text-dim); white-space: nowrap; min-width: 66px; flex: none; }
 .search-modes { display: inline-flex; gap: 4px; }
 .search-modes .mode-btn { padding: 3px 10px; }

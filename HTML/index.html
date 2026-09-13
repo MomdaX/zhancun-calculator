@@ -409,6 +409,7 @@
   <div class="drawer-head">
     <h3 id="drawerTitle">股道明细</h3>
     <span class="spacer"></span>
+    <button class="btn" id="btnSim" title="打开推演面板">推演面板</button>
     <button class="btn" id="btnPrevTrack">上一股道</button>
     <button class="btn" id="btnNextTrack">下一股道</button>
     <button class="btn" id="btnCloseDrawer">关闭</button>
@@ -420,6 +421,33 @@
     </table>
   </div>
 </div>
+
+<!-- ================= 推演面板抽屉 =================
+     明细抽屉的"分身"：从左侧滑出，与明细左右分栏（中间分隔条可拖动）。
+     标题栏：X道（推演区标志，硬编码）+ 辆数/换长/自重/载重/总重 + 「-」/重置/关闭。
+     内容只由「重置」清空；关闭（X 或收起）与关闭明细都不清空。 -->
+<div class="drawer-sim" id="simDrawer">
+  <div class="drawer-head">
+    <h3 id="simTitle">X道</h3>
+    <span class="spacer"></span>
+    <button class="btn" id="btnSimHome" title="隐藏推演面板与明细，回到主表选另一股道">主页</button>
+    <button class="btn" id="btnSimDel" title="删除推演面板中选中的车辆">-</button>
+    <select class="btn sim-dir" id="simDir" title="车辆加入方向：S=从下方插入，W=从上方插入">
+      <option value="S">S</option>
+      <option value="W">W</option>
+    </select>
+    <button class="btn" id="btnSimReset" title="清空推演面板内容">重置</button>
+    <button class="btn" id="btnSimClose" title="收起（保留内容）">×</button>
+  </div>
+  <div class="drawer-body">
+    <table class="detail" id="simTable">
+      <thead><tr id="simHead"></tr></thead>
+      <tbody id="simBody"></tbody>
+    </table>
+  </div>
+</div>
+<!-- 推演面板与明细抽屉之间的可拖动分隔条 -->
+<div class="sim-splitter" id="simSplitter" title="拖动调整两侧宽度"></div>
 
 <!-- ================= 搜索查询抽屉 ================= -->
 <div class="drawer-mask" id="searchMask"></div>
