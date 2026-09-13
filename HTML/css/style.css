@@ -1433,10 +1433,14 @@ table.grid td[data-col="effLen"][data-len]:hover::after {
 #modalDeparture.show .modal-content {
   pointer-events: auto;
 }
-/* 默认尺寸 = 用户确认过的大小；JS 拖拽后会改写内联 width/height 并记忆 */
+/* 默认尺寸 = 用户确认过的大小；JS 拖拽后会改写内联 width/height 并记忆。
+   高度改为「随内容自适应」：内容少时保持 32vh 的紧凑感，内容多
+   （例如出现「报表表格」结果区）时自动长高，最多 82vh，超出部分由 .dep-body 滚动。 */
 .dep-modal {
   width: 500px;
-  height: 32vh;
+  height: auto;
+  min-height: 32vh;
+  max-height: 82vh;
   max-width: 160vw;
   display: flex;
   flex-direction: column;
@@ -2142,38 +2146,86 @@ table.grid td[data-col="effLen"][data-len]:hover::after {
 .dep-cell-checi {
   font-weight: bold;
 }
-.dep-send-row {
-  padding: 12px 14px;
-  background: #f8fafc;
-  border-top: 1px solid var(--border, #dde1e8);
-}
-.dep-send-hint {
-  display: block;
+/* 「提交」开关：与「⟳ 刷新报表页」同处一行、紧跟在它后面（见 .dep-side-row）。
+   勾选后，发送填表成功即自动点报表页的「提交」按钮（等同手工点一次提交）。 */
+.dep-auto-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   font-size: 12px;
-  color: #6b7889;
-  margin-bottom: 8px;
-}
-.dep-send-btns {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.dep-send-btns .btn-send {
-  font-size: 12px;
-  padding: 5px 10px;
-  background: #6c757d;          /* 未启用：灰色 */
-  color: #e9ecef;
-  border: 0;
-  border-radius: 4px;
+  color: #46505d;
+  padding: 0 12px;
+  border: 1px solid #cbd3dd;
+  border-radius: 6px;
+  background: #fff;
   cursor: pointer;
-  transition: background .15s, color .15s;
+  user-select: none;
+  white-space: nowrap;
+  transition: background .15s, border-color .15s, color .15s;
 }
-.dep-send-btns .btn-send:hover { background: #868e96; }
-/* 当前选中的发送模式：高亮（亮蓝 + 描边） */
-.dep-send-btns .btn-send.active {
-  background: #2f6bd8;
-  color: #fff;
-  box-shadow: 0 0 0 2px #6ea8fe inset;
+.dep-auto-submit:hover { background: #f1f5fb; }
+.dep-auto-submit input { margin: 0; cursor: pointer; }
+/* 勾选后整块变绿，一眼看出「已开启」 */
+.dep-auto-submit.is-on,
+.dep-auto-submit:has(input:checked) {
+  background: #e6f6ea;
+  border-color: #7cc48c;
+  color: #1b6b32;
+  font-weight: 600;
+}
+
+/* 报表表格结果区：展示读自报表标签页的表格内容（发送 / 提交后刷新） */
+.dep-result {
+  margin: 10px 14px;
+  border: 1px solid #dde1e8;
+  border-radius: 6px;
+  background: #fff;
+  overflow: hidden;
+}
+.dep-result-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #f4f7fb;
+  border-bottom: 1px solid #e6ebf2;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3a4553;
+}
+.dep-result-close {
+  border: 0;
+  background: transparent;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  color: #8a94a2;
+  cursor: pointer;
+}
+.dep-result-close:hover { color: #e5484d; }
+.dep-result-body { max-height: 190px; overflow: auto; }
+.dep-result-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.dep-result-body th,
+.dep-result-body td {
+  border: 1px solid #e6ebf2;
+  padding: 4px 6px;
+  text-align: center;
+  white-space: nowrap;
+}
+.dep-result-body th { background: #f8fafc; color: #5b6675; font-weight: 600; }
+/* 第一行是最新提交的记录：加底色方便一眼看到 */
+.dep-result-body tbody tr:first-child td { background: #fffbe6; }
+.dep-result-empty {
+  padding: 10px;
+  font-size: 12px;
+  color: #8a94a2;
+  text-align: center;
 }
 
 /* 表格 + 右侧操作按钮 横向排列（表格在左，按钮在右） */
@@ -2185,7 +2237,7 @@ table.grid td[data-col="effLen"][data-len]:hover::after {
 .dep-side-btns {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
   flex: 0 0 auto;
   padding-top: 26px;          /* 与表格首行（时间行）视觉对齐 */
 }
@@ -2198,6 +2250,12 @@ table.grid td[data-col="effLen"][data-len]:hover::after {
   cursor: pointer;
   white-space: nowrap;
   transition: background .15s;
+}
+/* 「发送」下面这一行：⟳ 刷新报表页 + 提交开关 并排，两者等高 */
+.dep-side-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
 }
 .btn-side-refresh {
   background: #0d7a6f;
@@ -2212,20 +2270,6 @@ table.grid td[data-col="effLen"][data-len]:hover::after {
 }
 .btn-side-send:hover { background: #2b5cb0; }
 .btn-side-send:active { background: #163268; }
-/* 「刷新报表页」用青色，与蓝色发送按钮区分（一个是页面管理，一个是数据发送） */
-.dep-send-btns .btn-reload {
-  font-size: 12px;
-  padding: 5px 10px;
-  background: #0d7a6f;
-  color: #fff;
-  border: 0;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background .15s;
-}
-.dep-send-btns .btn-reload:hover { background: #0a6259; }
-.dep-send-btns .btn-reload:active { background: #084f47; }
-
 /* 浮窗内右下角状态提示：替代全局 toast 展示「已发送」「回执」等消息，3 秒后淡出 */
 .dep-status {
   position: absolute;

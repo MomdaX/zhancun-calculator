@@ -370,23 +370,30 @@
           </tr>
           </tbody>
         </table>
-        <!-- 右侧操作区：发送（用当前选中的 strategy）+ 刷新报表页 -->
+        <!-- 右侧操作区：发送（填表 + 同步表格）+ 刷新报表页 + 提交开关。
+             原先独立的「发送目标」区域已移除 —— 定位策略只有一种（逐级匹配 iframe，落空兜底写本帧），
+             点「发送」即是该模式，无需再单独选。 -->
         <div class="dep-side-btns">
-          <button class="btn-side btn-side-send" id="btnSendCurrent" title="使用下方选中的发送模式">发送</button>
-          <button class="btn-side btn-side-refresh" id="btnReloadReport" title="刷新 popup 中「报表地址」所匹配的标签页">⟳ 刷新报表页</button>
+          <button class="btn-side btn-side-send" id="btnSendCurrent" title="把上方 5 个值写入报表页，并把报表表格同步回来">发送</button>
+          <!-- 「⟳ 刷新报表页」+「提交」开关同处一行，提交紧跟在刷新按钮之后 -->
+          <div class="dep-side-row">
+            <button class="btn-side btn-side-refresh" id="btnReloadReport" title="刷新 popup 中「报表地址」所匹配的报表标签页，随后重新同步表格">⟳ 刷新</button>
+            <!-- 提交开关：勾选后，发送填表成功即自动点报表页的「提交」按钮（等同手工点一次提交） -->
+            <label class="dep-auto-submit"
+                   title="开启后：发送填表成功后，自动点击报表页的「提交」按钮">
+              <input type="checkbox" id="depAutoSubmit">
+              <span>提交</span>
+            </label>
+          </div>
         </div>
       </div>
-      <div class="dep-send-row">
-        <span class="dep-send-hint">发送模式_[默认⑦]：</span>
-        <div class="dep-send-btns" id="depSendBtns">
-          <button class="btn-send" data-strategy="fs_tab_id">① id^fs_tab</button>
-          <button class="btn-send" data-strategy="first_iframe">② 首个iframe</button>
-          <button class="btn-send" data-strategy="fs_tab_class">③ item类</button>
-          <button class="btn-send" data-strategy="name_fs_tab">④ name^fs_tab</button>
-          <button class="btn-send" data-strategy="self">⑤ 自身</button>
-          <button class="btn-send" data-strategy="all">⑥ 兜底</button>
-          <button class="btn-send active" data-strategy="fs_tab_toolbar">⑦ 报表Toolbar</button>
+      <!-- 报表标签页的表格内容（读自报表页，不是本地录入表）；发送/提交后刷新 -->
+      <div class="dep-result" id="depResult" hidden>
+        <div class="dep-result-head">
+          <span id="depResultTitle">报表表格</span>
+          <button type="button" class="dep-result-close" id="depResultClose" title="收起">×</button>
         </div>
+        <div class="dep-result-body" id="depResultBody"></div>
       </div>
       <!-- 浮窗内右下角状态提示：显示「已发送：xxx」「回执 [...] 写入 X/5」等，3 秒自动淡出 -->
       <div class="dep-status" id="depStatus"></div>
