@@ -676,6 +676,54 @@
     });
   }
 
+  /* ========================== 结果区打印 ==========================
+   * 与「截图」同一个区域：就是 #rptBody 里的那张 table
+   * （对应 DOM 路径 body/div[4]/div/div[2]/div[1]/table）。
+   * 做法：克隆表格 → 复用 inlineStyles 把计算样式内联 → 写进临时新窗口 → print()。
+   * 不直接对主窗口 window.print()：此时页面是浮窗状态，直接打会把遮罩、
+   * 右侧条件面板、工具栏一起带上，而这里要的只是这张表。
+   * ============================================================== */
+  function printResultTable() {
+    var body = Utils.$('rptBody');
+    var target = (body && body.querySelector('table')) || body;   // 与截图取的是同一个节点
+    if (!target) { Utils.toast('没有可打印的内容', 'error'); return; }
+
+    // 克隆 + 内联计算样式：屏幕上多大字、什么边框、列宽多少，打印出来就原样保留
+    var clone = target.cloneNode(true);
+    inlineStyles(target, clone);
+
+    // 必须在点击的同步调用里开窗口，否则会被浏览器当成弹窗拦截
+    var w = window.open('', '_blank', 'width=900,height=720');
+    if (!w) { Utils.toast('打印窗口被浏览器拦截，请允许本站弹出窗口后重试', 'error'); return; }
+
+    var fs = '15px';
+    try {
+      var v = getComputedStyle(body).getPropertyValue('--rpt-fs');
+      if (v && v.trim()) fs = v.trim();
+    } catch (e) {}
+
+    var doc = w.document;
+    doc.open();
+    doc.write('<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">');
+    doc.write('<title>站存计算</title><style>');
+    doc.write('html,body{margin:0;padding:0;background:#fff;color:#000}');
+    doc.write('body{font-size:' + fs + ';zoom:1.4}');   // 整体放大 140%，列宽保持原样
+    doc.write('table{border-collapse:collapse;-webkit-print-color-adjust:exact;print-color-adjust:exact}');
+    // 保留底色（沙口蓝 / 南口橙这类行底色别被浏览器省掉）
+    doc.write('*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}');
+    doc.write('</style></head><body>' + clone.outerHTML + '</body></html>');
+    doc.close();
+
+    // 打印对话框关闭（确定或取消）后自动收掉这个临时窗口
+    w.onafterprint = function () { try { w.close(); } catch (e) {} };
+
+    // 等新文档完成一次布局再唤起打印，避免打出空白
+    setTimeout(function () {
+      try { w.focus(); w.print(); }
+      catch (e) { Utils.toast('调用打印失败：' + (e && e.message ? e.message : e), 'error'); }
+    }, 300);
+  }
+
   /* ========================== 右侧条件面板 ========================== */
   var currentRawRows = [];
   var config = { drr: {}, crr: {} };
@@ -1019,9 +1067,11 @@
       runCalculation();   // 清空后按"未选择"再算一次
     });
 
-    // 结果区截图（按钮在弹窗头部，此处绑定一次）
+    // 结果区截图 / 打印（按钮在弹窗头部，此处绑定一次）
     var copyBtn = Utils.$('rptCopyImg');
     if (copyBtn) copyBtn.addEventListener('click', copyResultAsImage);
+    var printBtn = Utils.$('rptPrint');
+    if (printBtn) printBtn.addEventListener('click', printResultTable);
 
     // 表格字号缩放（按钮在弹窗头部，此处绑定一次）
     var zi = Utils.$('rptZoomIn'), zo = Utils.$('rptZoomOut');

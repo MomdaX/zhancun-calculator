@@ -299,7 +299,7 @@ body {
   padding: 2px 5px;
   vertical-align: middle;
 }
-.rpt31814 tr { height: calc(var(--rpt-fs, 15px) * 4.5); }   /* 12px → 54px，15px → 67.5px */
+.rpt31814 tr { height: calc(var(--rpt-fs, 15px) * 2.5); }   /* 12px → 54px，15px → 67.5px */
 /* 首行只放一行标题（colspan=3），不需要跟数据行一样高，单独调低 */
 .rpt31814 tr:first-child { height: calc(var(--rpt-fs, 15px) * 10 / 3); }  /* 15px → 50px */
 .rpt31814 th {
@@ -338,12 +338,12 @@ body {
   padding-bottom: 1px;
   box-sizing: border-box;
 }
-/* 两行结构（沙口 / 南口 / 待开）：上半格至少为下半格的 3 倍，内容多时继续自动增高 */
+/* 两行结构（沙口 / 南口 / 待开）：上半格至少为下半格的 4 倍，内容多时继续自动增高 */
 .rpt31814 tr.two-row .detail-top {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: calc(var(--row-bottom-h) * 3);
+  min-height: calc(var(--row-bottom-h) * 4);
 }
 /* 仅有上半行（无 detail-bottom）时，垂直居中并撑满行高 */
 .rpt31814 .detail-top.only {
@@ -2300,3 +2300,4 @@ table.grid td[data-col="effLen"][data-len]:hover::after {
 .dep-status.ok    { color: #155724; background: #d4edda; border-color: #c3e6cb; }
 .dep-status.warn  { color: #721c24; background: #f8d7da; border-color: #f5c6cb; }
 .dep-status.info  { color: #1e3f7c; background: #d6e6ff; border-color: #b5d3f0; }
+
