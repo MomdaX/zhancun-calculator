@@ -1509,20 +1509,14 @@
         F4: ($('depInputF4') || {}).value || ''
       };
     }
-    // ============== 发送模式（下方 7 个按钮：点一下切换当前模式，默认 ⑦）==============
-    // strategy 内部标识 → 状态提示里显示的友好名（与下方按钮文字一致）
-    var STRATEGY_LABEL = {
-      fs_tab_toolbar: '报表Toolbar',
-      fs_tab_id: 'id^fs_tab',
-      first_iframe: '首个iframe',
-      fs_tab_class: 'item类',
-      name_fs_tab: 'name^fs_tab',
-      self: '自身',
-      all: '兜底'
-    };
-    var depSendBtns = document.querySelectorAll('.dep-send-btns .btn-send');
+    /* ============== 发送目标（原两个模式已合并为单一策略）==============
+     * 扩展侧 depFillFunc / depReadFunc 都是「先逐级匹配报表 iframe → 匹配不到再兜底写本帧」，
+     * 所以一个策略即可覆盖两种场景：
+     *   ① 报表挂在平台页 iframe 里        → 逐级匹配命中
+     *   ② 直接打开报表页本身（本帧即报表）→ 走兜底分支
+     * 这里固定下发 fs_tab_toolbar；扩展侧对未知策略值也一律按它处理，向后兼容旧值。 */
+    var DEP_STRATEGY = 'fs_tab_toolbar';
     var depLastTrack = '';   // 最近一次发送所用的股道（道号），用于回执提示
-    var depActiveStrategy = 'fs_tab_toolbar';
     /* 一次发送会收到「多个 frame」的回执（每个 frame 的 page-fill 都会各自回传），
      * 采「成功优先 + 窗口聚合」：窗口内保留最佳结果，全成功或窗口结束才展示，
      * 避免后到的失败回执把已经成功的提示覆盖成「编好失败」。 */
@@ -1531,7 +1525,8 @@
     function showFillResult(res) {
       if (!res) return;
       var total = 5, ok = res.ok || 0;
-      var track = depLastTrack ? depLastTrack + '道' : '';
+      // depLastTrack 取自 cells.B4（形如「4道」），本身已含「道」字，不要再拼一次
+      var track = depLastTrack || '';
       var msg;
       if (ok >= total)      msg = track + '编好';
       else if (ok > 0)      msg = track + '编好（部分 ' + ok + '/' + total + '）';
@@ -1539,22 +1534,81 @@
       if (res.error) msg += ' · 原因：' + res.error;
       else if (res.failed && res.failed.length) msg += ' · 未写入：' + res.failed.join('、');
       showDepStatus(msg, ok > 0 ? 'ok' : 'warn');
+      renderDepTable();                        // 顺便刷新「报表表格」结果区
     }
-    function setActiveStrategy(btn) {
-      for (var k = 0; k < depSendBtns.length; k++) depSendBtns[k].classList.remove('active');
-      btn.classList.add('active');
-      depActiveStrategy = btn.getAttribute('data-strategy') || 'all';
-    }
-    for (var i = 0; i < depSendBtns.length; i++) {
-      (function (btn) {
-        btn.addEventListener('click', function () { setActiveStrategy(btn); });
-      })(depSendBtns[i]);
-    }
-    // 同步 HTML 里默认带 active 的那个（⑦ fs_tab_toolbar）
+    // ============== 「自动提交」开关：勾选后，发送填表成功即自动点报表页的「提交」==============
+    // 由扩展在报表帧内执行：#fr-btn-Submit > div > em > button
+    var depAutoSubmitEl = $('depAutoSubmit');
+    function depAutoSubmitOn() { return !!(depAutoSubmitEl && depAutoSubmitEl.checked); }
     (function () {
-      var def = document.querySelector('.dep-send-btns .btn-send.active');
-      if (def) depActiveStrategy = def.getAttribute('data-strategy') || 'fs_tab_toolbar';
+      if (!depAutoSubmitEl) return;
+      var wrap = depAutoSubmitEl.closest ? depAutoSubmitEl.closest('.dep-auto-submit') : null;
+      function sync() { if (wrap) wrap.classList.toggle('is-on', depAutoSubmitEl.checked); }
+      depAutoSubmitEl.addEventListener('change', sync);
+      sync();
     })();
+
+    // ============== 报表表格结果：展示读自报表标签页的表格内容 ==============
+    // depTableRows 由扩展回执带回（报表页 #frozen-west 的数据行），每次发送/提交后刷新。
+    var depTableRows = null;
+    var depSubmitted = false;
+    function escHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+    function renderDepTable() {
+      var box = $('depResult'), body = $('depResultBody'), title = $('depResultTitle');
+      if (!box || !body) return;
+      if (!depTableRows || !depTableRows.length) {
+        body.innerHTML = '<div class="dep-result-empty">报表页未读到数据行（确认报表已打开，且与当前「发送模式」匹配）</div>';
+        if (title) title.textContent = '报表表格';
+        box.hidden = false;
+        return;
+      }
+      var head = ['股道', '编组车次', '辆数', '换长', '尾车车号'];
+      var html = '<table><thead><tr>';
+      for (var h = 0; h < head.length; h++) html += '<th>' + head[h] + '</th>';
+      html += '</tr></thead><tbody>';
+      for (var i = 0; i < depTableRows.length; i++) {
+        html += '<tr>';
+        for (var j = 0; j < head.length; j++) {
+          var row = depTableRows[i] || [];
+          html += '<td>' + escHtml(row[j]) + '</td>';
+        }
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+      body.innerHTML = html;
+      if (title) {
+        title.textContent = '报表表格（共 ' + depTableRows.length + ' 行' +
+                            (depSubmitted ? ' · 已自动提交' : '') + '）';
+      }
+      box.hidden = false;
+    }
+    on('depResultClose', 'click', function () { var b = $('depResult'); if (b) b.hidden = true; });
+
+    /** 同步报表表格：向扩展桥要一份报表页当前表格。
+     *  独立指令（type:'readTable'），与「填表」「自动提交」完全无关。
+     *  @param {boolean} [showLoading] 是否先显示「正在读取…」占位（打开浮窗时用） */
+    function syncDepReportTable(showLoading) {
+      if (showLoading) {
+        var box = $('depResult'), body = $('depResultBody'), title = $('depResultTitle');
+        if (box && body) {
+          body.innerHTML = '<div class="dep-result-empty">正在读取报表表格…</div>';
+          if (title) title.textContent = '报表表格';
+          box.hidden = false;
+        }
+      }
+      try {
+        window.postMessage({
+          channel: DEP_BRIDGE,
+          type: 'readTable',
+          strategy: DEP_STRATEGY,
+          ts: Date.now()
+        }, '*');
+      } catch (e) { /* 未装扩展时静默 */ }
+    }
 
     // ============== 右侧「发送」按钮：用当前选中的模式发送 ==============
     on('btnSendCurrent', 'click', function () {
@@ -1563,17 +1617,33 @@
       depLastTrack = cells.B4;
       // 重置回执聚合窗口：本次发送的最佳结果由 showFillResult 统一展示
       depFillBest = null;
+      depSubmitted = false;
       if (depFillTimer) clearTimeout(depFillTimer);
-      depFillTimer = setTimeout(function () { showFillResult(depFillBest); }, 900);
+      depFillTimer = setTimeout(function () {
+        showFillResult(depFillBest);
+        // 兜底：即便一个回执都没收到，也刷新一次结果区（会显示「未读到数据行」便于排查）
+        renderDepTable();
+      }, 900);
+      var autoSub = depAutoSubmitOn();
       try {
+        /* ① 先独立同步一次报表表格：与「填表」「自动提交」完全解耦，
+         *    不管开关开没开，都要把报表页当前表格回执到 #depResult */
+        window.postMessage({
+          channel: DEP_BRIDGE,
+          type: 'readTable',
+          strategy: DEP_STRATEGY,
+          ts: Date.now()
+        }, '*');
+        /* ② 再下发填表指令（写入后扩展还会另带一份「提交后」的表格回来）*/
         window.postMessage({
           channel: DEP_BRIDGE,
           type: 'fillByStrategy',
           cells: cells,
-          strategy: depActiveStrategy,
+          strategy: DEP_STRATEGY,
+          autoSubmit: autoSub,                      // 扩展写入后是否代点「提交」
           ts: Date.now()
         }, '*');
-        showDepStatus('已下发填报指令 · 模式：' + (STRATEGY_LABEL[depActiveStrategy] || depActiveStrategy) + ' · 车次：' + cells.C4, 'ok');
+        showDepStatus('已下发填报指令 · 车次：' + cells.C4 + (autoSub ? ' · 自动提交' : ''), 'ok');
       } catch (e) {
         showDepStatus('发送失败：' + e.message, 'warn');
       }
@@ -1590,18 +1660,36 @@
       }
     });
 
+    /* 刷新报表页后的「延迟同步表格」定时器：
+     * 报表页 reload 后 contentPane 需要重建，立刻读会拿到刷新前的旧内容甚至读空。 */
+    var depReloadSyncTimer = null;
+
     // 监听扩展桥回执（filled）—— 哪个 strategy 写成功 / 失败 / 原因都在这里能直接看到
     window.addEventListener('message', function (ev) {
       var d = ev.data;
       if (!d || d.channel !== DEP_BRIDGE) return;
       // 刷新指令回执
       if (d.type === 'reloadResult') {
+        var reloaded = (d.count || 0) > 0;
         showDepStatus(
-          (d.count || 0) > 0
+          reloaded
             ? ('已刷新 ' + d.count + ' 个报表页')
             : '未找到报表页：请检查 popup 里的「报表地址」是否与已打开的页面一致',
-          (d.count || 0) > 0 ? 'ok' : 'warn'
+          reloaded ? 'ok' : 'warn'
         );
+        // 刷新成功 → 等报表页重新加载完，再把表格同步回来（会先显示「正在读取报表表格…」）
+        if (reloaded) {
+          if (depReloadSyncTimer) clearTimeout(depReloadSyncTimer);
+          depReloadSyncTimer = setTimeout(function () { syncDepReportTable(true); }, 1800);
+        }
+        return;
+      }
+      // 独立读表回执：不管开不开自动提交，同步到的报表表格都要展示
+      if (d.type === 'tableData') {
+        if (d.table) {
+          depTableRows = d.table;
+          renderDepTable();
+        }
         return;
       }
       if (d.type === 'filled' && d.strategy) {
@@ -1609,6 +1697,13 @@
         var ok = d.ok || 0;
         if (!depFillBest || ok > depFillBest.ok) {
           depFillBest = { ok: ok, error: d.error, failed: d.failed };
+        }
+        // 扩展回传的「报表页表格内容」：只要有就收下并【立即渲染】。
+        // 不依赖 ok>=5，也不依赖「自动提交」开关 —— 不开自动提交同样要能看到报表表格。
+        if (d.table) {
+          depTableRows = d.table;
+          if (d.submitted) { depSubmitted = true; }
+          renderDepTable();
         }
         if (ok >= 5) {
           if (depFillTimer) { clearTimeout(depFillTimer); depFillTimer = null; }
@@ -1635,7 +1730,10 @@
     UI.Modal.register('modal31814');
     UI.Modal.register('modalSettings', { onOpen: refreshFolderPath });
     UI.Modal.register('modalProductivity');
-    UI.Modal.register('modalDeparture');
+    // 打开浮窗（点「编好」）就先同步一次报表表格，立刻看到报表当前情况；点发送后会再同步一次
+    UI.Modal.register('modalDeparture', {
+      onOpen: function () { depSubmitted = false; syncDepReportTable(true); }
+    });
     UI.Modal.register('modalAreaMap');
     UI.Drawer.register('drawer', { maskId: 'drawerMask' });
     UI.Drawer.register('searchDrawer', { maskId: 'searchMask' });

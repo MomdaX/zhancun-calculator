@@ -130,12 +130,11 @@
         post({ type: 'checiList', list: collectCheci(), url: location.href });
       }
     } else if (d.type === 'fillByStrategy' && d.cells) {
-      /* 发送按钮用的「按 strategy 选目标」填表：
-       *   - 'fs_tab_id' / 'first_iframe' / 'fs_tab_class' / 'name_fs_tab'：仅顶层 frame 处理，
-       *     在本页 document 里按对应选择器找 iframe，调其 contentWindow.contentPane.setCellValue
-       *   - 'self'：仅报表 iframe frame 自身有 contentPane 时处理
-       *   - 'all'：仅顶层 frame 处理（兜底按多种选择器逐个尝试）
-       * 帧角色判定避免多 frame 重复执行 setCellValue。 */
+      /* 发送按钮用的「按 strategy 选目标」填表，现在只有两条路：
+       *   - 'fs_tab_toolbar'（默认）：在本帧 document 里逐级匹配报表 iframe，调其
+       *     contentWindow.contentPane.setCellValue；一个都没找到时兜底写本帧。
+       *   - 'self'：本帧就是报表页（直接打开报表页的场景），直接用本帧 contentPane。
+       * 不限制顶层 frame：报表 iframe 可能嵌在中间层，谁在自己的 document 里找得到谁负责写。 */
       var strategy = d.strategy || 'all';
 
       /* 本页是「站存计算器」自身（指令发起方）→ 直接静默跳过。
@@ -219,7 +218,7 @@
       }
 
       if (strategy === 'self') {
-        // 「自身」：本 frame 自己就是帆软报表 frame（有 contentPane），不必再找 iframe
+        // 「自身」：本帧就是报表页（直接打开报表页的场景），不找 iframe
         if (window.contentPane && typeof window.contentPane.setCellValue === 'function') {
           targetWin = window;
           targetLabel = 'self';
@@ -227,46 +226,19 @@
           isSkip = true;      // 本 frame 不是报表 frame，self 策略不归它处理
           skipReason = 'self: this frame has no contentPane';
         }
-      } else if (strategy === 'all') {
-        /* 兜底：在本 frame 里按「报表 iframe 特征」优先级从高到低逐个试。
-         * ★ 不再限制 window === window.top：帆软平台页(op=fs_main)常把报表 iframe 嵌在
-         *   中间层 frame 内，顶层 document 里根本没有它——原来非顶层 frame 一律 isSkip，
-         *   导致 7 个模式全部落空。放开后「谁在自己的 document 里找得到，谁就负责写」，
-         *   找到的 frame 唯一，不会重复。 */
-        if (!trySelect('.fs-tab-content-item.fs-tab-content-toolbar', 'cfg') &&
-            !trySelect('iframe.fs-tab-content-toolbar', 'iframe.fs-tab-content-toolbar') &&
-            !trySelect('iframe[id^="fs_tab"]', 'iframe[id^="fs_tab"]') &&
-            !trySelect('iframe[name^="fs_tab"]', 'iframe[name^="fs_tab"]') &&
-            !trySelect('.fs-tab-content-item', '.fs-tab-content-item') &&
-            !trySelect('iframe', 'querySelector("iframe")')) {
-          skipReason = 'all: no contentPane iframe found';
-        }
-      } else if (strategy === 'fs_tab_toolbar') {
-        // 用户实测最准：两个类同时具备的选择器（不带 iframe 前缀；命中的若为容器，
-        // trySelect 会自动在其内部找 iframe）
-        if (!trySelect('.fs-tab-content-item.fs-tab-content-toolbar', 'fs_tab_toolbar') &&
-            !trySelect('iframe.fs-tab-content-toolbar', 'fs_tab_toolbar')) {
-          skipReason = 'fs_tab_toolbar: no match';
-        }
-      } else if (strategy === 'fs_tab_id') {
-        if (!trySelect('iframe[id^="fs_tab"]', 'fs_tab_id')) {
-          skipReason = 'fs_tab_id: no match';
-        }
-      } else if (strategy === 'first_iframe') {
-        if (!trySelect('iframe', 'first_iframe')) {
-          skipReason = 'first_iframe: no match';
-        }
-      } else if (strategy === 'fs_tab_class') {
-        if (!trySelect('.fs-tab-content-item', 'fs_tab_class') &&
-            !trySelect('iframe.fs-tab-content-item', 'fs_tab_class')) {
-          skipReason = 'fs_tab_class: no match';
-        }
-      } else if (strategy === 'name_fs_tab') {
-        if (!trySelect('iframe[name^="fs_tab"]', 'name_fs_tab')) {
-          skipReason = 'name_fs_tab: no match';
-        }
       } else {
-        skipReason = 'unknown strategy: ' + strategy;
+        /* 找报表 iframe：首选实测最准的「组合类」，再逐级退回其它特征。
+         * ★ 不限制 window === window.top：帆软平台页常把报表 iframe 嵌在中间层 frame 内，
+         *   「谁在自己的 document 里找得到，谁就负责写」，找到的 frame 唯一、不会重复。
+         * 未知 strategy（含历史按钮值 all / fs_tab_id 等）也走这套，等价于原来的兜底。 */
+        if (!trySelect('.fs-tab-content-item.fs-tab-content-toolbar', 'fs_tab_toolbar') &&
+            !trySelect('iframe.fs-tab-content-toolbar', 'fs_tab_toolbar') &&
+            !trySelect('iframe[id^="fs_tab"]', 'fs_tab_toolbar') &&
+            !trySelect('iframe[name^="fs_tab"]', 'fs_tab_toolbar') &&
+            !trySelect('.fs-tab-content-item', 'fs_tab_toolbar') &&
+            !trySelect('iframe', 'fs_tab_toolbar')) {
+          skipReason = 'no contentPane iframe found';
+        }
       }
 
       /* 兜底：本 frame 自己就是帆软报表页 → 直接写本帧。

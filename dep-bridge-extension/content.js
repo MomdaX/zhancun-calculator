@@ -42,7 +42,10 @@
   // background → 页面（page-fill.js 与页面自身脚本都会收到）
   chrome.runtime.onMessage.addListener(function (msg) {
     if (!msg || msg.channel !== CHANNEL) return;
-    // 打标记再发回页面：这样本脚本的 window 监听会识别并跳过，避免无限回环
-    window.postMessage(Object.assign({}, msg.payload, { __from: 'dep-bridge-content' }), '*');
+    /* 打标记再发回页面：这样本脚本的 window 监听会识别并跳过，避免无限回环。
+     * ★ 必须回填 channel —— 页面侧（app.js 的 filled/tableData 处理、page-fill.js）
+     *   都以 d.channel === '__DEP_BRIDGE__' 作为第一道过滤，漏了它回执会被全部丢弃：
+     *   表现就是「填表能成功，但编好回执 / 报表表格永远读不回来」。 */
+    window.postMessage(Object.assign({}, msg.payload, { channel: CHANNEL, __from: 'dep-bridge-content' }), '*');
   });
 })();

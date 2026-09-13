@@ -439,6 +439,13 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
     return;
   }
 
+  /* 独立读表：不写任何单元格，只把报表页的表格同步回计算器页。
+   * 与「填表」「自动提交」完全解耦 —— 开关关着也照样回执，填表失败也照样回执。 */
+  if (payload.type === 'readTable') {
+    readTableByExecute(payload, fromTabId);
+    return;
+  }
+
   // 其余类型（checiList / filled / reloadResult 等回传）：只发给非报表页（即计算器页面）
   chrome.tabs.query({}, function (tabs) {
     (tabs || []).forEach(function (t) {
@@ -452,7 +459,7 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
  * depFillFunc 会被 chrome.scripting.executeScript 序列化后注入目标页面执行，
  * 所以它【必须自包含】——不能引用本文件作用域里的任何变量（CHANNEL / cfg 等）。
  * 注入到 MAIN world 才能访问 iframe.contentWindow.contentPane（帆软运行时对象）。 */
-function depFillFunc(cells, strategy) {
+async function depFillFunc(cells, autoSubmit) {
   /** 元素是 iframe 且其 contentWindow 上有可用的帆软 contentPane → 返回该 contentWindow */
   function paneWin(el) {
     try {
@@ -476,16 +483,49 @@ function depFillFunc(cells, strategy) {
     } catch (e) {}
     return null;
   }
-  var SELECTORS = {
-    fs_tab_toolbar: ['.fs-tab-content-item.fs-tab-content-toolbar', 'iframe.fs-tab-content-toolbar'],
-    fs_tab_id:      ['iframe[id^="fs_tab"]'],
-    first_iframe:   ['iframe'],
-    fs_tab_class:   ['.fs-tab-content-item', 'iframe.fs-tab-content-item'],
-    name_fs_tab:    ['iframe[name^="fs_tab"]'],
-    all:            ['.fs-tab-content-item.fs-tab-content-toolbar', 'iframe.fs-tab-content-toolbar',
-                     'iframe[id^="fs_tab"]', 'iframe[name^="fs_tab"]', '.fs-tab-content-item', 'iframe']
-  };
-  function writeInto(win, label) {
+  /* 目标定位：逐级匹配报表 iframe 的候选选择器（由最精确到最宽松）。
+   * 全部落空时，下面还有「本帧即报表页」的兜底 —— 所以单一策略同时覆盖：
+   *   ① 报表挂在平台页 iframe 里 → 逐级匹配命中
+   *   ② 直接打开报表页本身       → 走兜底分支
+   * 旧参数值（self / all / fs_tab_id 等）一律按这套处理，向后兼容。 */
+  var SELECTORS = ['.fs-tab-content-item.fs-tab-content-toolbar', 'iframe.fs-tab-content-toolbar',
+                   'iframe[id^="fs_tab"]', 'iframe[name^="fs_tab"]', '.fs-tab-content-item', 'iframe'];
+  /* 读回报表表格：左半冻结列（#frozen-west）的数据行，col 1~5 = 股道/编组车次/辆数/换长/尾车车号。
+     不同报表结构可能有差异，读不到就返回空数组，不影响填表结果本身。 */
+  function readTable(win) {
+    var out = [];
+    try {
+      var doc = win.document;
+      var box = doc.querySelector('#frozen-west') || doc.querySelector('.frozen-west') || doc;
+      var rows = box.querySelectorAll('tbody tr');
+      for (var i = 0; i < rows.length && out.length < 20; i++) {
+        var tds = rows[i].querySelectorAll('td[col]');
+        if (!tds.length) continue;
+        var rec = [];
+        for (var j = 0; j < tds.length; j++) {
+          var col = parseInt(tds[j].getAttribute('col'), 10);
+          if (col >= 1 && col <= 5) {
+            rec.push((tds[j].textContent || '').replace(/\s+/g, ' ').trim());
+          }
+        }
+        if (rec.length === 5) out.push(rec);
+      }
+    } catch (e) { /* 跨域 / 结构不同：忽略 */ }
+    return out;
+  }
+
+  /* 代点报表页的「提交」按钮（等同手工点一次）：
+     #fr-btn-Submit > div > em > button —— 报表页自己会处理提交动作 */
+  function clickSubmit(win) {
+    try {
+      var btn = win.document.querySelector('#fr-btn-Submit > div > em > button');
+      if (!btn) return false;
+      btn.click();
+      return true;
+    } catch (e) { return false; }
+  }
+
+  async function writeInto(win, label) {
     var ok = 0, failed = [];
     for (var id in cells) {
       if (!Object.prototype.hasOwnProperty.call(cells, id)) continue;
@@ -494,19 +534,20 @@ function depFillFunc(cells, strategy) {
         ok++;
       } catch (e) { failed.push(id + ':' + (e.message || e)); }
     }
-    return { ok: ok, failed: failed, target: label, url: location.href };
-  }
-
-  // ①「自身」：本 frame 自己就是帆软报表 frame（有 contentPane）
-  if (strategy === 'self') {
-    if (window.contentPane && typeof window.contentPane.setCellValue === 'function') {
-      return writeInto(window, 'self');
+    var submitted = false;
+    if (ok > 0 && autoSubmit) {
+      submitted = clickSubmit(win);
+      // 等报表把提交结果落进表格（本地测试页是同步插行，真实报表可能要一个往返）
+      if (submitted) await new Promise(function (r) { setTimeout(r, 450); });
     }
-    return { ok: 0, skip: true, target: 'self', url: location.href, error: '本 frame 无 contentPane' };
+    return {
+      ok: ok, failed: failed, target: label, url: location.href,
+      submitted: submitted, table: readTable(win)
+    };
   }
 
-  // ② 其余策略：在本 frame 的 document 里找带 contentPane 的报表 iframe
-  var sels = SELECTORS[strategy] || SELECTORS.all;
+  // ① 在本 frame 的 document 里找带 contentPane 的报表 iframe（逐级匹配）
+  var sels = SELECTORS;
   for (var s = 0; s < sels.length; s++) {
     var list;
     try { list = document.querySelectorAll(sels[s]); } catch (e) { continue; }
@@ -534,10 +575,146 @@ function depFillFunc(cells, strategy) {
   };
 }
 
+/* ====== 独立读表：只同步报表页表格，不写任何单元格 ========================
+ * 与「填表」「自动提交」完全解耦：任何时刻都能单独调用，回执类型 tableData。
+ * 同样必须注入 MAIN world —— 只有 MAIN world 才访问得到报表 iframe 的 document。 */
+function depReadFunc() {
+  /** 元素是 iframe 且其 contentWindow 上有可用的帆软 contentPane → 返回该 contentWindow */
+  function paneWin(el) {
+    try {
+      var w = el && el.contentWindow;
+      if (!w) return null;
+      var cp = w.contentPane;
+      if (cp && typeof cp.setCellValue === 'function') return w;
+    } catch (e) {}
+    return null;
+  }
+  /** 探测候选：元素本身是 iframe，或它内部（一层）的 iframe */
+  function probe(el) {
+    var own = paneWin(el);
+    if (own) return own;
+    try {
+      var inner = el.querySelectorAll('iframe');
+      for (var i = 0; i < inner.length; i++) {
+        var w2 = paneWin(inner[i]);
+        if (w2) return w2;
+      }
+    } catch (e) {}
+    return null;
+  }
+  /** 读表格：左半冻结列（#frozen-west）的数据行，col 1~5 = 股道/编组车次/辆数/换长/尾车车号 */
+  function readTable(win) {
+    var out = [];
+    try {
+      var doc = win.document;
+      var box = doc.querySelector('#frozen-west') || doc.querySelector('.frozen-west') || doc;
+      var rows = box.querySelectorAll('tbody tr');
+      for (var i = 0; i < rows.length && out.length < 20; i++) {
+        var tds = rows[i].querySelectorAll('td[col]');
+        if (!tds.length) continue;
+        var rec = [];
+        for (var j = 0; j < tds.length; j++) {
+          var col = parseInt(tds[j].getAttribute('col'), 10);
+          if (col >= 1 && col <= 5) {
+            rec.push((tds[j].textContent || '').replace(/\s+/g, ' ').trim());
+          }
+        }
+        if (rec.length === 5) out.push(rec);
+      }
+    } catch (e) {}
+    return out;
+  }
+
+  /* 与 depFillFunc 用同一套候选选择器：逐级匹配，落空时下面还有「本帧即报表页」兜底 */
+  var SELECTORS = ['.fs-tab-content-item.fs-tab-content-toolbar', 'iframe.fs-tab-content-toolbar',
+                   'iframe[id^="fs_tab"]', 'iframe[name^="fs_tab"]', '.fs-tab-content-item', 'iframe'];
+
+  function pack(win, label) {
+    return { ok: 1, target: label, url: location.href, table: readTable(win) };
+  }
+
+  // ① 在本 frame 的 document 里找带 contentPane 的报表 iframe（逐级匹配）
+  var sels = SELECTORS;
+  for (var s = 0; s < sels.length; s++) {
+    var list;
+    try { list = document.querySelectorAll(sels[s]); } catch (e) { continue; }
+    for (var i2 = 0; i2 < list.length; i2++) {
+      var w = probe(list[i2]);
+      if (w) return pack(w, sels[s] + '[' + i2 + ']');
+    }
+  }
+
+  // ③ 兜底：本 frame 自己就是报表页
+  if (window.contentPane) return pack(window, 'self(本页即报表页)');
+
+  var hasIframe = false;
+  try { hasIframe = !!document.querySelector('iframe'); } catch (e) {}
+  return {
+    ok: 0, skip: !hasIframe, table: [], url: location.href,
+    error: hasIframe ? '本 frame 的 iframe 里没有 contentPane（报表可能未加载完）' : '本 frame 无 iframe'
+  };
+}
+
+/** 向所有候选标签页注入 depReadFunc，取「行数最多」的结果回传（tableData） */
+function readTableByExecute(payload, fromTabId) {
+  var strategy = payload.strategy || 'all';
+  function reply(obj) { if (fromTabId != null) send(fromTabId, obj); }
+
+  chrome.tabs.query({}, function (tabs) {
+    var targets = (tabs || []).filter(function (t) { return isReport(t.url); });
+    if (!targets.length && cfg.broadcast) {
+      targets = (tabs || []).filter(function (t) {
+        if (t.id === fromTabId) return false;
+        if (!t.url || /^(chrome|chrome-extension|edge|about|devtools|view-source|file):/i.test(t.url)) return false;
+        return true;
+      });
+    }
+    if (!targets.length) {
+      reply({ type: 'tableData', ok: 0, table: [], error: '未找到报表标签页' });
+      return;
+    }
+
+    var pending = targets.length;
+    var best = null;
+    function settle() {
+      if (--pending > 0) return;
+      var n = best && best.table ? best.table.length : 0;
+      console.log('[dep-bridge] 读表完成：' + n + ' 行，target=' + (best ? best.target : '(无)'));
+      reply({
+        type: 'tableData',
+        ok: best ? best.ok : 0,
+        table: (best && best.table) || [],
+        target: best ? best.target : '',
+        error: best ? best.error : '没有任何 frame 返回表格'
+      });
+    }
+
+    targets.forEach(function (t) {
+      try {
+        chrome.scripting.executeScript({
+          target: { tabId: t.id, allFrames: true },
+          world: 'MAIN',
+          func: depReadFunc,
+          args: []
+        }, function (results) {
+          (results || []).forEach(function (r) {
+            var v = r && r.result;
+            if (!v || !v.table) return;
+            // 取「行数最多」的那份：真正的报表帧才读得到数据行，空帧会被自然淘汰
+            if (!best || v.table.length > ((best.table && best.table.length) || 0)) best = v;
+          });
+          settle();
+        });
+      } catch (e) { settle(); }
+    });
+  });
+}
+
 /** 向所有候选标签页的「所有 frame」注入 depFillFunc（MAIN world），取最佳结果回传计算器页 */
 function fillByExecute(payload, fromTabId) {
   var cells = payload.cells || {};
   var strategy = payload.strategy || 'all';
+  var autoSubmit = !!payload.autoSubmit;      // 写入成功后是否代点报表页的「提交」按钮
 
   function reply(obj) { if (fromTabId != null) send(fromTabId, obj); }
 
@@ -570,7 +747,9 @@ function fillByExecute(payload, fromTabId) {
         failed: best && best.failed,
         error: best ? best.error : '注入后没有任何 frame 返回结果',
         strategy: strategy,
-        target: best ? best.target : ''
+        target: best ? best.target : '',
+        submitted: best ? !!best.submitted : false,         // 是否代点了提交
+        table: best ? (best.table || null) : null           // 报表页表格内容（供计算器页展示）
       });
     }
 
@@ -580,7 +759,7 @@ function fillByExecute(payload, fromTabId) {
           target: { tabId: t.id, allFrames: true },
           world: 'MAIN',
           func: depFillFunc,
-          args: [cells, strategy]
+          args: [cells, autoSubmit]
         }, function (results) {
           if (chrome.runtime.lastError) {
             console.log('[dep-bridge] 注入失败 tab ' + t.id + '：' + chrome.runtime.lastError.message);
@@ -588,7 +767,13 @@ function fillByExecute(payload, fromTabId) {
           (results || []).forEach(function (r) {
             var v = r && r.result;
             if (!v) return;
-            if (!best || (v.ok || 0) > (best.ok || 0)) best = v;   // 取「写得最多」的那个 frame 的结果
+            // 取「写得最多」的 frame；ok 相同则优先取带回表格数据的（避免选到跳过帧的空结果）
+            if (!best ||
+                (v.ok || 0) > (best.ok || 0) ||
+                ((v.ok || 0) === (best.ok || 0) &&
+                 !(best.table && best.table.length) && v.table && v.table.length)) {
+              best = v;
+            }
           });
           settle();
         });
