@@ -535,8 +535,12 @@ async function depFillFunc(cells, autoSubmit) {
       } catch (e) { failed.push(id + ':' + (e.message || e)); }
     }
     var submitted = false;
-    if (ok > 0 && autoSubmit) {
-      submitted = clickSubmit(win);
+    /* 提交权只交给「本帧自己就是报表页」的那一次执行（win === window）。
+     * allFrames:true 会让平台壳页与报表帧各跑一遍，壳页通过 iframe 访问到的是同一个
+     * contentPane：所以「写入」是幂等的（同值覆盖），无需去重；但「提交」是新增记录、
+     * 不幂等 —— 两帧各点一次，一次发送就会生成两条记录（2026-09 实测：4道记录重复）。 */
+    if (ok > 0 && autoSubmit && win === window) {
+      submitted = clickSubmit(window);
       // 等报表把提交结果落进表格（本地测试页是同步插行，真实报表可能要一个往返）
       if (submitted) await new Promise(function (r) { setTimeout(r, 450); });
     }
@@ -738,9 +742,11 @@ function fillByExecute(payload, fromTabId) {
 
     var pending = targets.length;
     var best = null;
+    var anySubmitted = false;   // 是否有 frame 真的点了提交（提交只在报表帧发生，需单独聚合，
+                                // 不能跟着 best 走 —— best 可能选中拼写更早的壳页帧）
     function settle() {
       if (--pending > 0) return;
-      console.log('[dep-bridge] 注入完成：ok=' + (best ? best.ok : 0) + ' target=' + (best ? best.target : '(无)'));
+      console.log('[dep-bridge] 注入完成：ok=' + (best ? best.ok : 0) + ' target=' + (best ? best.target : '(无)') + ' submitted=' + anySubmitted);
       reply({
         type: 'filled',
         ok: best ? best.ok : 0,
@@ -748,7 +754,7 @@ function fillByExecute(payload, fromTabId) {
         error: best ? best.error : '注入后没有任何 frame 返回结果',
         strategy: strategy,
         target: best ? best.target : '',
-        submitted: best ? !!best.submitted : false,         // 是否代点了提交
+        submitted: anySubmitted,                            // 是否代点了提交（跨 frame 取「或」）
         table: best ? (best.table || null) : null           // 报表页表格内容（供计算器页展示）
       });
     }
@@ -767,11 +773,17 @@ function fillByExecute(payload, fromTabId) {
           (results || []).forEach(function (r) {
             var v = r && r.result;
             if (!v) return;
-            // 取「写得最多」的 frame；ok 相同则优先取带回表格数据的（避免选到跳过帧的空结果）
+            if (v.submitted) anySubmitted = true;   // 提交单独聚合，不受下面 best 选取影响
+            /* 取「写得最多」的 frame；ok 相同时再按两级排序：
+             *   ① 优先「代点过提交」的那一帧 —— 壳页帧同样能拿到 contentPane，但它按规则不提交，
+             *      读到的表是【提交前】的快照；报表帧提交后才读，才是含新记录的最新表。
+             *      不按这个排，回执表就会缺掉刚写入的那条（2026-09 实测）。
+             *   ② 再优先表格行数多的，避免选到跳过帧的空结果。 */
             if (!best ||
                 (v.ok || 0) > (best.ok || 0) ||
-                ((v.ok || 0) === (best.ok || 0) &&
-                 !(best.table && best.table.length) && v.table && v.table.length)) {
+                ((v.ok || 0) === (best.ok || 0) && !!v.submitted && !best.submitted) ||
+                ((v.ok || 0) === (best.ok || 0) && !!v.submitted === !!best.submitted &&
+                 ((v.table && v.table.length) || 0) > ((best.table && best.table.length) || 0))) {
               best = v;
             }
           });
