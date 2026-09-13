@@ -227,6 +227,26 @@
     modal.addEventListener('input', onEdit);
     modal.addEventListener('change', onEdit);
 
+    // 双击输入单元格：清空该框并聚焦，方便直接重新录入
+    var mainTable = $('prodMainTable');
+    if (mainTable) mainTable.addEventListener('dblclick', function (e) {
+      var cell = e.target.closest ? e.target.closest('td') : null;
+      if (!cell) return;
+      var input = cell.querySelector('.prod-in');
+      if (!input) return;
+      input.value = '';
+      input.focus();
+      if (input.select) input.select();
+      recompute();   // 清空后同步重算各项合计
+    });
+
+    // 输入后按回车：确认并退出编辑模式
+    mainTable.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('prod-in')) {
+        e.target.blur();
+      }
+    });
+
     global.Productivity = { open: open };
   }
 

@@ -79,9 +79,9 @@ function applyRefererRule() {
 }
 loadCfg();
 chrome.storage.onChanged.addListener(function (changes, area) {
-  if (area === 'local' && changes.depReportUrl) {
-    loadCfg();                                     // 报表地址变更，重新载入匹配特征
-  }
+  if (area !== 'local') return;
+  if (changes.depReportUrl) loadCfg();              // 报表地址变更，重新载入匹配特征
+  if (changes.depTokenUrl || changes.depTokenReferer) loadCfg(); // Token 地址/Referer 变更，同步内存配置
 });
 
 function send(tabId, payload) {
@@ -153,10 +153,14 @@ updateIcon();
  * 改由扩展直接请求真实后端拿 token，再注入地图的 sessionStorage.token。
  * 地图代码里所有 $.ajax 都会 setRequestHeader("Authorization", sessionStorage.token)，
  * 所以只要 sessionStorage.token 是对的，整个地图的 API 就都带上了正确的 Authorization。 */
-function fetchMapToken(cb) {
-  var opts = { credentials: 'omit', cache: 'no-store' };
-  if (mapTokenCfg.referer) opts.headers = { Referer: mapTokenCfg.referer };
-  fetchWithRetry(mapTokenCfg.url, opts, function (err, token) {
+function fetchMapToken(opts, cb) {
+  // 兼容内部旧调用：fetchMapToken(function(...){...})
+  if (typeof opts === 'function') { cb = opts; opts = null; }
+  var url = (opts && opts.url) || mapTokenCfg.url;
+  var referer = (opts && opts.referer) || mapTokenCfg.referer;
+  var fetchOpts = { credentials: 'omit', cache: 'no-store' };
+  if (referer) fetchOpts.headers = { Referer: referer };
+  fetchWithRetry(url, fetchOpts, function (err, token) {
     if (err) { cb && cb(err); return; }
     var t = (token || '').trim();
     chrome.storage.local.set({ authorization: t, authorizationTs: Date.now() }, function () {});
@@ -359,9 +363,57 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
         });
       return true;
     }
+    // popup：测试「取 Token → 再取版本号」整条链（不注入地图）
+    // 先按自定义 URL/Referer 取 token，再用该 token 请求 /getReleaseVersionData，
+    // 返回 token 状态 + 解析出的版本号（接口返回 ["C260802","日期","说明"] 取 [0]）。
+    if (msg && msg.type === 'testTokenAndVersion') {
+      var tvUrl = msg.url || mapTokenCfg.url;
+      var tvReferer = msg.referer || mapTokenCfg.referer;
+      var tv0 = Date.now();
+      var tvTokenOpts = { credentials: 'omit', cache: 'no-store' };
+      if (tvReferer) tvTokenOpts.headers = { Referer: tvReferer };
+      fetch(tvUrl, tvTokenOpts)
+        .then(function (tr) {
+          return tr.text().then(function (tvTokenText) {
+            var tvTokenOk = tr.ok;
+            var tvToken = (tvTokenText || '').trim();
+            var tvBase = '';
+            try { tvBase = new URL(tvUrl).origin; } catch (e) {}
+            var tvVerUrl = tvBase + '/getReleaseVersionData';
+            var tvVerOpts = {
+              credentials: 'omit', cache: 'no-store',
+              headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                Referer: tvReferer || (tvBase + '/cljl')
+              }
+            };
+            if (tvTokenOk && tvToken) tvVerOpts.headers['Authorization'] = tvToken;
+            return fetch(tvVerUrl, tvVerOpts).then(function (vr) {
+              return vr.text().then(function (vrText) {
+                var tvVersion = '';
+                try { var arr = JSON.parse(vrText); if (Array.isArray(arr) && arr[0]) tvVersion = String(arr[0]); } catch (e) {}
+                sendResponse({
+                  tokenOk: tvTokenOk, tokenStatus: tr.status, token: tvToken,
+                  versionOk: vr.ok, versionStatus: vr.status, version: tvVersion,
+                  ms: Date.now() - tv0, url: tvUrl, verUrl: tvVerUrl
+                });
+              });
+            }).catch(function (e) {
+              sendResponse({ tokenOk: tvTokenOk, tokenStatus: tr.status, token: tvToken,
+                             versionOk: false, versionStatus: 0, version: '', ms: Date.now() - tv0, url: tvUrl, verUrl: tvVerUrl });
+            });
+          });
+        })
+        .catch(function (e) {
+          sendResponse({ tokenOk: false, tokenStatus: 0, token: '',
+                         versionOk: false, versionStatus: 0, version: '', ms: Date.now() - tv0, url: tvUrl });
+        });
+      return true;
+    }
     // popup：手动取一次地图 token（调试用），取到后顺手广播注入
+    // 使用面板当前填写的 URL / Referer，避免内存中的 mapTokenCfg 未同步导致失败
     if (msg && msg.type === 'fetchMapToken') {
-      fetchMapToken(function (err, token) {
+      fetchMapToken({ url: msg.url, referer: msg.referer }, function (err, token) {
         sendResponse({ ok: !err, token: token, error: err });
         if (!err && token) broadcastMapToken(token);
       });

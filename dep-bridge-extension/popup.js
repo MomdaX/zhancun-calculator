@@ -40,6 +40,18 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+  // 标签切换：站存-发车流程填表桥 / 地图 Token 管理
+  var tabs = document.querySelectorAll('.tab');
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      tabs.forEach(function (t) { t.classList.remove('active'); });
+      tab.classList.add('active');
+      var target = tab.getAttribute('data-tab');
+      document.getElementById('panel-fill').style.display = (target === 'fill') ? '' : 'none';
+      document.getElementById('panel-token').style.display = (target === 'token') ? '' : 'none';
+    });
+  });
+
   var input = document.getElementById('urlInput');
   var parse = document.getElementById('parse');
   var btn = document.getElementById('saveBtn');
@@ -63,20 +75,39 @@ document.addEventListener('DOMContentLoaded', function () {
   var tokenBtn = document.getElementById('tokenBtn');
   var testBtn = document.getElementById('testBtn');
   var tokenInfo = document.getElementById('tokenInfo');
+  var versionInfo = document.getElementById('versionInfo');
   var tokenUrl = document.getElementById('tokenUrl');
   var tokenReferer = document.getElementById('tokenReferer');
 
-  // 回填上次填的 Token 地址 / Referer
+  // 默认地址常量（打开即填充，可手改）
+  var DEFAULT_TOKEN_URL = 'http://10.208.2.72:8080/getToken?ip=10.208.2.72';
+  var TEST_TOKEN_URL = 'http://localhost:3000/getToken?ip=10.208.2.72';
+  var DEFAULT_REFERER = 'http://10.208.2.72:8080/cljl';
+
+  // 回填上次填的 Token 地址 / Referer；没存过则用默认值（打开即有值，可手改）
   chrome.storage.local.get(['depTokenUrl', 'depTokenReferer'], function (r) {
-    if (r && r.depTokenUrl) tokenUrl.value = r.depTokenUrl;
-    if (r && r.depTokenReferer) tokenReferer.value = r.depTokenReferer;
+    tokenUrl.value = (r && r.depTokenUrl) ? r.depTokenUrl : DEFAULT_TOKEN_URL;
+    tokenReferer.value = (r && r.depTokenReferer) ? r.depTokenReferer : DEFAULT_REFERER;
   });
 
-  // 默认 Token 地址按钮
+  // 默认 / 测试 Token 地址按钮
   var defaultTokenBtn = document.getElementById('defaultTokenBtn');
+  var testTokenBtn = document.getElementById('testTokenBtn');
   if (defaultTokenBtn) {
     defaultTokenBtn.addEventListener('click', function () {
-      tokenUrl.value = 'http://localhost:3000/getToken?ip=10.208.2.72';
+      tokenUrl.value = DEFAULT_TOKEN_URL;
+    });
+  }
+  if (testTokenBtn) {
+    testTokenBtn.addEventListener('click', function () {
+      tokenUrl.value = TEST_TOKEN_URL;
+    });
+  }
+  // Referer 默认按钮
+  var defaultRefererBtn = document.getElementById('defaultRefererBtn');
+  if (defaultRefererBtn) {
+    defaultRefererBtn.addEventListener('click', function () {
+      tokenReferer.value = DEFAULT_REFERER;
     });
   }
 
@@ -85,24 +116,39 @@ document.addEventListener('DOMContentLoaded', function () {
     tokenInfo.textContent = text;
   }
 
-  // 测试请求：只回显状态码和响应内容，不注入地图
+  // 测试请求：先取 Token，再用该 Token 请求 /getReleaseVersionData 获取版本号并显示
   if (testBtn) {
     testBtn.addEventListener('click', function () {
       var url = tokenUrl.value.trim();
       if (!url) { showResult('no', '请填写 Token 地址'); return; }
       showResult('', '请求中…');
+      if (versionInfo) versionInfo.textContent = '请求中…';
       chrome.runtime.sendMessage({
-        type: 'testToken', url: url, referer: tokenReferer.value.trim()
+        type: 'testTokenAndVersion', url: url, referer: tokenReferer.value.trim()
       }, function (res) {
         if (!res) { showResult('no', '✗ 扩展无响应，请在扩展页点「重新加载」'); return; }
-        if (!res.ok) {
-          showResult('no', '✗ 失败（' + (res.status || 0) + '）' + (res.error ? '\n' + res.error : '') +
-                          '\n' + res.url + '\n耗时 ' + res.ms + 'ms');
-          return;
+
+        // Token 结果（单行）
+        if (!res.tokenOk) {
+          showResult('no', '✗ 失败（' + (res.tokenStatus || 0) + '）');
+        } else {
+          var tk = String(res.token || '');
+          showResult('ok', tk.length > 40 ? tk.slice(0, 40) + '…' : (tk || '✓ 成功'));
         }
-        var body = String(res.text || '');
-        showResult('ok', '✓ 成功 HTTP ' + res.status + '（' + res.ms + 'ms）\n' +
-                        '返回内容：' + (body.length > 300 ? body.slice(0, 300) + '…' : body));
+
+        // 版本号结果（单行）
+        if (versionInfo) {
+          if (!res.versionOk) {
+            versionInfo.className = 'v no';
+            versionInfo.textContent = '✗ 失败（' + (res.versionStatus || 0) + '）';
+          } else if (res.version) {
+            versionInfo.className = 'v ok';
+            versionInfo.textContent = res.version;
+          } else {
+            versionInfo.className = 'v';
+            versionInfo.textContent = '✓ 空';
+          }
+        }
       });
     });
   }
@@ -111,15 +157,12 @@ document.addEventListener('DOMContentLoaded', function () {
   if (tokenBtn) {
     tokenBtn.addEventListener('click', function () {
       var url = tokenUrl.value.trim();
-      if (url) {
-        chrome.storage.local.set({
-          depTokenUrl: url, depTokenReferer: tokenReferer.value.trim()
-        }, function () {
-          chrome.runtime.sendMessage({ type: 'fetchMapToken' }, showInject);
-        });
-      } else {
-        chrome.runtime.sendMessage({ type: 'fetchMapToken' }, showInject);
-      }
+      var referer = tokenReferer.value.trim();
+      chrome.storage.local.set({
+        depTokenUrl: url, depTokenReferer: referer
+      }, function () {
+        chrome.runtime.sendMessage({ type: 'fetchMapToken', url: url, referer: referer }, showInject);
+      });
     });
   }
 
@@ -128,20 +171,16 @@ document.addEventListener('DOMContentLoaded', function () {
       showResult('no', '✗ 失败：' + ((res && res.error) || '扩展无响应'));
       return;
     }
-    var t = String(res.token || '');
-    showResult('ok', '✓ 已保存到本地：' + (t.length > 40 ? t.slice(0, 40) + '…' : t) +
-                    '\n获取时间：' + new Date().toLocaleString('zh-CN') +
-                    '\n（地图打开/刷新后自动生效）');
+    showResult('ok', '✓ 已保存到本地');
   }
 
-  // 打开面板时显示已保存的 token 状态
+  // 打开面板时显示已保存的 token 状态（单行）
   chrome.storage.local.get(['authorization', 'authorizationTs'], function (r) {
     if (r && r.authorization) {
-      var t = String(r.authorization);
-      showResult('ok', '已保存 token：' + (t.length > 40 ? t.slice(0, 40) + '…' : t) +
-                       '\n获取时间：' + new Date(r.authorizationTs || Date.now()).toLocaleString('zh-CN'));
+      var st = String(r.authorization);
+      showResult('ok', st.length > 40 ? st.slice(0, 40) + '…' : st);
     } else {
-      showResult('', '尚未获取 token，点「刷新 Token」');
+      showResult('', '尚未获取 token');
     }
   });
 

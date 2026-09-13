@@ -44,7 +44,7 @@ function firePendingMapLoad()
     {
         var fn = window.__pendingMapLoad;
         window.__pendingMapLoad = null;
-        fn();
+        if (typeof fn === 'function') fn();   //尚未挂起（loadMapData 未先注册）时安全空转
     }
 }
 

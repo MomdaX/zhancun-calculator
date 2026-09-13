@@ -85,6 +85,19 @@
     if (global.Store) global.Store.set('cfgDzChecked', checked);
   }
 
+  /** 默认待装「用户自定义集合」：设置模式下勾选即覆盖保存，点「默认待装」时应用 */
+  function saveDzDefault() {
+    var ids = [];
+    document.querySelectorAll('#cfgTracks input:checked').forEach(function (cb) {
+      if (cb && cb.dataset && cb.dataset.track) ids.push(cb.dataset.track);
+    });
+    if (global.Store) global.Store.set('cfgDzDefault', ids);
+  }
+  function loadDzDefault() {
+    var v = (global.Store && global.Store.get) ? global.Store.get('cfgDzDefault', []) : [];
+    return (v && Array.isArray(v)) ? v : [];
+  }
+
   /** 依据实际勾选同步「全选」「默认待装」按钮态（恢复勾选后调用，避免指示与实际不符） */
   function syncDzToggleButtons() {
     var cbs = document.querySelectorAll('#cfgTracks input');
@@ -94,14 +107,13 @@
     if (allBox) allBox.checked = cbs.length > 0 && n === cbs.length;
     var dzBtn = Utils.$('cfgDefaultDz');
     if (!dzBtn) return;
-    // 「默认待装」亮起 ⇔ 勾选集恰好等于 DEFAULT_AREAS 中存在于 DOM 的股道
+    // 「默认待装」亮起 ⇔ 勾选集恰好等于已保存的默认待装集合
     var defaultIds = {};
-    Object.keys(DEFAULT_AREAS).forEach(function (name) {
-      DEFAULT_AREAS[name].forEach(function (id) {
-        if (Utils.$('cfgTrack_' + id)) defaultIds[id] = true;
-      });
+    loadDzDefault().forEach(function (id) {
+      if (Utils.$('cfgTrack_' + id)) defaultIds[id] = true;
     });
-    var on = true;
+    var defKeys = Object.keys(defaultIds);
+    var on = defKeys.length > 0;
     cbs.forEach(function (cb) {
       if (cb.checked !== !!defaultIds[cb.dataset.track]) on = false;
     });
@@ -676,25 +688,17 @@
     });
   }
 
-  /* ========================== 结果区打印 ==========================
-   * 与「截图」同一个区域：就是 #rptBody 里的那张 table
-   * （对应 DOM 路径 body/div[4]/div/div[2]/div[1]/table）。
-   * 做法：克隆表格 → 复用 inlineStyles 把计算样式内联 → 写进临时新窗口 → print()。
-   * 不直接对主窗口 window.print()：此时页面是浮窗状态，直接打会把遮罩、
-   * 右侧条件面板、工具栏一起带上，而这里要的只是这张表。
+  /* ========================== 结果区打印（隐藏 iframe，用户无感知） ==========================
+   * 与「截图」同一个区域：#rptBody 里的 table。
+   * 用隐藏的 iframe 代替弹窗：只弹出打印对话框，不会出现新窗口标签页。
    * ============================================================== */
   function printResultTable() {
     var body = Utils.$('rptBody');
-    var target = (body && body.querySelector('table')) || body;   // 与截图取的是同一个节点
+    var target = (body && body.querySelector('table')) || body;
     if (!target) { Utils.toast('没有可打印的内容', 'error'); return; }
 
-    // 克隆 + 内联计算样式：屏幕上多大字、什么边框、列宽多少，打印出来就原样保留
     var clone = target.cloneNode(true);
     inlineStyles(target, clone);
-
-    // 必须在点击的同步调用里开窗口，否则会被浏览器当成弹窗拦截
-    var w = window.open('', '_blank', 'width=900,height=720');
-    if (!w) { Utils.toast('打印窗口被浏览器拦截，请允许本站弹出窗口后重试', 'error'); return; }
 
     var fs = '15px';
     try {
@@ -702,25 +706,32 @@
       if (v && v.trim()) fs = v.trim();
     } catch (e) {}
 
-    var doc = w.document;
+    var iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;right:100%;bottom:100%;width:0;height:0;border:0;visibility:hidden;';
+    document.body.appendChild(iframe);
+
+    var doc = iframe.contentWindow.document;
     doc.open();
-    doc.write('<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">');
-    doc.write('<title>站存计算</title><style>');
-    doc.write('html,body{margin:0;padding:0;background:#fff;color:#000}');
-    doc.write('body{font-size:' + fs + ';zoom:1.4}');   // 整体放大 140%，列宽保持原样
-    doc.write('table{border-collapse:collapse;-webkit-print-color-adjust:exact;print-color-adjust:exact}');
-    // 保留底色（沙口蓝 / 南口橙这类行底色别被浏览器省掉）
-    doc.write('*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}');
-    doc.write('</style></head><body>' + clone.outerHTML + '</body></html>');
     doc.close();
+    doc.documentElement.setAttribute('lang', 'zh-CN');
+    doc.head.innerHTML = '<meta charset="utf-8"><title>站存计算</title>' +
+      '<style>' +
+      'html,body{margin:0;padding:0;background:#fff;color:#000}' +
+      'body{font-size:' + fs + ';zoom:1.3}' +   // 整体放大 130%，列宽保持原样
+      'table{border-collapse:collapse;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+      '*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+      '</style>';
+    doc.body.innerHTML = clone.outerHTML;
 
-    // 打印对话框关闭（确定或取消）后自动收掉这个临时窗口
-    w.onafterprint = function () { try { w.close(); } catch (e) {} };
-
-    // 等新文档完成一次布局再唤起打印，避免打出空白
     setTimeout(function () {
-      try { w.focus(); w.print(); }
-      catch (e) { Utils.toast('调用打印失败：' + (e && e.message ? e.message : e), 'error'); }
+      try {
+        iframe.contentWindow.onafterprint = function () { document.body.removeChild(iframe); };
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+      } catch (e) {
+        Utils.toast('调用打印失败：' + (e && e.message ? e.message : e), 'error');
+        document.body.removeChild(iframe);
+      }
     }, 300);
   }
 
@@ -752,6 +763,11 @@
     html += '<span class="cfg-title-text">待装股道</span>';
     html += '<span class="cfg-toggle-row">';
     html += '<button class="btn" id="cfgDefaultDz">默认待装</button>';
+    html += '<button class="btn icon-btn" id="cfgDefaultDzGear" type="button" title="设置默认待装：进入设置模式后勾选要保留为默认值的股道">' +
+      '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">' +
+      '<path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.38h-3.84c-.24 0-.43.17-.47.41L9.25 8.38c-.59.24-1.13.56-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.82c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.39.31.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.34.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.21.09.47 0 .59-.22l1.92-3.32a.48.48 0 0 0-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>' +
+      '</svg>' +
+      '</button>';
     html += '<button class="btn" id="cfgResetDz" title="取消全部待装勾选">重置</button>';
     html += '<label class="cfg-all"><input type="checkbox" id="cfgAllDz"> 全选</label>';
     html += '</span>';
@@ -1017,18 +1033,39 @@
       runCalculation();
     });
 
-    // 默认待装
+    // 默认待装「设置模式」开关：进入后勾选待装股道即存为默认集合
+    var dzSettingMode = false;
+    var gearBtn = Utils.$('cfgDefaultDzGear');
+    if (gearBtn) gearBtn.addEventListener('click', function () {
+      dzSettingMode = !dzSettingMode;
+      this.classList.toggle('active', dzSettingMode);
+      var panel = Utils.$('cfgPanel');
+      if (panel) panel.classList.toggle('setting-dz', dzSettingMode);
+      Utils.toast(dzSettingMode ? '设置模式：勾选要作为默认待装的股道' : '已退出设置模式', dzSettingMode ? 'info' : 'ok');
+    });
+
+    // 默认待装：应用已保存的自定义默认集合（而非全选）
     Utils.$('cfgDefaultDz').addEventListener('click', function () {
       var on = !this.classList.contains('active');
       this.classList.toggle('active', on);
       document.querySelectorAll('#cfgTracks input').forEach(function (cb) { cb.checked = false; });
       if (on) {
-        Object.keys(DEFAULT_AREAS).forEach(function (name) {
-          DEFAULT_AREAS[name].forEach(function (tr) {
-            var cb = Utils.$('cfgTrack_' + tr);
+        var def = loadDzDefault();
+        if (def && def.length) {
+          def.forEach(function (id) {
+            var cb = Utils.$('cfgTrack_' + id);
             if (cb) cb.checked = true;
           });
-        });
+        } else {
+          // 尚未设置默认：回退全选可装线，并提示用户用齿轮设置
+          Object.keys(DEFAULT_AREAS).forEach(function (name) {
+            DEFAULT_AREAS[name].forEach(function (tr) {
+              var cb = Utils.$('cfgTrack_' + tr);
+              if (cb) cb.checked = true;
+            });
+          });
+          Utils.toast('尚未设置默认待装，已按全部可装线选中；点 ⚙ 可设置', 'info');
+        }
       }
       syncGroupState();
       saveDzChecked();          // 默认待装切换后持久记忆
@@ -1041,6 +1078,7 @@
       if (!e.target || e.target.type !== 'checkbox') return;
       syncGroupState();
       saveDzChecked();          // 单个勾选变化即持久记忆
+      if (dzSettingMode) { saveDzDefault(); Utils.toast('已保存默认待装（' + loadDzDefault().length + ' 条）', 'ok'); }
       syncDzToggleButtons();
       runCalculation();
     });
@@ -1049,6 +1087,7 @@
       if (!btn) return;
       toggleGroup(btn.dataset.group);
       saveDzChecked();          // 整组切换后持久记忆
+      if (dzSettingMode) { saveDzDefault(); Utils.toast('已保存默认待装（' + loadDzDefault().length + ' 条）', 'ok'); }
       syncDzToggleButtons();
       runCalculation();   // 整组选择变化即重算
     });

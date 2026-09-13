@@ -2301,3 +2301,19 @@ table.grid td[data-col="effLen"][data-len]:hover::after {
 .dep-status.warn  { color: #721c24; background: #f8d7da; border-color: #f5c6cb; }
 .dep-status.info  { color: #1e3f7c; background: #d6e6ff; border-color: #b5d3f0; }
 
+/* 默认待装「设置模式」齿轮 */
+#cfgDefaultDzGear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 7px;
+}
+#cfgDefaultDzGear.active { background: var(--accent); color: #fff; border-color: var(--accent-dark); }
+#cfgDefaultDzGear svg { display: block; }
+.rpt-right.setting-dz .cfg-tracks-zone {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+}
+.rpt-right.setting-dz .cfg-tracks-zone > .cfg-section-title { color: var(--accent); font-weight: 700; }
+.rpt-right.setting-dz .cfg-tracks { background: #eef4fb; }
+

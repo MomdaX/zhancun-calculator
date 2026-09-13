@@ -60,9 +60,9 @@
                 display: flex; align-items: center; gap: 4px; }
   .card-title::before { content: ""; display: inline-block; width: 3px; height: 14px;
                         background: var(--title-bar); border-radius: 2px; flex: none; }
-  .row { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
-  .k { flex: none; width: 56px; color: var(--text-sub); font-size: 11px; }
-  .v { flex: 1; word-break: break-all; font-size: 11px; }
+  .row { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; }
+  .k { flex: none; width: auto; padding-right: 4px; color: var(--text-sub); font-size: 11px; }
+  .v { flex: 1; min-width: 0; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ok { color: var(--ok); font-weight: 700; }
   .no { color: var(--no); font-weight: 700; }
   input[type="text"],
@@ -79,7 +79,7 @@
   .btn-primary { background: var(--btn-primary); }
   .btn-test { background: var(--btn-test); }
   .btn-refresh { background: var(--btn-refresh); }
-  #parse, #tokenInfo { font-size: 11px; color: var(--text-sub); min-height: 16px; margin-top: 2px; word-break: break-all; }
+  #parse, #tokenInfo, #versionInfo { font-size: 11px; color: var(--text-sub); min-height: 16px; margin-top: 2px; word-break: break-all; }
   .retry-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding-top: 6px;
                border-top: 1px dashed var(--dashed); }
   .toggle-switch { position: relative; display: inline-block; width: 34px; height: 18px; flex: none; }
@@ -96,58 +96,80 @@
     border: 0; background: none; cursor: pointer; font-size: 15px; line-height: 24px;
     color: var(--theme-btn); padding: 0; border-radius: 50%; transition: color .2s; }
   .theme-toggle:hover { opacity: .7; }
-  body { position: relative; }
+  /* 浏览器标签式导航 */
+  .tabs { display: flex; border-bottom: 1px solid var(--dashed); margin-bottom: 8px; padding-right: 28px; }
+  .tab { flex: 1; padding: 7px 0 6px; text-align: center;
+         font: 12px/1.4 "Microsoft YaHei", system-ui, sans-serif;
+         color: var(--text-sub); background: transparent; border: 0; cursor: pointer;
+         border-radius: 6px 6px 0 0; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--title); font-weight: 700; border-bottom: 2px solid var(--title); }
 </style>
 </head>
 <body>
   <button class="theme-toggle" id="themeToggle" title="切换暗色/亮色主题">☀</button>
 
-  <!-- 卡片1：站存-发车流程填表桥 -->
-  <div class="card">
-    <div class="card-title">站存-发车流程填表桥</div>
-    <div class="row"><span class="k">状态</span><span class="v" id="st">读取中…</span></div>
-    <div class="row"><span class="k">报表标签页</span><span class="v" id="tabs">-</span></div>
-    <div class="lbl">报表地址</div>
-    <input type="text" id="urlInput" placeholder="粘贴报表页完整地址…">
-    <div id="parse"></div>
-    <div class="btn-row"><button class="btn-primary" id="saveBtn">保存</button></div>
-    <div class="sub">保存后自动解析 host 特征，用于识别报表标签页</div>
-    <div class="retry-row">
-      <label class="toggle-switch" title="开启：地址没配对时广播给所有标签页，由页面自己判断是否含 contentPane。
+  <!-- 标签栏 -->
+  <div class="tabs">
+    <button class="tab active" type="button" data-tab="fill">发车流程</button>
+    <button class="tab" type="button" data-tab="token">地图管理</button>
+  </div>
+
+  <!-- 面板1：站存-发车流程填表桥 -->
+  <div class="tab-panel" id="panel-fill">
+    <div class="card">
+      <div class="row"><span class="k">状态</span><span class="v" id="st">读取中…</span></div>
+      <div class="row"><span class="k">报表标签页</span><span class="v" id="tabs">-</span></div>
+      <div class="lbl">报表地址</div>
+      <input type="text" id="urlInput" placeholder="粘贴报表页完整地址…">
+      <div id="parse"></div>
+      <div class="btn-row"><button class="btn-primary" id="saveBtn">保存</button></div>
+      <div class="sub">保存后自动解析 host 特征，用于识别报表标签页</div>
+      <div class="retry-row">
+        <label class="toggle-switch" title="开启：地址没配对时广播给所有标签页，由页面自己判断是否含 contentPane。
 关闭：只发给「精确匹配」的报表页，用来验证上面的地址是否配对">
-        <input type="checkbox" id="broadcastToggle">
-        <span class="toggle-slider"></span>
-      </label>
-      <span style="font-size:11px;color:var(--text);">广播兜底</span>
-      <span style="flex:1;"></span>
-      <span class="sub" style="margin:0;" id="broadcastHint">关掉可验证地址是否配对</span>
+          <input type="checkbox" id="broadcastToggle">
+          <span class="toggle-slider"></span>
+        </label>
+        <span style="font-size:11px;color:var(--text);">广播兜底</span>
+        <span style="flex:1;"></span>
+        <span class="sub" style="margin:0;" id="broadcastHint">关掉可验证地址是否配对</span>
+      </div>
     </div>
   </div>
 
-  <!-- 卡片2：地图Token管理 -->
-  <div class="card">
-    <div class="card-title">地图 Token 管理</div>
-    <div class="lbl" style="display:flex;align-items:center;justify-content:space-between;">
-      <span>Token 地址</span>
-      <button type="button" id="defaultTokenBtn" style="padding:2px 8px;font-size:11px;background:#a0aab5;color:#fff;border:0;border-radius:4px;cursor:pointer;">默认</button>
-    </div>
-    <input type="text" id="tokenUrl" placeholder="http://10.208.2.72:8080/getToken?ip=10.208.2.72">
-    <div class="lbl">Referer</div>
-    <input type="text" id="tokenReferer" placeholder="http://10.208.2.72:8080/cljl">
-    <div class="btn-row">
-      <button class="btn-test" id="testBtn">测试请求</button>
-      <button class="btn-refresh" id="tokenBtn">刷新 Token</button>
-    </div>
-    <div id="tokenInfo"></div>
-    <div class="retry-row">
-      <label class="toggle-switch" title="开启后 Token 请求遇到 401 自动重试">
-        <input type="checkbox" id="retryToggle">
-        <span class="toggle-slider"></span>
-      </label>
-      <span style="font-size:11px;color:var(--text);">401 自动重试</span>
-      <span style="flex:1;"></span>
-      <label for="retryCount" style="font-size:11px;color:var(--text-sub);">次数</label>
-      <input type="number" id="retryCount" value="2" min="0" max="10" title="0 表示不重试，最大 10 次">
+  <!-- 面板2：地图 Token 管理 -->
+  <div class="tab-panel" id="panel-token" style="display:none;">
+    <div class="card">
+      <div class="lbl" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>Token 地址</span>
+        <span style="display:flex;gap:4px;">
+          <button type="button" id="defaultTokenBtn" style="padding:2px 8px;font-size:11px;background:#a0aab5;color:#fff;border:0;border-radius:4px;cursor:pointer;">默认</button>
+          <button type="button" id="testTokenBtn" style="padding:2px 8px;font-size:11px;background:#5b6abf;color:#fff;border:0;border-radius:4px;cursor:pointer;">测试</button>
+        </span>
+      </div>
+      <input type="text" id="tokenUrl" placeholder="http://10.208.2.72:8080/getToken?ip=10.208.2.72">
+      <div class="lbl" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>Referer</span>
+        <button type="button" id="defaultRefererBtn" style="padding:2px 8px;font-size:11px;background:#a0aab5;color:#fff;border:0;border-radius:4px;cursor:pointer;">默认</button>
+      </div>
+      <input type="text" id="tokenReferer" placeholder="http://10.208.2.72:8080/cljl">
+      <div class="btn-row">
+        <button class="btn-test" id="testBtn">测试请求</button>
+        <button class="btn-refresh" id="tokenBtn">保存Token</button>
+      </div>
+      <div class="row"><span class="k">Token：</span><span class="v" id="tokenInfo">—</span></div>
+      <div class="row"><span class="k">版本号：</span><span class="v" id="versionInfo">—</span></div>
+      <div class="retry-row">
+        <label class="toggle-switch" title="开启后 Token 请求遇到 401 自动重试">
+          <input type="checkbox" id="retryToggle">
+          <span class="toggle-slider"></span>
+        </label>
+        <span style="font-size:11px;color:var(--text);">401 自动重试</span>
+        <span style="flex:1;"></span>
+        <label for="retryCount" style="font-size:11px;color:var(--text-sub);">次数</label>
+        <input type="number" id="retryCount" value="2" min="0" max="10" title="0 表示不重试，最大 10 次">
+      </div>
     </div>
   </div>
   <script src="popup.js"></script>

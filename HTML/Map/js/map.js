@@ -71,7 +71,10 @@ function Map(height, width)
         loadMapData();
     }
 
-    //根据 apiAvailable 决定地图数据来源：undefined→挂起等 Token 判定；true→API；false→本地
+    //根据 apiAvailable 与 map_version 决定地图数据来源；二者都未就绪时挂起，
+    //待 getToken / getVersion 回调触发。关键：必须等 map_version 真正拿到
+    //（来自 getReleaseVersionData 的成功返回，或 error 兜底）后，再发数据请求，
+    //否则 getMapFontPoint 等会带着 null 版本号发请求，后端退回默认旧版本（C260702）。
     function loadMapData()
     {
         if (apiAvailable === undefined)
@@ -79,12 +82,19 @@ function Map(height, width)
             window.__pendingMapLoad = loadMapData;   //Token 尚未判定，挂起，待 getToken 回调触发
             return;
         }
+        if (map_version == null)
+        {
+            window.__pendingMapLoad = loadMapData;   //版本号未就绪，挂起，待 getVersion 回调触发
+            return;
+        }
+        if (window.__mapDataLoaded) return;          //避免重复加载（firePendingMapLoad 与 initMap 可能各触发一次）
+        window.__mapDataLoaded = true;
         if (!apiAvailable)
         {
             loadMapLocal();                          //后端不可达：直接用本地兜底数据，不发 API
             return;
         }
-        //后端正常：走 API 请求
+        //后端正常：走 API 请求（此时 map_version 已为 getReleaseVersionData 返回的真实版本号）
         getMapFontPoint();
         getMapLinePoint();
         getMapNodePoint();
