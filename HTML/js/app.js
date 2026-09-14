@@ -505,63 +505,19 @@
   // 明细「计重」编辑模式：临时删除某行的推算载重（仅影响计重统计，关闭后复原）
   var detailEditMode = false;
   var detailEditExcluded = new Set();
-  /* 计重编辑下的「按住拖动批量删除推算载重」：与拖选行（dragSel）同一套交互范式——
-   * 在推算载重格上按下记锚点与快照，mode 由起点格状态决定（未删→批量删 / 已删→批量恢复）；
-   * 拖动经过的行按 mode 实时应用，回滑超出范围按快照复原（未松手回滑数值即恢复）。
-   * 状态放顶层：bindDetailEditEvents（document 委托）与 bind()（detailBody 监听）都要访问。 */
-  var dragExc = { active: false, moved: false, anchor: -1, last: -1, snap: null, mode: 'exclude' };
-
-  /** 把一行的推算载重格设为 删除(excluded) / 恢复(derived)，同步该格 DOM；该行无可编辑
-   *  推算格（实载行等）返回 false 跳过。返回是否发生变更。 */
-  function setExcRow(tr, row, exc) {
-    var td = tr.querySelector('td.derived-est, td.excluded-cell');
-    if (!td) return false;
-    var isExc = detailEditExcluded.has(row);
-    if (exc === isExc) return false;                // 已是目标态
-    if (exc) {
-      detailEditExcluded.add(row);
-      td.textContent = '';
-      td.classList.remove('derived-est');
-      td.classList.add('excluded-cell');
-    } else {
-      detailEditExcluded.delete(row);
-      td.textContent = String(Math.round(estLoadOf(row)));   // 恢复显示推算值（与渲染口径一致）
-      td.classList.remove('excluded-cell');
-      td.classList.add('derived-est');
-    }
-    return true;
-  }
-  /** 拖动应用：**双侧范围**——锚点固定在按下行，范围 = 锚点到当前指针（cur 在锚点
-   *  上/下方都有效），范围内按 mode 统一应用，范围外按快照复原。与拖选行 renderDrag
-   *  同一结构：先全表对齐快照，再叠加当前范围。
-   *  计重特有：指针回到起拖格 → 锚点..上次指针行 整段恢复快照（删除是破坏性操作，
-   *  回到起点即撤销；快速滑动跳行时跳过的中间行一并覆盖）。选行无此分支（保持选中）。 */
-  function applyExcRange(cur) {
-    var r = state.rows[state.detailIdx];
-    if (!r || !r.raw) return;
-    var snap = dragExc.snap;
-    if (cur === dragExc.anchor) {
-      var loA = Math.min(dragExc.anchor, dragExc.last), hiA = Math.max(dragExc.anchor, dragExc.last);
-      for (var iA = loA; iA <= hiA; iA++) {
-        var rowA = r.raw[iA];
-        var trA = $('detailBody').querySelector('tr[data-i="' + iA + '"]');
-        if (rowA && trA) setExcRow(trA, rowA, snap.has(rowA));
-      }
-      updateDetailTitle();
-      return;
-    }
-    var lo = Math.min(dragExc.anchor, cur), hi = Math.max(dragExc.anchor, cur);
-    var trs = $('detailBody').querySelectorAll('tr');
-    var changed = false;
-    for (var i = 0; i < trs.length; i++) {
-      var idx = +trs[i].getAttribute('data-i');
-      var row = r.raw[idx];
-      if (!row) continue;
-      var exc = (idx >= lo && idx <= hi) ? (dragExc.mode === 'exclude') : snap.has(row);
-      if (setExcRow(trs[i], row, exc)) changed = true;
-    }
-    if (changed) updateDetailTitle();               // 计重合计实时重算
-  }
+  /* 计重编辑「按住拖动批量删除推算载重」：与推演面板共用 EstDrag 工厂（js/est-drag.js）。
+   * 交互状态与 DOM 更新由工厂自持，这里只提供取数与回调（双侧范围 / 回锚点恢复语义见该文件）。 */
+  var estDrag = EstDrag.create({
+    body: function () { return $('detailBody'); },
+    getRow: function (i) {
+      var r = state.rows[state.detailIdx];
+      return (r && r.raw) ? r.raw[i] : null;
+    },
+    excluded: detailEditExcluded,
+    estLoadOf: estLoadOf,
+    isEditing: function () { return detailEditMode; },
+    onChanged: updateDetailTitle
+  });
   var detailEvtBound = false;
   /**
    * 单行推算载重：载重有值→原值；为空→记事命中货物名称用预设重量，否则车种含70取70、其余61。
@@ -718,7 +674,7 @@
       if (!detailEditMode) return;
       if (!td.closest('#detailTable')) return;
       // 按住拖动批量删除已在 mouseover 中按范围应用，松手后的 click 不再切换单格
-      if (dragExc.moved) { dragExc.moved = false; return; }
+      if (estDrag.moved()) return;
       var tr = td.closest('tr'); if (!tr) return;
       var idx = tr.getAttribute('data-i');
       var r = state.rows[state.detailIdx];
@@ -1166,29 +1122,10 @@
       }
       updateDetailTitle();
     }
+    estDrag.bind();   // 计重编辑：推算格上的拖动批量删除（明细表侧，与推演面板共用工厂）
     on('detailBody', 'mousedown', function (e) {
-      // 计重编辑模式：在推算载重格上左键按下 → 启动「拖动批量删除」（锚点 + 快照 + 模式）。
-      // 应用发生在 mouseover（拖动）与 click（单击，走原切换逻辑），这里只记录。
-      if (detailEditMode) {
-        var det = e.target.closest && e.target.closest('td.derived-est, td.excluded-cell');
-        if (det && e.button === 0) {
-          e.preventDefault();                    // 防止拖动选中单元格文字
-          var trE = det.closest('tr');
-          var idxE = trE ? +trE.getAttribute('data-i') : -1;
-          var rE = state.rows[state.detailIdx];
-          var rowE = (rE && rE.raw) ? rE.raw[idxE] : null;
-          if (rowE) {
-            dragExc.active = true;
-            dragExc.moved = false;
-            dragExc.anchor = idxE;
-            dragExc.last = idxE;
-            dragExc.snap = new Set(detailEditExcluded);          // 快照：范围外按快照复原
-            dragExc.mode = detailEditExcluded.has(rowE) ? 'restore' : 'exclude';  // 起点状态定模式
-          }
-          return;
-        }
-        return;                                // 编辑模式下其他区域不启动拖选行
-      }
+      // 计重编辑模式下不启动拖选行（推算格上的拖动批量删除由 EstDrag 处理）
+      if (detailEditMode) return;
       var tr = e.target.closest('tr');
       if (!tr || tr.querySelector('td.stay') === e.target) return;
       e.preventDefault();
@@ -1201,17 +1138,6 @@
       dragSel.mode = state.detailSel.has(dragSel.anchor) ? 'del' : 'add';
     });
     on('detailBody', 'mouseover', function (e) {
-      // 拖动批量删除：经过的行按 mode 实时应用，回滑超出范围按快照复原
-      if (dragExc.active) {
-        var trX = e.target.closest('tr');
-        if (!trX) return;
-        var iX = +trX.getAttribute('data-i');
-        if (isNaN(iX) || iX === dragExc.last) return;
-        dragExc.moved = true;
-        applyExcRange(iX);
-        dragExc.last = iX;
-        return;
-      }
       if (!dragSel.active) return;
       var tr = e.target.closest('tr');
       if (!tr) return;
@@ -1225,11 +1151,6 @@
         dragSel.anchor = -1;
         dragSel.snap = null;
       }
-      // 拖动批量删除结束；moved 保留给随后的 click 压制（click 里清）
-      dragExc.active = false;
-      dragExc.anchor = -1;
-      dragExc.last = -1;
-      dragExc.snap = null;
     }
     document.addEventListener('mouseup', endDrag);
     // 单击（未发生拖动）时切换该行选中状态；拖动已在 mouseover 中实时应用
@@ -1283,7 +1204,8 @@
       renderDetailRows: renderDetailRows,
       computeTotals: computeTotals,
       totalsSpansHtml: totalsSpansHtml,
-      closeDetail: closeDetail
+      closeDetail: closeDetail,
+      estLoadOf: estLoadOf
     });
 
     /* ---- 浮窗 / 抽屉 / 下拉菜单 -----

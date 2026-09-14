@@ -42,7 +42,7 @@
   var COL = global.Aggregate ? global.Aggregate.COL : null;
 
   /* app.js 注入的能力，见 init(deps) 的说明 */
-  var state, renderDetailRows, computeTotals, totalsSpansHtml, closeDetail;
+  var state, renderDetailRows, computeTotals, totalsSpansHtml, closeDetail, estLoadOf;
   var inited = false;
 
   /* ==================== 状态 ==================== */
@@ -56,6 +56,16 @@
   var editMode = false;          // 「计重」编辑态（与明细同一套交互）
   var editExcluded = new Set();  // 编辑态中被删除推算载重的行
   var drag = { active: false, moved: false, anchor: -1, snap: null, mode: 'add' };
+  /* 计重编辑「按住拖动批量删除推算载重」：与明细表共用 EstDrag 工厂（js/est-drag.js）。
+   * cfg 引用本模块私有的 rows / editExcluded / editMode，交互行为与明细表完全一致。 */
+  var estDrag = EstDrag.create({
+    body: function () { return $('simBody'); },
+    getRow: function (i) { return rows[i] || null; },
+    excluded: editExcluded,
+    estLoadOf: function (row) { return estLoadOf(row); },   // 经 deps 注入，包装保证时序
+    isEditing: function () { return editMode; },
+    onChanged: updateTitle
+  });
   var flashTimer = null;         // 重复车辆闪烁的收尾计时器（保证连点也能重新闪）
   var FLASH_CLASS = 'sim-dup-flash';
   var FLASH_MS = 1200;           // 0.4s × 3 次，与 CSS 动画保持一致
@@ -116,6 +126,9 @@
     if (tbl) tbl.classList.toggle('detail-edit', enable);
     var span = $('simTitle') && $('simTitle').querySelector('.dt-weight-edit');
     if (span) span.classList.toggle('editing', enable);
+    // 计重编辑与「行选中」互斥：进入编辑先清空面板选中，否则 updateTitle 会按
+    // 「选中合计」口径只算选中的几行——删推算载重后标题载重会错成 0
+    if (enable) clearSel();
     if (!enable) editExcluded.clear();
     // 进入 / 退出都要重渲：进入才显示载重列推算值，退出则复原为空
     render();
@@ -128,6 +141,8 @@
    *  （明细 / 搜索表内的同款逻辑在 app.js，两处按 td.closest 各自分流，互不串扰） */
   function excludeDerivedEst(td) {
     if (!editMode) return;
+    // 拖动批量删除已实时应用，松手后的 click 不再切换单格（否则恢复模式会被抵消）
+    if (estDrag.moved()) return;
     var tr = td.closest('tr');
     if (!tr) return;
     var row = rows[+tr.getAttribute('data-i')];
@@ -334,6 +349,8 @@
   function bindTableSelection() {
     on('simBody', 'mousedown', function (e) {
       if (!isOpen) return;
+      // 计重编辑模式下不启动行选拖动（推算格上的拖动批量删除由 EstDrag 处理）
+      if (editMode) return;
       var tr = e.target.closest('tr');
       if (!tr || tr.querySelector('td.stay') === e.target) return;
       e.preventDefault();
@@ -358,6 +375,7 @@
     });
     on('simBody', 'click', function (e) {
       if (!isOpen) return;
+      if (editMode) return;                             // 计重编辑下不选行（删除走单击推算格/拖动）
       if (drag.moved) { drag.moved = false; return; }   // 拖动已实时应用，click 不重复处理
       var tr = e.target.closest('tr');
       if (!tr || tr.querySelector('td.stay') === e.target) return;
@@ -420,6 +438,7 @@
    * @param {Function} deps.computeTotals      辆数/换长/自重/载重/总重/计重
    * @param {Function} deps.totalsSpansHtml    标题统计 span 拼装
    * @param {Function} deps.closeDetail        关闭明细抽屉（「主页」用）
+   * @param {Function} deps.estLoadOf          单行推算载重（拖动批量删除的恢复显示用）
    */
   function init(deps) {
     if (inited) return;
@@ -429,6 +448,7 @@
     computeTotals = deps.computeTotals;
     totalsSpansHtml = deps.totalsSpansHtml;
     closeDetail = deps.closeDetail;
+    estLoadOf = deps.estLoadOf;
 
     // 抽屉注册：不配遮罩——它与明细拼起来铺满视口，点哪一侧都是有效区域。
     // onClose 统一做状态复位，保证 X 按钮 / ESC / 关闭明细 三条路径行为一致。
@@ -462,6 +482,7 @@
     on('btnSimReset', 'click', reset);
     on('btnSimClose', 'click', close);
 
+    estDrag.bind();        // 计重编辑：推算格上的拖动批量删除（推演面板侧，与明细共用工厂）
     bindTableSelection();
     bindClearSelection();
     bindSplitter();
