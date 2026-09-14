@@ -838,6 +838,14 @@ table.grid tbody tr:nth-child(even) td.col-a,
 table.grid tbody tr:nth-child(even) td.col-b-group,
 table.grid tbody tr:nth-child(even) td.col-b { background: var(--row-alt); }
 table.grid tbody tr:hover td { background: var(--row-hover); }
+/* 选中行所属分组：给该组的合并单元格（分组列，rowspan 整组）加底 + 加粗，
+   一眼看出"当前选中的股道属于哪一组"。
+   淡蓝 #c7e3ff 比选中行的 #d6ecff 略深一档，同色系但能分开"这行选中了"与"这行属于这组"。
+   选择器带 tr 是为了压过上面的 nth-child(even) 隔行底色。 */
+table.grid tbody tr td.col-b-group.grp-on {
+  background: #c7e3ff;
+  font-weight: 700;
+}
 table.grid tbody tr.selected td {
   background: #d6ecff !important;
 }

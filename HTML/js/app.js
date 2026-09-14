@@ -494,7 +494,7 @@
           if (sp.start) {
             // 用分组自带的 color 做左侧色条 + 文字着色，醒目区分到发线/调车线/虚拟场等
             var gc = cfg ? cfg.groupColor : '#888';
-            cells.push('<td class="col-b-group grp" data-col="group" rowspan="' + sp.span + '" ' +
+            cells.push('<td class="col-b-group grp" data-col="group" data-group="' + escapeHtml(sp.group) + '" rowspan="' + sp.span + '" ' +
                        'style="border-left:3px solid ' + gc + ';color:' + gc + '">' +
                        escapeHtml(sp.group) + '</td>');
           }
@@ -507,7 +507,10 @@
         cells.push('<td class="' + cls + '" data-col="' + c.key + '"' + style + attrs + '>' + inner + '</td>');
       });
 
+      // data-group：每行都记上所属分组名——分组列用 rowspan 合并（组内只有首行有该单元格），
+      // 选中某行时要按它反查"这一行属于哪个分组格"，给该格加底色（syncGroupHighlight）
       html.push('<tr data-idx="' + idx + '" data-track="' + escapeHtml(track) + '"' +
+                ' data-group="' + escapeHtml(spans[n] ? spans[n].group : '') + '"' +
                 (isBlank ? ' class="blank"' : '') + '>' + cells.join('') + '</tr>');
     });
 
@@ -1423,6 +1426,23 @@
       if (td) td.classList.add('bianhao-on');
     }
 
+    /** 选中行后：给它所属分组的合并单元格加底色，让用户一眼看出"当前选中的是哪一组"。
+     *  分组列用 rowspan 合并，组内只有首行有该单元格，所以按 data-group 反查
+     *  （渲染时组名同时打在 tr 与分组 td 上，见 render）。 */
+    function syncGroupHighlight(tr) {
+      var tbody = $('tbody');
+      if (!tbody) return;
+      var prev = tbody.querySelectorAll('td.col-b-group.grp-on');
+      for (var i = 0; i < prev.length; i++) prev[i].classList.remove('grp-on');
+      if (!tr) return;
+      var g = tr.getAttribute('data-group');
+      if (!g) return;
+      var all = tbody.querySelectorAll('td.col-b-group');
+      for (var j = 0; j < all.length; j++) {
+        if (all[j].getAttribute('data-group') === g) { all[j].classList.add('grp-on'); break; }
+      }
+    }
+
     // 单击选中（作业区横幅行不参与选中，否则会被高亮且 selectedIdx 变为 NaN）
     on('tbody', 'click', function (e) {
       var tr = e.target.closest('tr');
@@ -1433,6 +1453,7 @@
       state.selectedIdx = +tr.getAttribute('data-idx');
       // 选中这一行即刷新「编好」标记（无需点击第 9 列）
       syncBianhao(tr);
+      syncGroupHighlight(tr);
     });
 
     // 空线分组显示/隐藏开关
@@ -1511,7 +1532,11 @@
           // 不再立即向报表发送——由用户点下方任一「发送」按钮触发，便于测试哪种 iframe 定位方式能跑通
           var $b4 = $('depInputB4'), $c4 = $('depInputC4'),
               $d4 = $('depInputD4'), $e4 = $('depInputE4'), $f4 = $('depInputF4');
-          if ($b4) $b4.value = trackName;
+          if ($b4) {
+            // 股道写法转换：到发线 X1~X15 在站内存的是 "X6"，发车报表习惯写 "6道"，简单换算一下
+            var mX = /^X(\d+)$/.exec(String(trackName || '').trim());
+            $b4.value = mX ? (mX[1] + '道') : trackName;
+          }
           // 车次：从 Store（按股道）预填，未录入则为空。用户仍可随意修改
           if ($c4) $c4.value = checiOf(trackId);
           if ($d4) $d4.value = String(count);
