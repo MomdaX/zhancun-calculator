@@ -509,7 +509,7 @@
    * 在推算载重格上按下记锚点与快照，mode 由起点格状态决定（未删→批量删 / 已删→批量恢复）；
    * 拖动经过的行按 mode 实时应用，回滑超出范围按快照复原（未松手回滑数值即恢复）。
    * 状态放顶层：bindDetailEditEvents（document 委托）与 bind()（detailBody 监听）都要访问。 */
-  var dragExc = { active: false, moved: false, anchor: -1, last: -1, far: -1, snap: null, mode: 'exclude' };
+  var dragExc = { active: false, moved: false, anchor: -1, last: -1, snap: null, mode: 'exclude' };
 
   /** 把一行的推算载重格设为 删除(excluded) / 恢复(derived)，同步该格 DOM；该行无可编辑
    *  推算格（实载行等）返回 false 跳过。返回是否发生变更。 */
@@ -531,31 +531,24 @@
     }
     return true;
   }
-  /** 拖动应用：anchor..cur 范围内按 mode 统一删除/恢复，范围外按快照复原（回滑即恢复）。
-   *  与拖选行的 renderDrag 同一结构：先全表对齐快照，再叠加当前范围。
-   *  锚点特例（far 机制）：范围 [lo,hi] 恒含锚点，锚点格永远无法按快照恢复——
-   *  ① 指针回到锚点：该格按快照恢复（撤销），锚点不动等下一步；
-   *  ② 指针越过锚点到对侧（cur 与 far 分居锚点两侧）：锚点重置为当前行，从新位置继续刷。 */
+  /** 拖动应用：**双侧范围**——锚点固定在按下行，范围 = 锚点到当前指针（cur 在锚点
+   *  上/下方都有效），范围内按 mode 统一应用，范围外按快照复原。与拖选行 renderDrag
+   *  同一结构：先全表对齐快照，再叠加当前范围。
+   *  计重特有：指针回到起拖格 → 锚点..上次指针行 整段恢复快照（删除是破坏性操作，
+   *  回到起点即撤销；快速滑动跳行时跳过的中间行一并覆盖）。选行无此分支（保持选中）。 */
   function applyExcRange(cur) {
     var r = state.rows[state.detailIdx];
     if (!r || !r.raw) return;
+    var snap = dragExc.snap;
     if (cur === dragExc.anchor) {
-      // 指针回到锚点：锚点..上次指针行 之间【全部】按快照恢复——只恢复锚点一格会漏掉
-      // 回滑最后一步跨过的行（如 37 滑回 22 时，23 还差一步没恢复）
       var loA = Math.min(dragExc.anchor, dragExc.last), hiA = Math.max(dragExc.anchor, dragExc.last);
       for (var iA = loA; iA <= hiA; iA++) {
         var rowA = r.raw[iA];
         var trA = $('detailBody').querySelector('tr[data-i="' + iA + '"]');
-        if (rowA && trA) setExcRow(trA, rowA, dragExc.snap.has(rowA));
+        if (rowA && trA) setExcRow(trA, rowA, snap.has(rowA));
       }
       updateDetailTitle();
       return;
-    }
-    if (dragExc.far >= 0 && (cur - dragExc.anchor) * (dragExc.far - dragExc.anchor) < 0) {
-      dragExc.anchor = cur;                 // 已越过锚点到对侧 → 以当前位置为新锚
-      dragExc.far = cur;
-    } else if (Math.abs(cur - dragExc.anchor) > Math.abs(dragExc.far - dragExc.anchor)) {
-      dragExc.far = cur;                    // 更新最远到达行
     }
     var lo = Math.min(dragExc.anchor, cur), hi = Math.max(dragExc.anchor, cur);
     var trs = $('detailBody').querySelectorAll('tr');
@@ -564,7 +557,7 @@
       var idx = +trs[i].getAttribute('data-i');
       var row = r.raw[idx];
       if (!row) continue;
-      var exc = (idx >= lo && idx <= hi) ? (dragExc.mode === 'exclude') : dragExc.snap.has(row);
+      var exc = (idx >= lo && idx <= hi) ? (dragExc.mode === 'exclude') : snap.has(row);
       if (setExcRow(trs[i], row, exc)) changed = true;
     }
     if (changed) updateDetailTitle();               // 计重合计实时重算
@@ -1140,7 +1133,7 @@
     bindCarRowEvents('searchBody');
 
     // 明细中：按下行 → 拖动多选（拖动中实时调整范围，松开确定）；单击 → 切换选中
-    var dragSel = { active: false, moved: false, anchor: -1, last: -1, far: -1, snap: null, mode: 'add' };
+    var dragSel = { active: false, moved: false, anchor: -1, snap: null, mode: 'add' };
     function selectRow(i, on) {
       if (!state.detailSel) state.detailSel = new Set();
       var tr = $('detailBody').querySelector('tr[data-i="' + i + '"]');
@@ -1155,22 +1148,10 @@
       updateDetailTitle();
     }
     // 拖动中按「快照 + (anchor..cur) 按 mode 应用」实时渲染选中
-    // 锚点特例（far 机制）：指针回到锚点 → 该行恢复快照态；越过锚点到对侧 → 重置锚点
+    // 拖动选行：**双侧范围**——锚点固定在按下行，范围 = 锚点到当前指针（cur 在锚点
+    // 上/下方都有效），范围内按 mode 应用，范围外按快照复原。与 applyExcRange 同一结构。
     function renderDrag(cur) {
       if (!state.detailSel) state.detailSel = new Set();
-      if (cur === dragSel.anchor) {
-        // 回到锚点：锚点..上次指针行 之间全部恢复为快照态（与拖动批量删除同一修复）
-        var loS = Math.min(dragSel.anchor, dragSel.last), hiS = Math.max(dragSel.anchor, dragSel.last);
-        for (var jS = loS; jS <= hiS; jS++) selectRow(jS, dragSel.snap.has(jS));
-        updateDetailTitle();
-        return;
-      }
-      if (dragSel.far >= 0 && (cur - dragSel.anchor) * (dragSel.far - dragSel.anchor) < 0) {
-        dragSel.anchor = cur;
-        dragSel.far = cur;
-      } else if (Math.abs(cur - dragSel.anchor) > Math.abs(dragSel.far - dragSel.anchor)) {
-        dragSel.far = cur;
-      }
       var snap = dragSel.snap, add = dragSel.mode === 'add';
       // 还原快照
       var sels = $('detailBody').querySelectorAll('tr');
@@ -1201,8 +1182,7 @@
             dragExc.moved = false;
             dragExc.anchor = idxE;
             dragExc.last = idxE;
-            dragExc.far = idxE;                    // 最远到达行（越过锚点判定用）
-            dragExc.snap = new Set(detailEditExcluded);          // 快照：回滑恢复的基准
+            dragExc.snap = new Set(detailEditExcluded);          // 快照：范围外按快照复原
             dragExc.mode = detailEditExcluded.has(rowE) ? 'restore' : 'exclude';  // 起点状态定模式
           }
           return;
@@ -1219,8 +1199,6 @@
       dragSel.snap = new Set(state.detailSel);   // 记录拖动前选中快照
       // 起点已选中 → 取消模式；否则 → 加入模式（仅用于拖动，单击在 click 中处理）
       dragSel.mode = state.detailSel.has(dragSel.anchor) ? 'del' : 'add';
-      dragSel.last = dragSel.anchor;           // 上次指针行（回到锚点时按 anchor..last 恢复快照）
-      dragSel.far = dragSel.anchor;            // 最远到达行（越过锚点判定用）
     });
     on('detailBody', 'mouseover', function (e) {
       // 拖动批量删除：经过的行按 mode 实时应用，回滑超出范围按快照复原
@@ -1240,7 +1218,6 @@
       var i = +tr.getAttribute('data-i');
       dragSel.moved = true;
       renderDrag(i);                             // 实时按当前行调整整段
-      dragSel.last = i;                          // 更新上次指针行（回到锚点时恢复范围的另一端）
     });
     function endDrag() {
       if (dragSel.active) {
