@@ -29,10 +29,12 @@
 
   <span class="spacer"></span>
 
-  <label class="eye-slider" title="拖动调节护眼背景色浓度">
-    <svg class="eye-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 4C4.5 4 1.5 6.5 0 8c1.5 1.5 4.5 4 8 4s6.5-2.5 8-4c-1.5-1.5-4.5-4-8-4zm0 6.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5zM8 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" fill="currentColor"/></svg>
-    <input type="range" id="eyeProtectSlider" min="0" max="100" value="0" step="1">
-  </label>
+  <span class="eye-slider">
+    <button type="button" class="eye-toggle" id="btnEyeProtect" aria-pressed="false" title="护眼模式：关（点击开启）">
+      <svg class="eye-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 4C4.5 4 1.5 6.5 0 8c1.5 1.5 4.5 4 8 4s6.5-2.5 8-4c-1.5-1.5-4.5-4-8-4zm0 6.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5zM8 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" fill="currentColor"/></svg>
+    </button>
+    <input type="range" id="eyeProtectSlider" min="0" max="100" value="0" step="1" title="拖动调节护眼背景色浓度">
+  </span>
 
   <button class="btn toggle active" id="btnToggleVirtual" aria-pressed="true">隐藏空线分组</button>
 
@@ -60,7 +62,6 @@
       <tr id="headRow"></tr>
     </thead>
     <tbody id="tbody"></tbody>
-    <tfoot id="tfoot"></tfoot>
   </table>
 </div>
 
@@ -71,6 +72,7 @@
   <span class="stat">换长 <b id="stLen">0</b></span>
   <span class="stat">载重 <b id="stLoad">0</b></span>
   <span class="stat">老牌车 <b id="stOld">0</b></span>
+  <span class="stat">罐车 <b id="stTank">0(自)/0(路)</b></span>
   <span class="msg" id="stMsg"></span>
 </div>
 
@@ -284,17 +286,19 @@
 <div class="modal" id="modalProductivity">
   <div class="modal-content prod-modal">
     <div class="modal-head">
+      <img class="modal-emblem" src="images/luhui.png" alt="路徽">
       <h3 id="prodTitleText">生产效率表</h3>
       <span class="spacer"></span>
       <button class="btn" id="prodClose">关闭</button>
     </div>
     <div class="modal-body prod-body" id="prodBody">
       <div class="prod-meta">
-        <label>日期<input type="date" id="prodDate"></label>
+        <label>当前日期<input type="date" id="prodDate"></label>
         <label>安全起始日<input type="date" id="prodSafeStart"></label>
         <label>安全天数<input type="text" id="prodSafety" readonly></label>
         <label>夜班时长(分)<input type="number" id="prodNightH" min="0" step="1"></label>
         <label>白班时长(分)<input type="number" id="prodDayH" min="0" step="1"></label>
+        <label>最近更新<input type="text" id="prodUpdated" class="prod-updated" readonly placeholder="—"></label>
       </div>
       <div class="prod-table-wrap">
         <table class="prod-table prod-main-table" id="prodMainTable">
@@ -313,7 +317,7 @@
           <tbody id="prodMainBody"></tbody>
         </table>
       </div>
-      <label class="prod-notes-label">记事<textarea id="prodNotes"></textarea></label>
+      <label class="prod-notes-label">记事栏<textarea id="prodNotes"></textarea></label>
     </div>
   </div>
 </div>

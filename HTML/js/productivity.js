@@ -14,6 +14,21 @@
     return d.getFullYear() + '-' + Utils.pad2(d.getMonth() + 1) + '-' + Utils.pad2(d.getDate());
   }
 
+  /* 「最近更新」= 表体内容（钩数 / 生产时间，即 .prod-in）最后一次被改动的时间。
+   * 只认表体：日期 / 安全起始日 / 班次时长 / 记事属于表头 meta 与配置，改动不计入。 */
+  var prodUpdated = '';
+
+  function nowStamp() {
+    var d = new Date();
+    return d.getFullYear() + '-' + Utils.pad2(d.getMonth() + 1) + '-' + Utils.pad2(d.getDate()) +
+           ' ' + Utils.pad2(d.getHours()) + ':' + Utils.pad2(d.getMinutes());
+  }
+
+  function markUpdated() {
+    prodUpdated = nowStamp();
+    setVal('prodUpdated', prodUpdated);
+  }
+
   function defaultData() {
     var make = function () { return [{h:'',m:''},{h:'',m:''},{h:'',m:''}]; };
     return {
@@ -23,7 +38,8 @@
       dayH: 660,
       night: make(),
       day: make(),
-      notes: ''
+      notes: '',
+      updated: ''      // 表体内容的最近修改时间（YYYY-MM-DD HH:mm），见 markUpdated()
     };
   }
 
@@ -38,6 +54,7 @@
         if (Array.isArray(s.night)) d.night = s.night;
         if (Array.isArray(s.day)) d.day = s.day;
         if (s.notes != null) d.notes = s.notes;
+        if (s.updated != null) d.updated = s.updated;
       }
     }
     return d;
@@ -96,6 +113,7 @@
     d.dayH = val('prodDayH');
     d.safety = str('prodSafety');
     d.notes = str('prodNotes');
+    d.updated = prodUpdated;   // 不随 collect 重置：只有 markUpdated() 才改它
     for (var i = 0; i < 3; i++) {
       d.night[i] = { h: val('nH' + i), m: val('nM' + i) };
       d.day[i]   = { h: val('dH' + i), m: val('dM' + i) };
@@ -150,6 +168,9 @@
     setVal('prodDayH', d.dayH);
     setVal('prodSafety', d.safety);
     setVal('prodNotes', d.notes);
+    // 打开浮窗时回显上次的表体修改时间（未改过则显示占位 —）
+    prodUpdated = d.updated || '';
+    setVal('prodUpdated', prodUpdated);
 
     var tbody = $('prodMainBody');
     if (tbody) {
@@ -218,7 +239,8 @@
     function onEdit(e) {
       var t = e.target;
       if (!t) return;
-      if (t.classList && t.classList.contains('prod-in')) return recompute();
+      // 表体单元格（钩数 / 生产时间）被改动 → 刷新「最近更新」
+      if (t.classList && t.classList.contains('prod-in')) { markUpdated(); return recompute(); }
       if (t.id === 'prodNightH' || t.id === 'prodDayH' ||
           t.id === 'prodDate' || t.id === 'prodSafeStart' || t.id === 'prodNotes') {
         recompute();
@@ -237,6 +259,7 @@
       input.value = '';
       input.focus();
       if (input.select) input.select();
+      markUpdated();     // 双击清空也算改动表体内容
       recompute();   // 清空后同步重算各项合计
     });
 

@@ -18,17 +18,22 @@
     { key: 'carTypes',  title: '车种',           width: 124 },
     { key: 'length',    title: '换长',           width: 58,  num: true, cls: 'mid' },
     { key: 'dest',      title: '车辆信息',       width: 340, dest: true },
-    { key: 'empty',     title: '空箱/空车',      width: 78,  num: true },
-    { key: 'heavy',     title: '重车',           width: 52,  num: true },
+    // 编好车次：按股道录入的编组车次（双击编辑）。数据源是 Store.KEYS.readyTrains，
+    // 与 31814 报表「待发股道车次」、发车流程「车次」共用同一份持久化（见 app.js checiOf/setCheci）
+    { key: 'checi',     title: '编好车次',       width: 88 },
+    // 发送：只承载「编好」伪元素按钮，不显示任何数据（原「重车」列，数字已取消）
+    { key: 'send',      title: '发送',           width: 56 },
     { key: 'train',     title: '到达车次',       width: 76 },
     { key: 'load',      title: '载重',           width: 72,  num: true, cls: 'mid' },
     { key: 'oldCar',    title: '老牌车',         width: 60,  num: true, cls: 'mid' }
   ];
 
-  /* 「编好」按钮：挂在表头 th[9]（XPath 1 起 → COLUMNS[8] = empty「空箱/空车」）
-   * 的第 1~30 个数据行。选中该单元格后以 ::after 伪元素浮现，点击打开发车作业全流程。
-   * 用 COLUMNS 下标推导而非写死 key：将来增删列时自动跟随。 */
-  var BIANHAO_COL     = COLUMNS[8] ? COLUMNS[8].key : 'empty';
+  /* 「编好」按钮：挂在表头 th[10]（XPath 1 起 → COLUMNS[9] = send「发送」）
+   * 的合格数据行。选中该行后以 ::after 伪元素浮现，点击打开发车作业全流程。
+   * 原先挂在 th[9]（empty「编好车次」），该列改为录入车次后让出按钮位置。
+   * 用 COLUMNS 下标推导而非写死 key：将来增删列时自动跟随。
+   * 注：只决定"标记/命中哪个单元格"，选中资格（非 blank、股道在区间内）仍在 app.js，未改动。 */
+  var BIANHAO_COL     = COLUMNS[9] ? COLUMNS[9].key : 'send';
   /* 生效股道区间（按 track.config.js 的 TRACK_DEFS 顺序取 index 判定）：
    * 1道(1) … X15，含两端。写股道 id 而非行号——行号会随分组/空线显隐而浮动。 */
   var BIANHAO_FROM    = '1';

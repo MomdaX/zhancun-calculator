@@ -86,9 +86,18 @@ body {
 
 .toolbar .spacer { flex: 1 1 auto; }
 
-/* 护眼色滑块 */
+/* 护眼色：图标开关 + 浓度滑块 */
 .eye-slider { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
 .eye-slider .eye-icon { flex: none; color: var(--text-dim); }
+/* 图标开关：点击在「关 0 / 开 100」间切换，开启时图标变绿底 */
+.eye-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 3px; border: 1px solid transparent; border-radius: 4px;
+  background: transparent; color: var(--text-dim); cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.eye-toggle:hover { background: #eef4fa; border-color: var(--border-strong); }
+.eye-toggle.on { color: #1a7f4b; background: #e6f7ee; border-color: #a8e0c2; }
 .eye-slider input[type="range"] { -webkit-appearance: none; appearance: none;
   width: 60px; height: 4px; background: #d5dbdf; border-radius: 2px; outline: none; cursor: pointer; }
 .eye-slider input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none;
@@ -729,15 +738,17 @@ table.grid tbody td.col-a::after {
 table.grid tbody td.col-a:hover::after { opacity: .92; }
 table.grid.notes-collapsed tbody td.col-a::after { content: '展开'; }
 
-/* 空箱/空车列（表头 th[9]）：单元格选中后，行内右侧浮现「编好」伪元素按钮，
+/* 发送列（表头 th[10]，原「重车」）：单元格选中后，行内左侧浮现「编好」伪元素按钮，
  * 点击打开「发车作业全流程」浮窗（取代原工具栏「发车流程」按钮）。
- * 与上方 col-a 的「收起/展开」同一套实现：::after 显示 + 右侧命中区判定点击。
+ * 该列不再显示任何数字，只作为按钮的落点。
+ * 与上方 col-a 的「收起/展开」同一套实现：::after 显示 + 左侧命中区判定点击。
  * 注意：伪元素不是事件目标，故不能靠 e.target 判断，只能用坐标命中（见 app.js）。 */
-table.grid tbody td[data-col="empty"] { position: relative; }
-table.grid tbody td[data-col="empty"].bianhao-on::after {
+table.grid tbody td[data-col="send"] { position: relative; }
+table.grid tbody td[data-col="send"].bianhao-on::after {
   content: '编好';
   position: absolute;
-  top: 50%; left: 6px;
+  top: 50%; left: 50%;
+  margin-left: -21px;
   transform: translateY(-50%);
   padding: 2px 8px;
   border-radius: 3px;
@@ -747,6 +758,28 @@ table.grid tbody td[data-col="empty"].bianhao-on::after {
   pointer-events: none;   /* 不拦截单元格本身的点击，命中由坐标判定 */
   z-index: 4;
 }
+
+/* 编好车次列（表头 th[9]）：双击录入 / 清空重录车次。
+ * 值来自 Store（按股道），与 31814 报表「待发股道车次」是同一份数据。 */
+table.grid tbody td[data-col="checi"] {
+  cursor: text;
+  color: #1f6feb;
+  font-weight: 600;
+  text-align: center;
+}
+table.grid tbody td[data-col="checi"]:hover { background: #f3f8ff; }
+table.grid tbody td[data-col="checi"] .checi-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+}
+table.grid tbody td[data-col="checi"] .checi-input:focus { outline: none; }
 
 /* 注意事项正文容器：收起时限制高度并底部淡出，展开时原样逐条换行 */
 table.grid td.col-a .note-body {
@@ -844,6 +877,10 @@ td.dest span.shakou  { color: var(--dir-shakou); }
 td.dest span.nankou  { color: var(--dir-nankou); }
 td.dest span.guanna  { color: var(--dir-guanna); }
 td.dest span.danger  { color: var(--mark-danger); font-weight: 700; }
+/* 编好车次列：车次颜色套用与上面相同的方向色（沙口蓝/南口橙/管内紫） */
+td[data-col="checi"] span.shakou { color: var(--dir-shakou); }
+td[data-col="checi"] span.nankou { color: var(--dir-nankou); }
+td[data-col="checi"] span.guanna { color: var(--dir-guanna); }
 td.dest span.heavy   { color: var(--mark-heavy); font-weight: 700; }
 
 /* 条件底色 */
@@ -854,24 +891,6 @@ td.oil      { background: var(--mark-oil) !important; }
 td.empty-track { background: var(--mark-empty); }
 td.warn-e   { background: #ffd6d6 !important; font-weight: 700; }
 td.warn-pink { background: #ffd9ec !important; font-weight: 700; }
-
-/* 合计行 */
-table.grid tfoot td {
-  position: sticky;
-  bottom: 0;
-  background: #eaf1f7;
-  font-weight: 700;
-  border-top: 2px solid var(--border-strong);
-  z-index: 4;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-table.grid tfoot td.col-a, table.grid tfoot td.col-b-group, table.grid tfoot td.col-b {
-  z-index: 7;
-  text-align: center;
-  background: #eaf1f7;
-}
-table.grid tfoot td.num.mid { text-align: center; }
 
 /* 空车股道整行淡化 */
 tr.blank td { color: #b2bec3; }
@@ -1458,6 +1477,10 @@ table.grid td[data-col="effLen"][data-len]:hover::after {
   padding: 12px 16px;
 }
 .prod-modal .modal-head h3 { color: #fff; font-weight: 700; letter-spacing: .5px; }
+/* 标题前的路徽：与明细抽屉 detail-emblem 同一素材，尺寸放大到 20px 适配深色标题栏 */
+.prod-modal .modal-head .modal-emblem {
+  width: 20px; height: 20px; object-fit: contain; flex: none;
+}
 .prod-modal .modal-head .btn {
   background: rgba(255, 255, 255, .18);
   border-color: rgba(255, 255, 255, .4);
@@ -1622,7 +1645,10 @@ table.grid td[data-col="effLen"][data-len]:hover::after {
   font-size: 12px; font-weight: 600; color: #5a6573; letter-spacing: .3px;
 }
 .prod-meta input {
-  width: 150px; padding: 7px 9px;
+  width: 100px;
+  /* 固定高度 + border-box：全部 meta 输入框（含只读的「最近更新」）等高对齐。
+     原先用 padding 7px 撑高，字号不同（20px / 15px）行盒就不同高，看起来不齐。 */
+  height: 40px; padding: 0 9px; box-sizing: border-box;
   border: 1px solid #cfd8e3; border-radius: 7px;
   font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
   font-size: 20px; color: #2a3340; background: #fbfcfe;
@@ -1630,6 +1656,23 @@ table.grid td[data-col="effLen"][data-len]:hover::after {
 }
 .prod-meta input:hover { border-color: #9fb6d4; }
 .prod-meta input:focus { outline: none; background: #fff; border-color: #2b5cb0; box-shadow: 0 0 0 3px rgba(43, 92, 176, .16); }
+/* 「最近更新」：只读展示表体（钩数/生产时间）最后一次改动的时间，
+   与可录入框区分——灰底、小字、不抢焦点 */
+.prod-meta input.prod-updated {
+  font-size: 20px; font-weight: 600;
+  color: #5a6573; background: #eef2f7; cursor: default;
+}
+/* meta 各项宽度按内容长度分配：
+   ①日期 ②安全起始日 ⑥最近更新 → 150px；③安全天数 ④夜班时长 ⑤白班时长 → 100px。
+   用 label:nth-child 而非 id，调序/换位时改这里即可，一眼对得上界面顺序。 */
+.prod-meta label:nth-child(1) input,
+.prod-meta label:nth-child(2) input,
+.prod-meta label:nth-child(6) input { width: 150px; }
+.prod-meta label:nth-child(3) input,
+.prod-meta label:nth-child(4) input,
+.prod-meta label:nth-child(5) input { width: 100px; }
+.prod-meta input.prod-updated:hover { border-color: #cfd8e3; }
+.prod-meta input.prod-updated:focus { outline: none; background: #eef2f7; border-color: #cfd8e3; box-shadow: none; }
 
 /* 表格整体 */
 .prod-table-wrap { border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0, 0, 0, .08); }
@@ -1637,14 +1680,27 @@ table.grid td[data-col="effLen"][data-len]:hover::after {
 .prod-main-table tbody tr { font-size: 20px; }
 .prod-main-table tbody tr:nth-child(n+7) td { font-size: 18px; }
 .prod-main-table .prod-sum-label { font-weight: 700; text-align: center; }
-.prod-main-table th, .prod-main-table td { border: 1px solid #d4e0ef; padding: 9px 3px; text-align: center; white-space: nowrap; }
+/* 行高主要由单元格上下 padding 决定（默认 9px + 20px 字号的常规行盒 ≈ 44px/行）。
+ * 收紧到 3px 并锁定 line-height:1.2 → 每行约 30px，整表能在可视区里多露几行；
+ * 字号保持 20px 不动，避免影响录入时的可读性。要再矮就直接改这里的 padding。 */
+.prod-main-table th, .prod-main-table td {
+  border: 1px solid #d4e0ef;
+  padding: 3px 3px;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+}
 
 /* 表头：深绿渐变 + 吸顶 */
 .prod-main-table thead th {
   position: sticky; top: 0; z-index: 2;
-  background: linear-gradient(180deg, #2ba06b, #17643f);
+  /* 与标题栏 .prod-modal .modal-head 同一支蓝（原为绿色渐变），整窗配色统一 */
+  background: linear-gradient(135deg, #2b5cb0, #1e3f7c);
   color: #fff; font-weight: 600; letter-spacing: .5px;
   text-shadow: 0 1px 1px rgba(0, 0, 0, .15);
+  /* 表头单独放大行高（数据行已收紧到 3px）：吸顶时更有存在感、与数据行区分明显。
+     要再高/再矮改这里的 padding 即可，不影响 tbody。 */
+  padding: 11px 3px;
 }
 
 /* 班次分组底色：夜班浅蓝、白班浅杏、合计浅灰（行底色避开表头绿色便于区分） */
@@ -1667,6 +1723,9 @@ table.grid td[data-col="effLen"][data-len]:hover::after {
 .prod-in {
   width: 100%;text-align: center;
   border: none; border-radius: 6px;
+  /* 撑高行高的另一半来自输入框自身：去掉浏览器默认 padding 并锁定行高，
+     让它与单元格文字等高（否则 td 收紧了、input 仍把行顶开） */
+  padding: 0; line-height: 1.2;
   font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
   font-size: 20px; color: #2a3340; background: transparent;
   transition: background .15s, box-shadow .15s;
@@ -2219,7 +2278,7 @@ table.grid td[data-col="effLen"][data-len]:hover::after {
 
 /* 报表表格结果区：展示读自报表标签页的表格内容（发送 / 提交后刷新） */
 .dep-result {
-  margin: 10px 14px;
+  margin: 10px 1px;
   border: 1px solid #dde1e8;
   border-radius: 6px;
   background: #fff;

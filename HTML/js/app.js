@@ -57,6 +57,38 @@
     $('loading').className = show ? 'loading show' : 'loading';
   }
 
+  /* =================== 「编好车次」统一数据源 ===================
+   * 三处共用同一份 Store.KEYS.readyTrains（{ 股道id: 车次 }）：
+   *   ① 主表「编好车次」列（双击录入）
+   *   ② 发车流程浮窗的「车次」输入框 depInputC4（点「编好」时预填）
+   *   ③ 31814 报表「待发股道 → 车次」芯片（report31814.js 已在读写同一个键，故天然同步）
+   * 一律从 Store 读取，不读单元格 DOM——避免"界面显示值"与"真实数据"两套真相。 */
+  function checiMap() {
+    return (Store && Store.get) ? (Store.get(Store.KEYS.readyTrains, {}) || {}) : {};
+  }
+  /** 取某股道的编好车次；未录入返回空串 */
+  function checiOf(trackId) {
+    var m = checiMap();
+    return m[trackId] == null ? '' : String(m[trackId]);
+  }
+  /** 写入某股道的编好车次；传空字符串即删除 */
+  function setCheci(trackId, val) {
+    var m = checiMap();
+    val = String(val == null ? '' : val).trim();
+    if (val) m[trackId] = val; else delete m[trackId];
+    Store.set(Store.KEYS.readyTrains, m);
+  }
+  /** 车次颜色：套用「车辆信息」列同款方向色（沙口蓝 / 南口橙 / 管内紫）。
+   *  一股道多方向时按 沙 > 南 > 管 取优先级，与 renderDest 的判定顺序一致；
+   *  无方向（或方向是到卸等）返回空串 → 走车次列默认蓝。 */
+  function checiDirCls(direction) {
+    var d = String(direction == null ? '' : direction);
+    if (/沙/.test(d)) return 'shakou';
+    if (/南/.test(d)) return 'nankou';
+    if (/管内/.test(d)) return 'guanna';
+    return '';
+  }
+
   /* 到站富文本着色 / 车型高亮 / 车站名识别 已抽到 js/dest-color.js（纯函数，挂 global） */
 
   /* =================== 虚拟股道显示/隐藏 =================== */
@@ -401,6 +433,8 @@
         if (c.key === 'track' && cfg) v = cfg.name;
         // 有效长：股道固有属性，按股道 id 查配置（与车辆数据无关，故不在 aggregate 里算）
         if (c.key === 'effLen') v = YardConfig.trackLength(r.track);
+        // 编好车次：不是聚合字段，按股道从 Store 读（与 31814 报表「待发股道车次」同一份数据）
+        if (c.key === 'checi') v = checiOf(r.track);
         var cls = c.cls || '';
         var style = '';
         var attrs = '';
@@ -428,6 +462,11 @@
           if (c.key === 'note') {
             // 包一层 .note-body，供表头「收起/展开」控件按状态裁剪高度
             inner = '<div class="note-body">' + escapeHtml(rawNote).replace(/\n/g, '<br>') + '</div>';
+          } else if (c.key === 'checi') {
+            // 车次颜色套用「车辆信息」列的方向色（沙口蓝/南口橙/管内紫），无方向走默认蓝
+            inner = v ? '<span class="' + checiDirCls(r.direction) + '">' +
+                       escapeHtml(String(v)) + '</span>' : '';
+            if (!c.cls && !c.num) cls += ' center';
           } else {
             inner = escapeHtml(rawNote);
             if (!c.cls && !c.num) cls += ' center';
@@ -477,38 +516,17 @@
     renderGridFoot(vis);
   }
 
-  /** 主表合计行 + 罐车结存 + 状态栏（render 收口）。
-   *  合计与可见行保持一致：隐藏虚拟股道/空线分组后，合计同步变化。 */
+  /** 罐车结存 + 状态栏（render 收口）。
+   *  原「主表合计行」已移除——股道/车数/换长/载重/老牌车这些合计状态栏本来就有，
+   *  罐车结存（自备罐/路罐）也一并从合计行挪到状态栏，避免同一份数据两处显示。
+   *  统计与可见行保持一致：隐藏虚拟股道/空线分组后，状态栏同步变化。 */
   function renderGridFoot(vis) {
     var tc = 0, tl = 0, tw = 0, told = 0;
     vis.forEach(function (item) {
       var r = item.r;
       tc += r.count || 0; tl += r.length || 0; tw += r.load || 0; told += r.oldCar || 0;
     });
-    // 由 COLUMNS 逐列生成：增删列时合计行自动跟随，
-    // 不再需要手工数着补 <td>（原写死 colspan + 固定个数的空 td，加一列就整体错位）。
-    var FOOT_VALUES = {
-      count: tc,
-      length: Utils.fmt1(tl),
-      load: Utils.round1(tw),
-      oldCar: told
-    };
-    var footCells = [];
-    COLUMNS.forEach(function (c, i) {
-      // 注意事项(冻结) + 分组合并列(冻结) 合计标签横跨这两列
-      if (i === 0) { footCells.push('<td class="col-a" colspan="2">合计</td>'); return; }
-      if (i === 1) return;                       // 已被上面的 colspan=2 覆盖（分组合并列）
-      if (c.key === 'track') { footCells.push('<td class="col-b"></td>'); return; }
-      if (c.key === 'dest') { footCells.push('<td id="footTank"></td>'); return; }
-      if (Object.prototype.hasOwnProperty.call(FOOT_VALUES, c.key)) {
-        footCells.push('<td class="num mid">' + FOOT_VALUES[c.key] + '</td>');
-        return;
-      }
-      footCells.push('<td></td>');
-    });
-    $('tfoot').innerHTML = '<tr>' + footCells.join('') + '</tr>';
-
-    // 罐车结存（自备罐/路罐）
+    // 罐车结存（自备罐/路罐）：原在主表合计行的「到站」列，现随合计行一并移到状态栏
     var zb = 0, lg = 0;
     vis.forEach(function (item) {
       var re = /(自备罐|路罐)(\d+)/g, m;
@@ -517,7 +535,7 @@
         if (m[1] === '自备罐') zb += +m[2]; else lg += +m[2];
       }
     });
-    $('footTank').textContent = zb + '(自)/' + lg + '(路)';
+    $('stTank').textContent = zb + '(自)/' + lg + '(路)';
 
     // 状态栏
     $('stTrack').textContent = vis.filter(function (item) { return item.r.count; }).length;
@@ -1352,7 +1370,7 @@
       if (dt && !dt.contains(e.target)) clearDetailSel();
     });
 
-    /* ---------- 「编好」伪元素按钮（空箱/空车列 = 表头 th[9]） ---------- */
+    /* ---------- 「编好」伪元素按钮（编好车次列 = 表头 th[9]） ---------- */
 
     /** 清除所有「编好」标记 */
     function clearBianhao() {
@@ -1494,7 +1512,8 @@
           var $b4 = $('depInputB4'), $c4 = $('depInputC4'),
               $d4 = $('depInputD4'), $e4 = $('depInputE4'), $f4 = $('depInputF4');
           if ($b4) $b4.value = trackName;
-          if ($c4) $c4.value = '';
+          // 车次：从 Store（按股道）预填，未录入则为空。用户仍可随意修改
+          if ($c4) $c4.value = checiOf(trackId);
           if ($d4) $d4.value = String(count);
           if ($e4) $e4.value = length;
           if ($f4) $f4.value = lastCar;
@@ -1506,6 +1525,55 @@
         // 向报表页要一份最新的「编组车次」列表（扩展桥接通道），用于车次重复校验
         try { window.postMessage({ channel: DEP_BRIDGE, type: 'readCheci', ts: Date.now() }, '*'); } catch (e) {}
       }, true);
+    }
+
+    /* ---------- 「编好车次」列：双击录入车次 ----------
+     * 已有车次时：先删除旧车次再进入编辑（方便直接改填新车次）。
+     * 用捕获阶段 + stopPropagation：抢在 tbody 的「双击行 → 打开明细抽屉」之前，两者不打架。 */
+    if (gridEl) {
+      gridEl.addEventListener('dblclick', function (e) {
+        var td = e.target.closest ? e.target.closest('td[data-col="checi"]') : null;
+        if (!td || !document.contains(td)) return;
+        e.stopPropagation();
+        e.preventDefault();
+        var tr = td.closest('tr');
+        var trackId = tr ? tr.getAttribute('data-track') : '';
+        if (!trackId) return;
+        if (checiOf(trackId)) setCheci(trackId, '');   // 已有车次 → 先清空落库
+        editCheciCell(td, trackId);
+      }, true);
+    }
+
+    /** 把「编好车次」单元格就地换成输入框：回车 / 失焦保存，Esc 取消 */
+    function editCheciCell(td, trackId) {
+      if (!td || !document.contains(td) || td.querySelector('.checi-input')) return;
+      var old = checiOf(trackId);        // 调用处已清空过 → 重录时这里是空串
+      td.textContent = '';
+      var inp = document.createElement('input');
+      inp.type = 'text';
+      inp.className = 'checi-input';
+      inp.maxLength = 10;
+      inp.placeholder = '车次';
+      inp.value = old;
+      td.appendChild(inp);
+      inp.focus();
+      inp.select();
+      var done = false;
+      function finish(save) {
+        if (done) return;
+        done = true;
+        if (save) setCheci(trackId, inp.value.trim());
+        render();                        // 复原单元格，并让 31814 / 发车流程拿到最新值
+      }
+      inp.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+        else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+      });
+      inp.addEventListener('blur', function () { finish(true); });
+      // 输入期间的鼠标事件不冒泡到「行选中 / 编好命中 / 双击开明细」
+      ['mousedown', 'click', 'dblclick'].forEach(function (ev) {
+        inp.addEventListener(ev, function (e) { e.stopPropagation(); });
+      });
     }
 
     /* ================= 发车浮窗警示标 =================
@@ -2020,7 +2088,9 @@
 
     /* ---- 浮窗 / 抽屉 / 下拉菜单 -----
      * 注册后自动获得「点空白处关闭 + ESC 关栈顶」，新增面板无需再改 ESC 处理。 */
-    UI.Modal.register('modal31814');
+    // 31814 报表里改动过「待发股道车次」后，关窗即重渲主表——
+    // 两边读写同一个 Store.KEYS.readyTrains，"编好车次"列随即同步（用户仍可在报表里改/删，行为不变）
+    UI.Modal.register('modal31814', { onClose: function () { render(); } });
     UI.Modal.register('modalSettings', { onOpen: refreshFolderPath });
     UI.Modal.register('modalProductivity');
     // 打开浮窗（点「编好」）就先同步一次报表表格，立刻看到报表当前情况；点发送后会再同步一次
@@ -2100,7 +2170,7 @@
     on('prodClose', 'click', function () { UI.Modal.close('modalProductivity'); });
     on('depClose', 'click', function () { UI.Modal.close('modalDeparture'); });
     // 原工具栏「发车流程」按钮（btnDepartureFlow）已移除：
-    // 改由主表「空箱/空车」列（表头 th[9]）的「编好」伪元素按钮打开同一浮窗。
+    // 改由主表「编好车次」列（原「空箱/空车」，表头 th[9]）的「编好」伪元素按钮打开同一浮窗。
 
     // 功能下拉菜单（组件负责展开 / 收起 / 点外部关闭）
     UI.Dropdown('btnMenu', 'menuList', {
@@ -2770,21 +2840,36 @@
     // 先渲染空框架：让页面一打开就呈现完整股道清单，便于核对配置
     renderEmpty();
 
-    // 护眼色滑块
+    // 护眼色：图标开关（0 ↔ 100）+ 浓度滑块（精细调节），两者共用同一份 Store.KEYS.eyeProtect
     (function () {
       var slider = $('eyeProtectSlider');
       var overlay = $('eyeOverlay');
+      var btn = $('btnEyeProtect');
       if (!slider || !overlay) return;
-      var saved = Store.get('eyeProtect', 0);
-      slider.value = saved;
-      overlay.style.opacity = saved / 100;
-      if (saved > 0) overlay.style.display = '';
-      on('eyeProtectSlider', 'input', function () {
-        var v = parseInt(this.value, 10);
+
+      /** 统一落点：滑块位置、遮罩浓度、开关外观、持久化 四处一起更新，避免出现"界面和数据不一致" */
+      function applyEye(val) {
+        var v = parseInt(val, 10) || 0;
+        if (v < 0) v = 0; else if (v > 100) v = 100;
+        slider.value = v;
         overlay.style.display = v > 0 ? '' : 'none';
         overlay.style.opacity = v / 100;
         Store.set('eyeProtect', v);
+        if (btn) {
+          var on = v > 0;
+          btn.classList.toggle('on', on);
+          btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+          btn.title = on ? '护眼模式：开（点击关闭）' : '护眼模式：关（点击开启）';
+        }
+      }
+
+      on('eyeProtectSlider', 'input', function () { applyEye(this.value); });
+      on('btnEyeProtect', 'click', function () {
+        // 开关语义：只在「关 0」与「开 100」之间切换，不记忆中间值
+        applyEye(parseInt(slider.value, 10) > 0 ? 0 : 100);
       });
+
+      applyEye(Store.get('eyeProtect', 0));   // 打开页面时恢复上次状态
     })();
 
     // 恢复上次选择的文件夹，自动读取最新 xls
