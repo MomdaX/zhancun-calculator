@@ -505,6 +505,70 @@
   // 明细「计重」编辑模式：临时删除某行的推算载重（仅影响计重统计，关闭后复原）
   var detailEditMode = false;
   var detailEditExcluded = new Set();
+  /* 计重编辑下的「按住拖动批量删除推算载重」：与拖选行（dragSel）同一套交互范式——
+   * 在推算载重格上按下记锚点与快照，mode 由起点格状态决定（未删→批量删 / 已删→批量恢复）；
+   * 拖动经过的行按 mode 实时应用，回滑超出范围按快照复原（未松手回滑数值即恢复）。
+   * 状态放顶层：bindDetailEditEvents（document 委托）与 bind()（detailBody 监听）都要访问。 */
+  var dragExc = { active: false, moved: false, anchor: -1, last: -1, far: -1, snap: null, mode: 'exclude' };
+
+  /** 把一行的推算载重格设为 删除(excluded) / 恢复(derived)，同步该格 DOM；该行无可编辑
+   *  推算格（实载行等）返回 false 跳过。返回是否发生变更。 */
+  function setExcRow(tr, row, exc) {
+    var td = tr.querySelector('td.derived-est, td.excluded-cell');
+    if (!td) return false;
+    var isExc = detailEditExcluded.has(row);
+    if (exc === isExc) return false;                // 已是目标态
+    if (exc) {
+      detailEditExcluded.add(row);
+      td.textContent = '';
+      td.classList.remove('derived-est');
+      td.classList.add('excluded-cell');
+    } else {
+      detailEditExcluded.delete(row);
+      td.textContent = String(Math.round(estLoadOf(row)));   // 恢复显示推算值（与渲染口径一致）
+      td.classList.remove('excluded-cell');
+      td.classList.add('derived-est');
+    }
+    return true;
+  }
+  /** 拖动应用：anchor..cur 范围内按 mode 统一删除/恢复，范围外按快照复原（回滑即恢复）。
+   *  与拖选行的 renderDrag 同一结构：先全表对齐快照，再叠加当前范围。
+   *  锚点特例（far 机制）：范围 [lo,hi] 恒含锚点，锚点格永远无法按快照恢复——
+   *  ① 指针回到锚点：该格按快照恢复（撤销），锚点不动等下一步；
+   *  ② 指针越过锚点到对侧（cur 与 far 分居锚点两侧）：锚点重置为当前行，从新位置继续刷。 */
+  function applyExcRange(cur) {
+    var r = state.rows[state.detailIdx];
+    if (!r || !r.raw) return;
+    if (cur === dragExc.anchor) {
+      // 指针回到锚点：锚点..上次指针行 之间【全部】按快照恢复——只恢复锚点一格会漏掉
+      // 回滑最后一步跨过的行（如 37 滑回 22 时，23 还差一步没恢复）
+      var loA = Math.min(dragExc.anchor, dragExc.last), hiA = Math.max(dragExc.anchor, dragExc.last);
+      for (var iA = loA; iA <= hiA; iA++) {
+        var rowA = r.raw[iA];
+        var trA = $('detailBody').querySelector('tr[data-i="' + iA + '"]');
+        if (rowA && trA) setExcRow(trA, rowA, dragExc.snap.has(rowA));
+      }
+      updateDetailTitle();
+      return;
+    }
+    if (dragExc.far >= 0 && (cur - dragExc.anchor) * (dragExc.far - dragExc.anchor) < 0) {
+      dragExc.anchor = cur;                 // 已越过锚点到对侧 → 以当前位置为新锚
+      dragExc.far = cur;
+    } else if (Math.abs(cur - dragExc.anchor) > Math.abs(dragExc.far - dragExc.anchor)) {
+      dragExc.far = cur;                    // 更新最远到达行
+    }
+    var lo = Math.min(dragExc.anchor, cur), hi = Math.max(dragExc.anchor, cur);
+    var trs = $('detailBody').querySelectorAll('tr');
+    var changed = false;
+    for (var i = 0; i < trs.length; i++) {
+      var idx = +trs[i].getAttribute('data-i');
+      var row = r.raw[idx];
+      if (!row) continue;
+      var exc = (idx >= lo && idx <= hi) ? (dragExc.mode === 'exclude') : dragExc.snap.has(row);
+      if (setExcRow(trs[i], row, exc)) changed = true;
+    }
+    if (changed) updateDetailTitle();               // 计重合计实时重算
+  }
   var detailEvtBound = false;
   /**
    * 单行推算载重：载重有值→原值；为空→记事命中货物名称用预设重量，否则车种含70取70、其余61。
@@ -660,6 +724,8 @@
       if (td.closest('#simTable')) { SimPanel.excludeDerivedEst(td); return; }
       if (!detailEditMode) return;
       if (!td.closest('#detailTable')) return;
+      // 按住拖动批量删除已在 mouseover 中按范围应用，松手后的 click 不再切换单格
+      if (dragExc.moved) { dragExc.moved = false; return; }
       var tr = td.closest('tr'); if (!tr) return;
       var idx = tr.getAttribute('data-i');
       var r = state.rows[state.detailIdx];
@@ -1074,7 +1140,7 @@
     bindCarRowEvents('searchBody');
 
     // 明细中：按下行 → 拖动多选（拖动中实时调整范围，松开确定）；单击 → 切换选中
-    var dragSel = { active: false, moved: false, anchor: -1, snap: null, mode: 'add' };
+    var dragSel = { active: false, moved: false, anchor: -1, last: -1, far: -1, snap: null, mode: 'add' };
     function selectRow(i, on) {
       if (!state.detailSel) state.detailSel = new Set();
       var tr = $('detailBody').querySelector('tr[data-i="' + i + '"]');
@@ -1089,8 +1155,22 @@
       updateDetailTitle();
     }
     // 拖动中按「快照 + (anchor..cur) 按 mode 应用」实时渲染选中
+    // 锚点特例（far 机制）：指针回到锚点 → 该行恢复快照态；越过锚点到对侧 → 重置锚点
     function renderDrag(cur) {
       if (!state.detailSel) state.detailSel = new Set();
+      if (cur === dragSel.anchor) {
+        // 回到锚点：锚点..上次指针行 之间全部恢复为快照态（与拖动批量删除同一修复）
+        var loS = Math.min(dragSel.anchor, dragSel.last), hiS = Math.max(dragSel.anchor, dragSel.last);
+        for (var jS = loS; jS <= hiS; jS++) selectRow(jS, dragSel.snap.has(jS));
+        updateDetailTitle();
+        return;
+      }
+      if (dragSel.far >= 0 && (cur - dragSel.anchor) * (dragSel.far - dragSel.anchor) < 0) {
+        dragSel.anchor = cur;
+        dragSel.far = cur;
+      } else if (Math.abs(cur - dragSel.anchor) > Math.abs(dragSel.far - dragSel.anchor)) {
+        dragSel.far = cur;
+      }
       var snap = dragSel.snap, add = dragSel.mode === 'add';
       // 还原快照
       var sels = $('detailBody').querySelectorAll('tr');
@@ -1106,7 +1186,29 @@
       updateDetailTitle();
     }
     on('detailBody', 'mousedown', function (e) {
-      if (detailEditMode) return;   // 编辑模式下禁止拖选行
+      // 计重编辑模式：在推算载重格上左键按下 → 启动「拖动批量删除」（锚点 + 快照 + 模式）。
+      // 应用发生在 mouseover（拖动）与 click（单击，走原切换逻辑），这里只记录。
+      if (detailEditMode) {
+        var det = e.target.closest && e.target.closest('td.derived-est, td.excluded-cell');
+        if (det && e.button === 0) {
+          e.preventDefault();                    // 防止拖动选中单元格文字
+          var trE = det.closest('tr');
+          var idxE = trE ? +trE.getAttribute('data-i') : -1;
+          var rE = state.rows[state.detailIdx];
+          var rowE = (rE && rE.raw) ? rE.raw[idxE] : null;
+          if (rowE) {
+            dragExc.active = true;
+            dragExc.moved = false;
+            dragExc.anchor = idxE;
+            dragExc.last = idxE;
+            dragExc.far = idxE;                    // 最远到达行（越过锚点判定用）
+            dragExc.snap = new Set(detailEditExcluded);          // 快照：回滑恢复的基准
+            dragExc.mode = detailEditExcluded.has(rowE) ? 'restore' : 'exclude';  // 起点状态定模式
+          }
+          return;
+        }
+        return;                                // 编辑模式下其他区域不启动拖选行
+      }
       var tr = e.target.closest('tr');
       if (!tr || tr.querySelector('td.stay') === e.target) return;
       e.preventDefault();
@@ -1117,14 +1219,28 @@
       dragSel.snap = new Set(state.detailSel);   // 记录拖动前选中快照
       // 起点已选中 → 取消模式；否则 → 加入模式（仅用于拖动，单击在 click 中处理）
       dragSel.mode = state.detailSel.has(dragSel.anchor) ? 'del' : 'add';
+      dragSel.last = dragSel.anchor;           // 上次指针行（回到锚点时按 anchor..last 恢复快照）
+      dragSel.far = dragSel.anchor;            // 最远到达行（越过锚点判定用）
     });
     on('detailBody', 'mouseover', function (e) {
+      // 拖动批量删除：经过的行按 mode 实时应用，回滑超出范围按快照复原
+      if (dragExc.active) {
+        var trX = e.target.closest('tr');
+        if (!trX) return;
+        var iX = +trX.getAttribute('data-i');
+        if (isNaN(iX) || iX === dragExc.last) return;
+        dragExc.moved = true;
+        applyExcRange(iX);
+        dragExc.last = iX;
+        return;
+      }
       if (!dragSel.active) return;
       var tr = e.target.closest('tr');
       if (!tr) return;
       var i = +tr.getAttribute('data-i');
       dragSel.moved = true;
       renderDrag(i);                             // 实时按当前行调整整段
+      dragSel.last = i;                          // 更新上次指针行（回到锚点时恢复范围的另一端）
     });
     function endDrag() {
       if (dragSel.active) {
@@ -1132,6 +1248,11 @@
         dragSel.anchor = -1;
         dragSel.snap = null;
       }
+      // 拖动批量删除结束；moved 保留给随后的 click 压制（click 里清）
+      dragExc.active = false;
+      dragExc.anchor = -1;
+      dragExc.last = -1;
+      dragExc.snap = null;
     }
     document.addEventListener('mouseup', endDrag);
     // 单击（未发生拖动）时切换该行选中状态；拖动已在 mouseover 中实时应用
