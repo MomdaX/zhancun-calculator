@@ -39,7 +39,7 @@
   var COL = global.Aggregate ? global.Aggregate.COL : null;
 
   /* app.js 注入的能力，见 init(deps) 的说明 */
-  var state, renderDetailRows, computeTotals, totalsSpansHtml, renderCurrentDetail, closeDetail;
+  var state, renderDetailRows, computeTotals, totalsSpansHtml, closeDetail;
   var inited = false;
 
   /* ==================== 状态 ==================== */
@@ -186,12 +186,18 @@
     });
     var dir = ($('simDir') && $('simDir').value) || 'S';
     rows = (dir === 'W') ? batch.concat(rows) : rows.concat(batch);
-    state.detailSel.clear();                  // 加入后取消明细选中，方便接着挑下一批
-    renderCurrentDetail();                    // 明细表重渲 → 选中高亮同步消失
+    // 刻意不清明细的选中：加完仍保留高亮，便于对照/继续追加同一批；
+    // 要取消选中按明细既有的交互走——点表格外（或标题栏）即可。
     render();
     if (added || skip) {
-      toast('推演面板：已从' + (dir === 'W' ? '上方' : '下方') + '加入 ' + added + ' 辆' +
-        (skip ? '，跳过重复 ' + skip + ' 辆' : ''), added ? 'ok' : 'error');
+      // 选中不再自动清空，所以「同一批再点一次」是常见操作：此时 added=0，
+      // 单独给一句明确的说明，避免出现「已加入 0 辆」这种读起来像故障的提示。
+      if (!added) {
+        toast('推演面板：这 ' + skip + ' 辆已在面板中，未重复加入', 'error');
+      } else {
+        toast('推演面板：已从' + (dir === 'W' ? '上方' : '下方') + '加入 ' + added + ' 辆' +
+          (skip ? '，跳过重复 ' + skip + ' 辆' : ''), 'ok');
+      }
     }
   }
 
@@ -343,7 +349,6 @@
    * @param {Function} deps.renderDetailRows   明细同款表格渲染（list, els, opts）
    * @param {Function} deps.computeTotals      辆数/换长/自重/载重/总重/计重
    * @param {Function} deps.totalsSpansHtml    标题统计 span 拼装
-   * @param {Function} deps.renderCurrentDetail 重渲当前股道明细（加车后清选中高亮）
    * @param {Function} deps.closeDetail        关闭明细抽屉（「主页」用）
    */
   function init(deps) {
@@ -353,7 +358,6 @@
     renderDetailRows = deps.renderDetailRows;
     computeTotals = deps.computeTotals;
     totalsSpansHtml = deps.totalsSpansHtml;
-    renderCurrentDetail = deps.renderCurrentDetail;
     closeDetail = deps.closeDetail;
 
     // 抽屉注册：不配遮罩——它与明细拼起来铺满视口，点哪一侧都是有效区域。

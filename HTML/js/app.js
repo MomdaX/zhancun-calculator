@@ -868,8 +868,8 @@
 
   /* =================== 推演面板（明细抽屉的「分身」） ===================
    * 已抽到 js/sim-panel.js（依赖注入 + 单向调用）：
-   *   state / renderDetailRows / computeTotals / totalsSpansHtml / renderCurrentDetail /
-   *   closeDetail 由本文件在 init() 时注入；本文件只在 4 个点回调它——
+   *   state / renderDetailRows / computeTotals / totalsSpansHtml / closeDetail
+   *   由本文件在 init() 时注入；本文件只在 4 个点回调它——
    *   init（装配）、resumeOnOpen（openDetail 末尾）、close（closeDetail 开头）、
    *   toggleEditMode 与 excludeDerivedEst（「双击计重」手势的派发）。
    * 面板内容与全部状态由模块内部持有。 */
@@ -1798,7 +1798,6 @@
       renderDetailRows: renderDetailRows,
       computeTotals: computeTotals,
       totalsSpansHtml: totalsSpansHtml,
-      renderCurrentDetail: renderCurrentDetail,
       closeDetail: closeDetail
     });
 
