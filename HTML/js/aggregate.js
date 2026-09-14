@@ -50,10 +50,13 @@
   var parseArriveTime = Utils.parseArriveTime;
   var hoursDiff = Utils.hoursDiff;
 
-  /** 卸车地点默认列表（用户可在设置面板增删，存于 Store.unloadSpots） */
+  /** 卸车地点默认列表（用户可在设置面板增删，存于 Store.unloadSpots）。
+   *  ⚠ 唯一出处是 dest-color.js（挂 global.DEFAULT_*，设置面板同源）；本地副本仅作
+   *  dest-color.js 加载异常时的兜底，改动默认值请改 dest-color.js，勿只改这里。 */
   var DEFAULT_UNLOAD_SPOTS = ['永鑫', '货场', '天盛', '港务局'];
 
-  /** 黑罐细化默认列表（G7 罐车按收货人列识别为具体黑罐子类，存于 Store.blackTankSpots） */
+  /** 黑罐细化默认列表（G7 罐车按收货人列识别为具体黑罐子类，存于 Store.blackTankSpots）。
+   *  同上：唯一出处 dest-color.js，本地仅兜底。 */
   var DEFAULT_BLACK_TANK_SPOTS = ['中粮', '外运'];
 
   /* ==========================================================================
@@ -71,9 +74,11 @@
      * "黑罐"识别为具体子类（中粮/外运）。列表来自 Store.blackTankSpots，可在设置增删。
      * 取「首个命中」的词（收货人列无"转"改写法，按列表顺序即可）。 */
     function resolveBlackTank(text) {
+      // 默认列表与设置面板同源（dest-color.js 挂 global），本地副本仅兜底
+      var defBlackTank = global.DEFAULT_BLACK_TANK_SPOTS || DEFAULT_BLACK_TANK_SPOTS;
       var list = (global.Store && global.Store.getList)
-        ? global.Store.getList(global.Store.KEYS.blackTankSpots, DEFAULT_BLACK_TANK_SPOTS)
-        : DEFAULT_BLACK_TANK_SPOTS;
+        ? global.Store.getList(global.Store.KEYS.blackTankSpots, defBlackTank)
+        : defBlackTank;
       if (!text) return '';
       for (var i = 0; i < list.length; i++) {
         if (vbInStr(text, list[i]) > 0) return list[i];
@@ -190,9 +195,11 @@
        *  - 普通多词（"永鑫货场"）：取记事里【首个】出现的地点词。
        *  - 含"转"的改卸写法（"货场转永鑫"）："转"表示改卸，取【转之后】那段里的
        *    首个地点词（永鑫），忽略转之前的部分。 */
+      // 默认列表与设置面板同源（dest-color.js 挂 global），本地副本仅兜底
+      var defUnload = global.DEFAULT_UNLOAD_SPOTS || DEFAULT_UNLOAD_SPOTS;
       var UNLOAD_SPOTS = (global.Store && global.Store.getList)
-        ? global.Store.getList(global.Store.KEYS.unloadSpots, DEFAULT_UNLOAD_SPOTS)
-        : DEFAULT_UNLOAD_SPOTS;
+        ? global.Store.getList(global.Store.KEYS.unloadSpots, defUnload)
+        : defUnload;
       var scan = note;
       var zhuan = vbInStr(note, '转');
       if (zhuan > 0) scan = note.substring(zhuan - 1 + 1);  // 只看"转"之后的子串

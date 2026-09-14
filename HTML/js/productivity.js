@@ -1,10 +1,20 @@
+/**
+ * productivity.js —— 生产指挥台（调机钩数 / 生产时间 / 班次时长 / 记事）
+ * ----------------------------------------------------------------------------
+ * 暴露全局：window.Productivity
+ * 加载顺序：须在 utils / store / ui 之后（app.js 之前亦可，仅自绑浮窗内事件）。
+ * 数据存取一律走 Store.KEYS.productivity（键名集中登记，勿散写字符串）。
+ * 「最近更新」只认表体内容（.prod-in）改动，表头 meta 与配置不计入。
+ * ----------------------------------------------------------------------------
+ */
 (function (global) {
+  'use strict';
   if (!global.Utils) return;
   var Utils = global.Utils;
   var Store = global.Store;
   var UI = global.UI;
   var NAMES = ['1调', '2调', '3调'];
-  var STORE_KEY = 'productivity';
+  var STORE_KEY = Store.KEYS.productivity;   // 键名集中登记于 store.js（原为散写字符串，值不变、老数据兼容）
 
   // 复用 Utils.$（原先本地又重写了一遍 getElementById）
   var $ = Utils.$;

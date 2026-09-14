@@ -24,7 +24,9 @@
  *
  * 交互与明细抽屉对齐：面板内可单击 / 拖选（供「-」删除），点标题栏或表格外则取消选中；
  * 标题统计同样跟随选中——有选中行时显示「选中合计」，无选中行时显示全部行合计。
- * 加入采用「全有或全无」：选中里含重复则整批不加入，并在面板中把重复行闪 3 次（flashByKeys）。
+ * 加入采用「全有或全无」：选中里含重复则整批不加入，并在面板中把重复行闪 3 次（flashByKeys）；
+ * 成功加入的那一批会记进 justAdded，渲染时挂 .sim-new（行首蓝条 + 淡蓝底）标出「本次加入」；
+ * 该标记不跨交互保留——点表格外、或收起面板（× / ESC / 关闭明细 /「主页」）即清除。
  * 生命周期：内容只由「重置」清空；X 关闭、ESC、关闭明细都只是收起，内容保留。
  * 加载顺序：须在 app.js 之前（app.js 的 init 会调用 SimPanel.init）。
  * ============================================================================
@@ -48,6 +50,7 @@
   var rows = [];                 // 面板中的车辆（保持「加入先后」顺序）
   var keys = {};                 // 车号去重：key → true
   var sel = new Set();           // 面板内选中的行下标（供「-」删除）
+  var justAdded = new Set();     // 最近一次「+」加入的车（行对象），用于行首蓝条标记
   var isOpen = false;
   var resume = false;            // 「主页」隐藏过 → 下次打开明细时把面板一起带回来
   var editMode = false;          // 「计重」编辑态（与明细同一套交互）
@@ -56,6 +59,7 @@
   var flashTimer = null;         // 重复车辆闪烁的收尾计时器（保证连点也能重新闪）
   var FLASH_CLASS = 'sim-dup-flash';
   var FLASH_MS = 1200;           // 0.4s × 3 次，与 CSS 动画保持一致
+  var NEW_CLASS = 'sim-new';     // 「本次加入」的行标记类
 
   /** 车辆去重键：以车号为准；车号为空时用「股道#顺位」兜底，保证仍能加入且可去重 */
   function keyOf(row) {
@@ -76,7 +80,12 @@
       // 序号 = 本板顺序，而非车辆在原股道明细中的顺位
       seqText: function (row, i) { return String(i + 1); },
       rowAttr: function (row, i) {
-        return ' data-i="' + i + '"' + (sel.has(i) ? ' class="selected"' : '');
+        var cls = [];
+        if (sel.has(i)) cls.push('selected');
+        // 「本次加入」的标记：按行对象判断而非下标——插入方向可上可下、删行还会重排，
+        // 只有对象引用是稳定的（同一辆车在面板里始终是同一个引用）
+        if (justAdded.has(row)) cls.push(NEW_CLASS);
+        return ' data-i="' + i + '"' + (cls.length ? ' class="' + cls.join(' ') + '"' : '');
       },
       // 「计重」编辑：进入编辑才显示载重列推算值（供删除），与明细同一套渲染分支
       excluded: editExcluded,
@@ -207,6 +216,7 @@
     batch.forEach(function (row) { keys[keyOf(row)] = true; });
     var dir = ($('simDir') && $('simDir').value) || 'S';
     rows = (dir === 'W') ? batch.concat(rows) : rows.concat(batch);
+    justAdded = new Set(batch);   // 只有最近一批算「本次加入」：旧标记整体让位（下次 render 即生效）
     // 刻意不清明细的选中：加完仍保留高亮，便于对照/继续追加同一批；
     // 要取消选中按明细既有的交互走——点表格外（或标题栏）即可。
     render();
@@ -222,6 +232,7 @@
         var row = rows[i];
         delete keys[keyOf(row)];
         editExcluded.delete(row);   // 同步清理计重编辑态里的残留
+        justAdded.delete(row);      // 以及「本次加入」标记里的残留
       } else keep.push(rows[i]);
     }
     rows = keep;
@@ -236,6 +247,7 @@
     keys = {};
     sel.clear();
     editExcluded.clear();
+    justAdded.clear();
     if (editMode) setEditMode(false);   // 内部会重渲
     else render();
     toast('推演面板已重置', 'ok');
@@ -283,6 +295,18 @@
     var trs = $('simBody') ? $('simBody').querySelectorAll('tr.selected') : [];
     for (var i = 0; i < trs.length; i++) trs[i].classList.remove('selected');
     updateTitle();   // 标题回到「全部行合计」
+  }
+
+  /** 清「本次加入」标记。标记只对"刚加进来"这一小段时间有意义，
+   *  用户一旦把注意力移开（点表格外）或收起面板，它就失去价值，故一并清掉。
+   *  注意：光清 Set 不会摘掉行上的类，得手动摘（与 clearSel 同款做法，避免为此整表重渲）。 */
+  function clearJustAdded() {
+    if (!justAdded.size) return;
+    justAdded.clear();
+    var body = $('simBody');
+    if (!body) return;
+    var trs = body.querySelectorAll('tr.' + NEW_CLASS);
+    for (var i = 0; i < trs.length; i++) trs[i].classList.remove(NEW_CLASS);
   }
 
   /** 单行选中状态切换（与明细同样用 .selected 高亮） */
@@ -346,8 +370,8 @@
    *  两处放行是为了不误伤自己：
    *    · 表格内——那是框选区域，由 bindTableSelection 负责；
    *    · 方向下拉——边上的控件，点它不应把刚选好的车丢掉。
-   *  面板里的按钮无需在此排除：它们在 init 里已对 mousedown 做了 stopPropagation，
-   *  document 根本收不到（否则点「-」会先清空选中，删除就失效了）。 */
+   *  面板里的按钮与分隔条也无需在此排除：它们在各自的 mousedown 里已 stopPropagation，
+   *  document 根本收不到（否则点「-」会先清空选中、删除就失效；拖分隔条也会把选中一起清掉）。 */
   function bindClearSelection() {
     document.addEventListener('mousedown', function (e) {
       if (drag.active) return;                       // 正在拖动框选，不清
@@ -355,6 +379,7 @@
       if (!t || !t.closest) return;
       if (t.closest('#simTable, #simDir')) return;
       clearSel();
+      clearJustAdded();
     });
   }
 
@@ -412,6 +437,8 @@
         if (!isOpen) return;
         isOpen = false;
         document.body.classList.remove('sim-open');
+        // 「本次加入」标记不跨收起保留：× 按钮 / ESC / 关闭明细 /「主页」都走这里
+        clearJustAdded();
         var b = $('btnSim');
         if (b) {
           b.textContent = '推演面板';

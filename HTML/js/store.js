@@ -207,7 +207,8 @@
     depCheci: 'depCheci',                        // 待发股道车次映射；由外部页写入，读取须直连 localStorage（绕过 Store 内存缓存）
     depModalSize: 'depModalSize',                // 发车作业浮窗尺寸记忆
     carTypeCfgCollapsed: 'carTypeCfgCollapsed',  // 车型高亮配置表收起状态
-    eyeProtect: 'eyeProtect'                     // 护眼背景色浓度
+    eyeProtect: 'eyeProtect',                    // 护眼背景色浓度
+    productivity: 'productivity'                 // 生产指挥台（钩数 / 生产时间表体内容 + 表头 meta）
   };
 
   global.Store = {
