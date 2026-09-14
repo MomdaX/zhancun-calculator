@@ -1053,6 +1053,14 @@ body.sim-open .sim-splitter { display: block; }
 .drawer-head .sim-dir { padding: 4px 6px; min-width: 46px; }
 /* 推演面板标题栏按钮间距收紧（明细抽屉保持 10px 不变） */
 .drawer-sim .drawer-head { gap: 4px; }
+/* 「+」加入时发现该车已在面板中 → 对应行闪 3 次做提示（0.4s × 3 ≈ 1.2s，与 JS 的收尾计时一致）。
+   用 keyframes 而非内联样式：既不会被隔行底色/选中高亮盖掉，也能靠移除类可靠复位。
+   起点/终点用「全透明琥珀」而不是 transparent，避免闪完那一瞬把行底色刷成白。 */
+@keyframes sim-dup-flash {
+  0%, 100% { background-color: rgba(255, 170, 60, 0); }
+  50%      { background-color: rgba(255, 170, 60, .75); }
+}
+#simTable tbody tr.sim-dup-flash td { animation: sim-dup-flash .4s ease-in-out 3; }
 
 .search-count { font-size: 12px; color: var(--text-dim); white-space: nowrap; min-width: 66px; flex: none; }
 .search-modes { display: inline-flex; gap: 4px; }

@@ -24,6 +24,7 @@
  *
  * 交互与明细抽屉对齐：面板内可单击 / 拖选（供「-」删除），点标题栏或表格外则取消选中；
  * 标题统计同样跟随选中——有选中行时显示「选中合计」，无选中行时显示全部行合计。
+ * 加入采用「全有或全无」：选中里含重复则整批不加入，并在面板中把重复行闪 3 次（flashByKeys）。
  * 生命周期：内容只由「重置」清空；X 关闭、ESC、关闭明细都只是收起，内容保留。
  * 加载顺序：须在 app.js 之前（app.js 的 init 会调用 SimPanel.init）。
  * ============================================================================
@@ -52,6 +53,9 @@
   var editMode = false;          // 「计重」编辑态（与明细同一套交互）
   var editExcluded = new Set();  // 编辑态中被删除推算载重的行
   var drag = { active: false, moved: false, anchor: -1, snap: null, mode: 'add' };
+  var flashTimer = null;         // 重复车辆闪烁的收尾计时器（保证连点也能重新闪）
+  var FLASH_CLASS = 'sim-dup-flash';
+  var FLASH_MS = 1200;           // 0.4s × 3 次，与 CSS 动画保持一致
 
   /** 车辆去重键：以车号为准；车号为空时用「股道#顺位」兜底，保证仍能加入且可去重 */
   function keyOf(row) {
@@ -161,11 +165,14 @@
 
   /* ==================== 内容操作 ==================== */
 
-  /** 把明细抽屉当前选中的行加入面板（按车号去重，整组插入）。没选任何行 → 提示不动作。
+  /** 把明细抽屉当前选中的行加入面板。没选任何行 → 提示不动作。
+   *  【全有或全无】选中里只要有一辆重复——面板中已有，或选中内部选到同一车号——
+   *  则**整批都不加入**，改为在面板中把重复的那些行闪 3 次提示；明细选中保持不动，
+   *  便于用户剔除重复项后重试。
    *  插入方向由标题栏下拉决定（与"升序/降序"无关，是插在已有内容的上方还是下方）：
    *    S（默认）= 从下方插入 → 追加到末尾
    *    W        = 从上方插入 → 插到最前面
-   *  两种都是「整组」插入：本批内部保持选中先后，不拆散、不重排已有内容。 */
+   *  插入时整组保持选中先后，不拆散、不重排已有内容。 */
   function addSelected() {
     var r = state.rows[state.detailIdx];
     if (!r || !state.detailSel || !state.detailSel.size) {
@@ -173,32 +180,37 @@
       return;
     }
     var list = r.raw || [];
-    var added = 0, skip = 0;
-    var batch = [];                           // 本批要加入的车（保持选中先后）
+
+    // 第一遍：只校验，不落库。因为「含重复则整批不加」，若边校验边写 keys，
+    // 整批放弃时还得回滚——两遍走法从根上杜绝脏数据。
+    var batch = [];        // 本批要加入的车（保持选中先后）
+    var dupKeys = [];      // 重复车的去重键（面板中已有 / 选中内部选重），供闪烁反查
+    var seen = {};         // 本批内部去重：明细里同一车号出现两次时同样按重复处理
     state.detailSel.forEach(function (i) {
       var row = list[i];
       if (!row) return;
       var k = keyOf(row);
-      if (keys[k]) { skip++; return; }        // 已存在：按车号去重，不重复加入
-      keys[k] = true;
+      if (keys[k] || seen[k]) { dupKeys.push(k); return; }
+      seen[k] = true;
       batch.push(row);
-      added++;
     });
+
+    // 有重复 → 整批不加。此时面板内容未变，直接对着现有 DOM 闪即可，无需 render。
+    if (dupKeys.length) {
+      flashByKeys(dupKeys);
+      toast('推演面板：选中里有 ' + dupKeys.length + ' 辆重复，整批 ' +
+        (batch.length + dupKeys.length) + ' 辆均未加入', 'error');
+      return;
+    }
+
+    // 第二遍：确认无重复，才落库并插入
+    batch.forEach(function (row) { keys[keyOf(row)] = true; });
     var dir = ($('simDir') && $('simDir').value) || 'S';
     rows = (dir === 'W') ? batch.concat(rows) : rows.concat(batch);
     // 刻意不清明细的选中：加完仍保留高亮，便于对照/继续追加同一批；
     // 要取消选中按明细既有的交互走——点表格外（或标题栏）即可。
     render();
-    if (added || skip) {
-      // 选中不再自动清空，所以「同一批再点一次」是常见操作：此时 added=0，
-      // 单独给一句明确的说明，避免出现「已加入 0 辆」这种读起来像故障的提示。
-      if (!added) {
-        toast('推演面板：这 ' + skip + ' 辆已在面板中，未重复加入', 'error');
-      } else {
-        toast('推演面板：已从' + (dir === 'W' ? '上方' : '下方') + '加入 ' + added + ' 辆' +
-          (skip ? '，跳过重复 ' + skip + ' 辆' : ''), 'ok');
-      }
-    }
+    toast('推演面板：已从' + (dir === 'W' ? '上方' : '下方') + '加入 ' + batch.length + ' 辆', 'ok');
   }
 
   /** 删除面板中选中的车辆（「-」按钮） */
@@ -227,6 +239,39 @@
     if (editMode) setEditMode(false);   // 内部会重渲
     else render();
     toast('推演面板已重置', 'ok');
+  }
+
+  /**
+   * 重复车辆提示：让面板中对应行闪烁 3 次。
+   * 入参用「去重键」而非行对象——车号相同的车，明细里可能是另一个行对象，
+   * 面板里存的是先加入的那个引用，按 key 反查才不会漏闪。
+   * 必须在 render() 之后调用：render 会重建 tbody，先加类会被冲掉。
+   */
+  function flashByKeys(dupKeys) {
+    var body = $('simBody');
+    if (!body) return;
+    var trs = [];
+    dupKeys.forEach(function (k) {
+      for (var i = 0; i < rows.length; i++) {
+        if (keyOf(rows[i]) !== k) continue;
+        var tr = body.querySelector('tr[data-i="' + i + '"]');
+        if (tr && trs.indexOf(tr) < 0) trs.push(tr);
+        break;
+      }
+    });
+    if (!trs.length) return;
+
+    // 先清掉上一批（含未跑完的计时器），再重新触发：连点「+」时才能重新闪而不是被忽略
+    if (flashTimer) { clearTimeout(flashTimer); flashTimer = null; }
+    var old = body.querySelectorAll('tr.' + FLASH_CLASS);
+    for (var j = 0; j < old.length; j++) old[j].classList.remove(FLASH_CLASS);
+    void body.offsetWidth;   // 强制回流：让同一个动画类能被重新触发
+    trs.forEach(function (tr) { tr.classList.add(FLASH_CLASS); });
+
+    flashTimer = setTimeout(function () {
+      trs.forEach(function (tr) { tr.classList.remove(FLASH_CLASS); });
+      flashTimer = null;
+    }, FLASH_MS);
   }
 
   /* ==================== 面板内行选中（供「-」删除） ==================== */
