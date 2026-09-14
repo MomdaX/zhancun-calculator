@@ -1,5 +1,5 @@
 /**
- * dest-color.js —— 到站富文本着色与辅助（从 app.js 抽出，P2-7 第三步）
+ * dest-color.js —— 到站富文本着色与辅助（纯函数：主表 / 明细 / 搜索共用同一口径）
  *
  * 纯函数（输入文本/片段 → 输出 HTML 串或布尔），被主表渲染与明细抽屉共用。
  * 依赖：Utils（carTypeMatch / carTypeClass / escapeHtml）、Store（词表配置）、Aggregate.COL；
@@ -35,7 +35,7 @@
     if (!p) return false;
     var name = String(p).replace(/\d+$/, '');   // 去尾数：永鑫50 → 永鑫
     if (!name) return false;
-    var list = (Store.getList && Store.getList('unloadSpots', DEFAULT_UNLOAD_SPOTS)) ||
+    var list = (Store.getList && Store.getList(Store.KEYS.unloadSpots, DEFAULT_UNLOAD_SPOTS)) ||
                DEFAULT_UNLOAD_SPOTS;
     return list.indexOf(name) >= 0;
   }
@@ -49,7 +49,7 @@
     if (!p) return false;
     var name = String(p).replace(/\d+$/, '');
     if (!name) return false;
-    var list = (Store.getList && Store.getList('blackTankSpots', DEFAULT_BLACK_TANK_SPOTS)) ||
+    var list = (Store.getList && Store.getList(Store.KEYS.blackTankSpots, DEFAULT_BLACK_TANK_SPOTS)) ||
                DEFAULT_BLACK_TANK_SPOTS;
     return list.indexOf(name) >= 0;
   }

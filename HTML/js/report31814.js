@@ -15,6 +15,8 @@
   'use strict';
 
   var COL = global.Aggregate ? global.Aggregate.COL : null;
+  // 持久化封装（store.js 先于本文件加载）；键名一律走 Store.KEYS.*，避免散写字符串拼错后静默失效
+  var Store = global.Store;
 
   /** 待卸纠正的 4 个车种（C/X/P/G）。输入框 id 统一为 `corr<类型>`，
    *  统一由此常量派生，避免多处硬编码 ['corrC','corrX','corrP','corrG'] */
@@ -82,7 +84,7 @@
     document.querySelectorAll('#cfgTracks input:checked').forEach(function (cb) {
       if (cb && cb.dataset && cb.dataset.track) checked.push(cb.dataset.track);
     });
-    if (global.Store) global.Store.set('cfgDzChecked', checked);
+    if (Store) Store.set(Store.KEYS.cfgDzChecked, checked);
   }
 
   /** 默认待装「用户自定义集合」：设置模式下勾选即覆盖保存，点「默认待装」时应用 */
@@ -91,10 +93,10 @@
     document.querySelectorAll('#cfgTracks input:checked').forEach(function (cb) {
       if (cb && cb.dataset && cb.dataset.track) ids.push(cb.dataset.track);
     });
-    if (global.Store) global.Store.set('cfgDzDefault', ids);
+    if (Store) Store.set(Store.KEYS.cfgDzDefault, ids);
   }
   function loadDzDefault() {
-    var v = (global.Store && global.Store.get) ? global.Store.get('cfgDzDefault', []) : [];
+    var v = (Store && Store.get) ? Store.get(Store.KEYS.cfgDzDefault, []) : [];
     return (v && Array.isArray(v)) ? v : [];
   }
 
@@ -122,7 +124,7 @@
 
   /** 打开 31814 时恢复上次勾选的待装股道 */
   function restoreDzChecked() {
-    var saved = (global.Store && global.Store.get) ? global.Store.get('cfgDzChecked', []) : [];
+    var saved = (Store && Store.get) ? Store.get(Store.KEYS.cfgDzChecked, []) : [];
     if (!saved) return;
     saved.forEach(function (id) {
       var cb = Utils.$('cfgTrack_' + id);
@@ -907,10 +909,10 @@
       var el = document.getElementById(id);
       if (!el) return;
       var save = function () {
-        var all = (global.Store && global.Store.get) ? global.Store.get('corrInputs', {}) : {};
+        var all = (Store && Store.get) ? Store.get(Store.KEYS.corrInputs, {}) : {};
         all = all || {};
         all[id] = el.value;
-        if (global.Store) global.Store.set('corrInputs', all);
+        if (Store) Store.set(Store.KEYS.corrInputs, all);
       };
       el.addEventListener('change', save);
       el.addEventListener('blur', save);
@@ -987,7 +989,7 @@
         var item = del.closest('.cfg-ready-item');
         var id = item.getAttribute('data-ready-id');
         delete readyTrains[id];
-        if (global.Store) global.Store.set('readyTrains', readyTrains);
+        if (Store) Store.set(Store.KEYS.readyTrains, readyTrains);
         updateReadyChip(item, id);
         // 删除后收起整个编辑区（含输入框），由「+」按钮重新添加
         var holder = item.querySelector('.cfg-ready-train-holder');
@@ -1015,7 +1017,7 @@
       var id = inp.getAttribute('data-train-for');
       var val = inp.value.trim();
       if (val) readyTrains[id] = val; else delete readyTrains[id];
-      if (global.Store) global.Store.set('readyTrains', readyTrains);
+      if (Store) Store.set(Store.KEYS.readyTrains, readyTrains);
       runCalculation();
     });
     // 回车确认：把输入框翻转成「车次芯片」，隐藏输入框
@@ -1027,7 +1029,7 @@
       var id = inp.getAttribute('data-train-for');
       var val = inp.value.trim();
       if (val) readyTrains[id] = val; else delete readyTrains[id];
-      if (global.Store) global.Store.set('readyTrains', readyTrains);
+      if (Store) Store.set(Store.KEYS.readyTrains, readyTrains);
       inp.style.display = 'none';
       updateReadyChip(item, id);
       runCalculation();
@@ -1173,14 +1175,14 @@
     syncGroupState();
     syncDzToggleButtons();
     // 打开时恢复上次本地持久记忆的纠正输入
-    var savedCorr = (global.Store && global.Store.get) ? global.Store.get('corrInputs', {}) : {};
+    var savedCorr = (Store && Store.get) ? Store.get(Store.KEYS.corrInputs, {}) : {};
     savedCorr = savedCorr || {};
     CORR_IDS.forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.value = (savedCorr[id] != null ? savedCorr[id] : '');
     });
     // 打开时恢复车次输入（待发股道 → 车次映射）
-    var savedTrains = (global.Store && global.Store.get) ? global.Store.get('readyTrains', {}) : {};
+    var savedTrains = (Store && Store.get) ? Store.get(Store.KEYS.readyTrains, {}) : {};
     readyTrains = savedTrains || {};
     document.querySelectorAll('#cfgReady .cfg-ready-item').forEach(function (item) {
       var id = item.getAttribute('data-ready-id');

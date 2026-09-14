@@ -198,9 +198,11 @@
     estLoadGoods: 'estLoadGoods',     // 货物推算重量：[{ name, weight }] 列表（载重缺失时记事命中 name → 用 weight）
     xlsDir: 'xlsDir',
     detailCols: 'zhancun.detail.cols.v2',   // 历史列宽记忆键（已带前缀，keyOf 原样返回）
+    gridCols: 'zhancun.grid.cols.v2',       // 主表列宽记忆键（同上）；改列序时递增版本号即可让旧记忆整体失效
     cfgDzChecked: 'cfgDzChecked',
+    cfgDzDefault: 'cfgDzDefault',       // 待装股道「默认待装」集合（用户自定义默认值，与本次勾选 cfgDzChecked 区分）
     corrInputs: 'corrInputs',
-    readyTrains: 'readyTrains',
+    readyTrains: 'readyTrains',          // 待发股道车次映射 { 股道id: 车次 }——主表「编好车次」列也读它
     // 以下 4 个原为散写的字符串键（未集中登记），补入后调用处统一用 Store.KEYS.xxx
     depCheci: 'depCheci',                        // 待发股道车次映射；由外部页写入，读取须直连 localStorage（绕过 Store 内存缓存）
     depModalSize: 'depModalSize',                // 发车作业浮窗尺寸记忆

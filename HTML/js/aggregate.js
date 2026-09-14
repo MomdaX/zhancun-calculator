@@ -72,7 +72,7 @@
      * 取「首个命中」的词（收货人列无"转"改写法，按列表顺序即可）。 */
     function resolveBlackTank(text) {
       var list = (global.Store && global.Store.getList)
-        ? global.Store.getList('blackTankSpots', DEFAULT_BLACK_TANK_SPOTS)
+        ? global.Store.getList(global.Store.KEYS.blackTankSpots, DEFAULT_BLACK_TANK_SPOTS)
         : DEFAULT_BLACK_TANK_SPOTS;
       if (!text) return '';
       for (var i = 0; i < list.length; i++) {
@@ -191,7 +191,7 @@
        *  - 含"转"的改卸写法（"货场转永鑫"）："转"表示改卸，取【转之后】那段里的
        *    首个地点词（永鑫），忽略转之前的部分。 */
       var UNLOAD_SPOTS = (global.Store && global.Store.getList)
-        ? global.Store.getList('unloadSpots', DEFAULT_UNLOAD_SPOTS)
+        ? global.Store.getList(global.Store.KEYS.unloadSpots, DEFAULT_UNLOAD_SPOTS)
         : DEFAULT_UNLOAD_SPOTS;
       var scan = note;
       var zhuan = vbInStr(note, '转');

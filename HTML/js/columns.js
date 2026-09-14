@@ -1,5 +1,5 @@
 /**
- * columns.js —— 列定义与"编好"列配置（从 app.js 抽出，P2-7 第二步）
+ * columns.js —— 列定义与「编好」列配置（纯常量：零逻辑、零 DOM）
  *
  * 纯常量，零逻辑、零 DOM。仅依赖 Aggregate.COL（index.html 中 aggregate.js 已先加载）。
  * 通过 global 暴露，供 app.js 主表渲染 / 明细抽屉直接按原名字引用。
@@ -19,7 +19,7 @@
     { key: 'length',    title: '换长',           width: 58,  num: true, cls: 'mid' },
     { key: 'dest',      title: '车辆信息',       width: 340, dest: true },
     // 编好车次：按股道录入的编组车次（双击编辑）。数据源是 Store.KEYS.readyTrains，
-    // 与 31814 报表「待发股道车次」、发车流程「车次」共用同一份持久化（见 app.js checiOf/setCheci）
+    // 与 31814 报表「待发股道车次」、发车流程「车次」共用同一份持久化（见 js/checi-store.js）
     { key: 'checi',     title: '编好车次',       width: 88 },
     // 发送：只承载「编好」伪元素按钮，不显示任何数据（原「重车」列，数字已取消）
     { key: 'send',      title: '发送',           width: 56 },

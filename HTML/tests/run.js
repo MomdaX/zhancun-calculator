@@ -26,8 +26,9 @@ const vm = require('vm');
 /* ==================== 把浏览器脚本载入 Node 沙箱 ==================== */
 
 const ROOT = path.join(__dirname, '..');      // HTML/
-const SRC = ['js/utils.js', 'js/store.js', 'js/ui.js', 'js/aggregate.js',
-             'js/columns.js', 'js/dest-color.js', 'js/direction.data.js', 'js/track.config.js', 'js/rpt31814-calc.js', 'js/data-source.js',
+const SRC = ['js/utils.js', 'js/store.js', 'js/checi-store.js', 'js/ui.js', 'js/aggregate.js',
+             'js/columns.js', 'js/dest-color.js', 'js/direction.data.js', 'js/track.config.js',
+             'js/grid-layout.js', 'js/rpt31814-calc.js', 'js/data-source.js',
              'js/config-io.js'];
 
 const memStore = {};
@@ -195,21 +196,24 @@ suite('carStyle 列索引解耦', () => {
     eq(Utils.carTypeClass('X70'),    ctcOf('X'));  // X 项 contains 模式
     // 即使把 X 项在设置里改成 starts，NX 项仍能罩住 NX 开头
     const saved = sandbox.Store;
-    sandbox.Store = { get: () => [
+    // 用 Object.assign 保留真 Store 的其余成员（KEYS/PREFIX 等）：只替换 get，
+    // 别把 Store 变成"没有 KEYS 的残缺对象"——聚合与 utils 都会读 Store.KEYS
+    sandbox.Store = Object.assign({}, saved, { get: () => [
       { prefix: 'NX', match: 'starts',   on: true, bold: false, color: '#a0aec0' },
       { prefix: 'X',  match: 'starts',   on: true, bold: false, color: '#a0aec0' }   // 用户改成了 starts
-    ]};
-    eq(Utils.carTypeClass('NX70AF'), 'ctc-0');
-    eq(Utils.carTypeClass('X70'),    'ctc-1');
-    sandbox.Store = saved;
+    ]});
+    try {
+      eq(Utils.carTypeClass('NX70AF'), 'ctc-0');
+      eq(Utils.carTypeClass('X70'),    'ctc-1');
+    } finally { sandbox.Store = saved; }
   });
   t('carTypeClass：硬兜底——配置里 X/NX 被删光，X/NX 开头仍命中灰底', () => {
     // 模拟用户在设置里把 X/NX 两项都删了（或者都 on:false 跳过）
     const saved = sandbox.Store;
-    sandbox.Store = { get: () => [
+    sandbox.Store = Object.assign({}, saved, { get: () => [
       { prefix: 'P', match: 'starts', on: true, bold: false, color: '#ecc94b' }
       // 没有 X，没有 NX
-    ]};
+    ]});
     try {
       eq(Utils.carTypeClass('X70'),    '__ctc_fallback__');
       eq(Utils.carTypeClass('NX70AF'), '__ctc_fallback__');
@@ -221,10 +225,10 @@ suite('carStyle 列索引解耦', () => {
   });
   t('carTypeClass：硬兜底——X/NX 被关掉（on:false）时仍生效', () => {
     const saved = sandbox.Store;
-    sandbox.Store = { get: () => [
+    sandbox.Store = Object.assign({}, saved, { get: () => [
       { prefix: 'NX', match: 'starts', on: false, bold: false, color: '#a0aec0' },
       { prefix: 'X',  match: 'starts', on: false, bold: false, color: '#a0aec0' }
-    ]};
+    ]});
     try {
       eq(Utils.carTypeClass('X70'),    '__ctc_fallback__');
       eq(Utils.carTypeClass('NX70AF'), '__ctc_fallback__');
@@ -242,7 +246,7 @@ suite('carStyle 列索引解耦', () => {
   });
   t('carTypeMatch：硬兜底 X 也带 isFlatbed=true（主表不挂底色）', () => {
     const saved = sandbox.Store;
-    sandbox.Store = { get: () => [{ prefix: 'P', match: 'starts', on: true, bold: false, color: '#ecc94b' }] };
+    sandbox.Store = Object.assign({}, saved, { get: () => [{ prefix: 'P', match: 'starts', on: true, bold: false, color: '#ecc94b' }] });
     try {
       const m = Utils.carTypeMatch('X70');
       ok(m && m.isFlatbed === true, '未被配置命中的 X 兜底为平板车');
@@ -254,11 +258,12 @@ suite('carStyle 列索引解耦', () => {
   });
   t('carTypeClass：以 Store 中的自定义配置为准', () => {
     const saved = sandbox.Store;
-    sandbox.Store = { get: () => [{ prefix: 'P', match: 'starts', on: false, bold: true, color: '#e53e3e' }] };
-    eq(Utils.carTypeClass('P5'), '');             // 关掉的项不生效
-    sandbox.Store = { get: () => [{ prefix: 'P', match: 'starts', on: true, bold: true, color: '#e53e3e' }] };
-    eq(Utils.carTypeClass('P5'), 'ctc-0');        // 自定义配置的下标从 0 起算
-    sandbox.Store = saved;
+    sandbox.Store = Object.assign({}, saved, { get: () => [{ prefix: 'P', match: 'starts', on: false, bold: true, color: '#e53e3e' }] });
+    try {
+      eq(Utils.carTypeClass('P5'), '');             // 关掉的项不生效
+      sandbox.Store = Object.assign({}, saved, { get: () => [{ prefix: 'P', match: 'starts', on: true, bold: true, color: '#e53e3e' }] });
+      eq(Utils.carTypeClass('P5'), 'ctc-0');        // 自定义配置的下标从 0 起算
+    } finally { sandbox.Store = saved; }
   });
   t('改 COL.CARTYPE 后 carStyle 跟随（证明未硬编码索引）', () => {
     const origType = COL.CARTYPE, origNo = COL.CARNO;
@@ -334,23 +339,27 @@ suite('到站推断', () => {
   });
   t('段2 细化：卸车地点可配置（Store.unloadSpots 覆盖默认）', () => {
     const saved = sandbox.Store;   // 脚本在 vm 沙箱运行，global 即 sandbox
-    sandbox.Store = { get: k => (k === 'unloadSpots' ? ['大榄坪', '勒沟'] : null),
-                      getList: (k, d) => (k === 'unloadSpots' ? ['大榄坪', '勒沟'] : d) };
-    eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '卸大榄坪' })), '大榄坪');
-    eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '勒沟转大榄坪' })), '大榄坪');
-    // 默认列表里的词不再生效
-    eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '卸永鑫' })), '到卸');
-    sandbox.Store = saved;   // 还原，避免影响后续用例
+    try {
+      sandbox.Store = Object.assign({}, saved, {
+        get: k => (k === 'unloadSpots' ? ['大榄坪', '勒沟'] : null),
+        getList: (k, d) => (k === 'unloadSpots' ? ['大榄坪', '勒沟'] : d) });
+      eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '卸大榄坪' })), '大榄坪');
+      eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '勒沟转大榄坪' })), '大榄坪');
+      // 默认列表里的词不再生效
+      eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '卸永鑫' })), '到卸');
+    } finally { sandbox.Store = saved; }   // 还原：假 Store 泄漏会污染后续所有用例
   });
 
   t('段2 细化：取词前先按"转"截断（仅取转之后的子串）', () => {
     // 默认列表含 永鑫/货场/天盛/港务局，但配置里删掉永鑫后：
     const saved = sandbox.Store;
-    sandbox.Store = { get: k => (k === 'unloadSpots' ? ['货场', '天盛', '港务局'] : null),
-                      getList: (k, d) => (k === 'unloadSpots' ? ['货场', '天盛', '港务局'] : d) };
-    eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '货场转永鑫' })), '到卸'); // 永鑫不在配置
-    eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '天盛转货场' })), '货场'); // 取转后
-    sandbox.Store = saved;
+    try {
+      sandbox.Store = Object.assign({}, saved, {
+        get: k => (k === 'unloadSpots' ? ['货场', '天盛', '港务局'] : null),
+        getList: (k, d) => (k === 'unloadSpots' ? ['货场', '天盛', '港务局'] : d) });
+      eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '货场转永鑫' })), '到卸'); // 永鑫不在配置
+      eq(rd(mkRow({ LOAD: 60, DEST: '钦州港', NOTE: '天盛转货场' })), '货场'); // 取转后
+    } finally { sandbox.Store = saved; }
   });
   t('段3：载重/到站/记事皆空，按车种车号判定', () => {
     eq(rd(mkRow({ CARTYPE: 'G60', CARNO: '6123456' })), '路罐');
@@ -369,11 +378,13 @@ suite('到站推断', () => {
   });
   t('段1 黑罐细化：可配置（Store.blackTankSpots 覆盖默认）', () => {
     const saved = sandbox.Store;
-    sandbox.Store = { get: k => (k === 'blackTankSpots' ? ['益海', '九三'] : null),
-                      getList: (k, d) => (k === 'blackTankSpots' ? ['益海', '九三'] : d) };
-    eq(rd(mkRow({ CARTYPE: 'G70', CARNO: '0712345', CONSIGNEE: '益海嘉里' })), '益海');
-    eq(rd(mkRow({ CARTYPE: 'G70', CARNO: '0712345', CONSIGNEE: '中粮' })), '黑罐'); // 默认词失效
-    sandbox.Store = saved;
+    try {
+      sandbox.Store = Object.assign({}, saved, {
+        get: k => (k === 'blackTankSpots' ? ['益海', '九三'] : null),
+        getList: (k, d) => (k === 'blackTankSpots' ? ['益海', '九三'] : d) });
+      eq(rd(mkRow({ CARTYPE: 'G70', CARNO: '0712345', CONSIGNEE: '益海嘉里' })), '益海');
+      eq(rd(mkRow({ CARTYPE: 'G70', CARNO: '0712345', CONSIGNEE: '中粮' })), '黑罐'); // 默认词失效
+    } finally { sandbox.Store = saved; }
   });
   t('段1：记事命中站名时取「最长」匹配（防城港 不被截成 防城）', () => {
     eq(rd(mkRow({ LOAD: 5, DEST: '钦州港', NOTE: '防城港卸' })), '防城港');
@@ -783,6 +794,115 @@ suite('配置导入导出（config-io.js，JSON 编解码）', () => {
     const m = sandbox.ConfigIO.parseJson(sandbox.ConfigIO.toJson(sample));
     ok(!Object.prototype.hasOwnProperty.call(m, 'xlsDir'), '不应含 xlsDir');
   });
+});
+
+/* ==========================================================================
+ * 编好车次数据源（checi-store.js）
+ * —— 主表 / 发车流程 / 31814 报表三处共用，口径错一处就会三处不同步
+ * ========================================================================== */
+suite('编好车次数据源（checi-store.js，纯数据层）', () => {
+  const Checi = sandbox.Checi;
+
+  t('未录入返回空串', () => {
+    Checi.set('1', '');
+    eq(Checi.of('1'), '');
+  });
+
+  t('写入后可读回，且去掉首尾空格', () => {
+    Checi.set('2', '  45415 ');
+    eq(Checi.of('2'), '45415');
+  });
+
+  t('传空串即删除该项（不给 map 留空值）', () => {
+    Checi.set('3', '34102');
+    eq(Checi.of('3'), '34102');
+    Checi.set('3', '   ');
+    eq(Checi.of('3'), '');
+    ok(!Object.prototype.hasOwnProperty.call(Checi.map(), '3'), '空值应被删除而非留空串');
+  });
+
+  t('车次配色：方向 → class（沙口蓝 / 南口橙 / 管内紫）', () => {
+    eq(Checi.dirCls('沙口'), 'shakou');
+    eq(Checi.dirCls('南口'), 'nankou');
+    eq(Checi.dirCls('管内'), 'guanna');
+  });
+
+  t('车次配色：多方向按 沙 > 南 > 管 取优先级', () => {
+    eq(Checi.dirCls('南口\n沙口'), 'shakou');
+    eq(Checi.dirCls('管内\n南口'), 'nankou');
+  });
+
+  t('车次配色：无方向 / 到卸 → 空串（交给 CSS 用默认蓝）', () => {
+    eq(Checi.dirCls('到卸'), '');
+    eq(Checi.dirCls(''), '');
+    eq(Checi.dirCls(null), '');
+  });
+});
+
+/* ==========================================================================
+ * 发车报表股道写法换算（Utils.depTrackLabel）
+ * ========================================================================== */
+suite('股道写法换算（Utils.depTrackLabel）', () => {
+  t('X1~X15 换算成「N道」', () => {
+    eq(Utils.depTrackLabel('X6'), '6道');
+    eq(Utils.depTrackLabel('X1'), '1道');
+    eq(Utils.depTrackLabel('X15'), '15道');
+  });
+  t('只认「X+纯数字」，其它原样返回（不误伤）', () => {
+    eq(Utils.depTrackLabel('7道'), '7道');
+    eq(Utils.depTrackLabel('B1'), 'B1');
+    eq(Utils.depTrackLabel('Y5'), 'Y5');
+    eq(Utils.depTrackLabel('X'), 'X');
+    eq(Utils.depTrackLabel('x6'), 'x6');     // 小写不换算
+    eq(Utils.depTrackLabel('X6A'), 'X6A');   // 带后缀不换算
+  });
+  t('空值安全', () => {
+    eq(Utils.depTrackLabel(''), '');
+    eq(Utils.depTrackLabel(null), '');
+    eq(Utils.depTrackLabel(undefined), '');
+  });
+});
+
+/* ==========================================================================
+ * 主表布局计算（grid-layout.js）
+ * —— 算错的后果是"分组名/横幅错位"，看不出原因，故用不变量兜住
+ * ========================================================================== */
+suite('主表布局计算（grid-layout.js，纯函数）', () => {
+  const GL = sandbox.GridLayout;
+  const allIds = YardConfig.tracks.map(t => t.id);
+
+  t('groupSpans：长度与输入一致，且同分组只标记一次首行', () => {
+    const vis = allIds.map(id => ({ r: { track: id } }));
+    const sp = GL.groupSpans(vis);
+    eq(sp.length, vis.length);
+    sp.forEach((s, i) => {
+      if (i > 0 && s.group === sp[i - 1].group) eq(s.start, false, '同分组不应重复标首行');
+      if (!s.start) eq(s.span, 1, '非首行 span 恒为 1');
+    });
+  });
+
+  t('groupSpans：各首行 span 之和等于总行数（rowspan 无缝覆盖）', () => {
+    const vis = allIds.map(id => ({ r: { track: id } }));
+    const sum = GL.groupSpans(vis).reduce((n, s) => n + (s.start ? s.span : 0), 0);
+    eq(sum, vis.length);
+  });
+
+  t('groupSpans：空输入返回空数组', () => eq(GL.groupSpans([]), []));
+
+  t('bannerSlots：横幅所在行的股道必须落在该作业区区间内，且每个区最多一次', () => {
+    const vis = allIds.map(id => ({ r: { track: id } }));
+    const slots = GL.bannerSlots(vis);
+    const names = [];
+    Object.keys(slots).forEach(n => {
+      const a = slots[n];
+      const t = YardConfig.getTrack(vis[+n].r.track);
+      ok(t && t.index >= a.from && t.index <= a.to, '横幅行应在作业区区间内');
+      names.push(a.name);
+    });
+    eq(names.length, new Set(names).size, '同一作业区不应产生多个横幅');
+  });
+
+  t('bannerSlots：空输入返回空对象', () => eq(GL.bannerSlots([]), {}));
 });
 
 /* ==================== 汇总 ==================== */

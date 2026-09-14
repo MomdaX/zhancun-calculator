@@ -1,31 +1,40 @@
 /**
- * app.js —— 股道存车主程序
+ * app.js —— 股道存车主程序（页面装配层）
  *
  * 无服务器设计：
  *   - 方向库、股道配置通过 <script src> 加载（file:// 下唯一可靠方式）
  *   - xls 通过 File System Access API 读取，目录句柄存 IndexedDB 实现"打开即自动读取"
  *   - 不支持该 API 的浏览器自动降级为 <input type="file"> 手动选择
  *
- * ============================ 功能区块索引 ============================
- * 本文件（app.js）按职责划分为以下区块，便于定位（行号为当前快照，后续可能偏移）：
+ * ============================ 本文件职责 ============================
+ * 这里是「页面装配层」：把各纯逻辑模块拼装成可交互界面。
+ * 凡是能脱离 DOM 独立成立的计算，都不放在本文件——已抽出的模块：
  *
- *   [列定义]              COLUMNS / DETAIL_COLS / BIANHAO_* —— 已抽到 js/columns.js（纯常量，零依赖）
- *   [主表渲染]      render / computeTotals / renderEmpty
- *                        —— 主表 tbody 构建、合计、空态（到站着色 renderDest 已抽到 js/dest-color.js，纯函数零 DOM）
- *   [明细抽屉]      updateDetailTitle / openDetail / closeDetail / stepDetail
- *                        —— 股道明细抽屉的打开、翻页、标题
- *   [明细多选]      selectRow / renderDrag / endDrag / clearDetailSel
- *                        —— 明细行拖拽范围选 + 单击切换（bind 内联，未抽组件）
- *   [事件绑定]      bind —— 全部 DOM 事件绑定
- *   [入口]          init —— 启动编排（含向 global 注入 state/render/loading/syncPickFolderBtn 桥接）
- *   [对外接口]      文件末尾  window.YardApp —— 数据 / 配置 / 渲染 / 交互的统一出口
+ *   js/columns.js        列定义（COLUMNS / DETAIL_COLS / BIANHAO_*）     纯常量
+ *   js/dest-color.js     到站着色 / 车型高亮 / 车站名识别                纯函数
+ *   js/checi-store.js    「编好车次」统一数据源（主表 / 发车流程 / 31814 共用）
+ *   js/grid-layout.js    主表分组跨行、作业区横幅定位                     纯函数
+ *   js/data-source.js    数据源：FSA 权限 / 文件夹读取 / xls 解析编排
+ *   js/rpt31814-calc.js  31814 车流属性等纯计算
+ *   js/config-io.js      配置导出/导入的 JSON 编解码                      纯转换
  *
- * 说明：state 为 IIFE 内私有对象，数据源区块（ensurePerm/pickFolder/loadFromDir/
- *       readAndRender/renderFileSwitcher，原耦合最弱）已抽到 js/data-source.js，
- *       通过 init 注入的 global 桥接访问私有资源；index.html 中 data-source.js 在 app.js 之前加载。
- *       另：列定义（COLUMNS/DETAIL_COLS/BIANHAO_*）抽到 js/columns.js，到站着色（renderDest
- *       等纯函数）抽到 js/dest-color.js；三者均为零 DOM 依赖，可被 node 节点测试覆盖。
- * =====================================================================
+ * 留在本文件的区块（按文件内出现顺序，用 `=== 区块名 ===` 注释分隔；
+ * 刻意不写行号——行号改一次就失效，反而误导定位）：
+ *
+ *   [全局状态]        state / 虚拟股道显隐 / 数据文件夹按钮同步
+ *   [渲染主表]        render / renderGridHead / renderGridFoot / computeTotals / bannerRow
+ *   [明细抽屉]        openDetail / closeDetail / stepDetail / 计重编辑 / 明细多选
+ *   [推演面板]        推演抽屉的加入、删除、重置、分隔条拖动
+ *   [地图径路]        双击车站名打开径路
+ *   [事件绑定]        bind() —— 全部 DOM 事件绑定（编好车次 / 发车浮窗 / 设置 / 导入导出…）
+ *   [浮窗拖动 / 缩放] 标题栏拖动、右下角手柄改尺寸
+ *   [初始化]          init() —— 启动编排；并把 state / render / loading /
+ *                     syncPickFolderBtn 注入 global，供子模块桥接访问
+ *   [对外接口]        window.YardApp —— 数据 / 配置 / 渲染 / 交互的统一出口
+ *
+ * 说明：state 为 IIFE 内私有对象，子模块经 init 注入的 global 桥接访问；
+ *       index.html 中所有子模块均在 app.js 之前加载。
+ * ==================================================================
  */
 (function (global) {
   'use strict';
@@ -57,39 +66,8 @@
     $('loading').className = show ? 'loading show' : 'loading';
   }
 
-  /* =================== 「编好车次」统一数据源 ===================
-   * 三处共用同一份 Store.KEYS.readyTrains（{ 股道id: 车次 }）：
-   *   ① 主表「编好车次」列（双击录入）
-   *   ② 发车流程浮窗的「车次」输入框 depInputC4（点「编好」时预填）
-   *   ③ 31814 报表「待发股道 → 车次」芯片（report31814.js 已在读写同一个键，故天然同步）
-   * 一律从 Store 读取，不读单元格 DOM——避免"界面显示值"与"真实数据"两套真相。 */
-  function checiMap() {
-    return (Store && Store.get) ? (Store.get(Store.KEYS.readyTrains, {}) || {}) : {};
-  }
-  /** 取某股道的编好车次；未录入返回空串 */
-  function checiOf(trackId) {
-    var m = checiMap();
-    return m[trackId] == null ? '' : String(m[trackId]);
-  }
-  /** 写入某股道的编好车次；传空字符串即删除 */
-  function setCheci(trackId, val) {
-    var m = checiMap();
-    val = String(val == null ? '' : val).trim();
-    if (val) m[trackId] = val; else delete m[trackId];
-    Store.set(Store.KEYS.readyTrains, m);
-  }
-  /** 车次颜色：套用「车辆信息」列同款方向色（沙口蓝 / 南口橙 / 管内紫）。
-   *  一股道多方向时按 沙 > 南 > 管 取优先级，与 renderDest 的判定顺序一致；
-   *  无方向（或方向是到卸等）返回空串 → 走车次列默认蓝。 */
-  function checiDirCls(direction) {
-    var d = String(direction == null ? '' : direction);
-    if (/沙/.test(d)) return 'shakou';
-    if (/南/.test(d)) return 'nankou';
-    if (/管内/.test(d)) return 'guanna';
-    return '';
-  }
-
-  /* 到站富文本着色 / 车型高亮 / 车站名识别 已抽到 js/dest-color.js（纯函数，挂 global） */
+  /* 到站富文本着色 / 车型高亮 / 车站名识别 已抽到 js/dest-color.js（纯函数，挂 global）
+   * 「编好车次」统一数据源已抽到 js/checi-store.js（Checi.of / Checi.set / Checi.dirCls） */
 
   /* =================== 虚拟股道显示/隐藏 =================== */
   /**
@@ -152,52 +130,8 @@
   }
 
   /* =================== 渲染主表 =================== */
-  /**
-   * 计算分组「合并列」所需的跨行信息。
-   * 返回与 vis 等长的数组：{ group, start, span }
-   *   group 该行的分组名（来自 track.config 的 groupName）
-   *   start 是否为该分组在当前可见行中的首行
-   *   span  该分组连续占据的行数（用于 rowspan）
-   * 注意：隐藏虚拟股道后，虚拟场分组可能整段消失，span 仅统计可见部分。
-   */
-  function computeGroupSpans(vis) {
-    var arr = vis.map(function (item) {
-      var cfg = YardConfig.getTrack(item.r.track);
-      return { group: cfg ? cfg.groupName : '', start: false, span: 1 };
-    });
-    for (var i = 0; i < arr.length; i++) {
-      if (i === 0 || arr[i].group !== arr[i - 1].group) {
-        arr[i].start = true;
-        var j = i + 1;
-        while (j < arr.length && arr[j].group === arr[i].group) j++;
-        arr[i].span = j - i;
-      }
-    }
-    return arr;
-  }
-
-  /**
-   * 计算各作业区横幅的插入位置。
-   * 主表行顺序取自数据中股道的出现顺序（aggregate 按数据分组），未必等于配置顺序，
-   * 故按股道在配置中的序位区间判定：每个作业区取其区间内「第一个出现的可见行」。
-   * 该区股道被整段隐藏（空线分组开关）或数据中不存在时，不会产生横幅。
-   * @param {Array} vis visibleRows() 的结果
-   * @returns {Object} 行号 → 作业区配置（{ name, color, from, to, ids }）
-   */
-  function computeBannerSlots(vis) {
-    var slots = {};
-    var areas = (YardConfig && YardConfig.mainAreas) || [];
-    areas.forEach(function (a) {
-      for (var n = 0; n < vis.length; n++) {
-        var t = YardConfig.getTrack(vis[n].r.track);
-        if (t && t.index >= a.from && t.index <= a.to) {
-          if (!slots[n]) slots[n] = a;   // 区间互不重叠，理论上不会冲突
-          break;
-        }
-      }
-    });
-    return slots;
-  }
+  /* 分组跨行计算（computeGroupSpans）与作业区横幅定位（computeBannerSlots）
+   * 已抽到 js/grid-layout.js（纯函数、可单测），此处改用 GridLayout.groupSpans / bannerSlots。 */
 
   /* 作业区 → 站场示意图。键 = 横幅上的作业区名，值 = HTML/images/ 下的文件名。
    * 新增或替换示意图：把图片放进 HTML/images/，再在这里登记一行即可，不必改其它代码。
@@ -376,10 +310,10 @@
 
     // 分组「合并列」：预先算出每行的所属分组、是否该组首行、跨行数(span)。
     // 渲染时首行输出带 rowspan 的分组单元格，组内其余行不输出该 td（由 rowspan 覆盖）。
-    var spans = computeGroupSpans(vis);
+    var spans = GridLayout.groupSpans(vis);
 
     // 作业区横幅：定位每个作业区在可见行中的首行（该区无可见行时自动不显示）
-    var bannerAt = computeBannerSlots(vis);
+    var bannerAt = GridLayout.bannerSlots(vis);
 
     vis.forEach(function (item, n) {
       var r = item.r, idx = item.idx;
@@ -434,7 +368,7 @@
         // 有效长：股道固有属性，按股道 id 查配置（与车辆数据无关，故不在 aggregate 里算）
         if (c.key === 'effLen') v = YardConfig.trackLength(r.track);
         // 编好车次：不是聚合字段，按股道从 Store 读（与 31814 报表「待发股道车次」同一份数据）
-        if (c.key === 'checi') v = checiOf(r.track);
+        if (c.key === 'checi') v = Checi.of(r.track);
         var cls = c.cls || '';
         var style = '';
         var attrs = '';
@@ -464,7 +398,7 @@
             inner = '<div class="note-body">' + escapeHtml(rawNote).replace(/\n/g, '<br>') + '</div>';
           } else if (c.key === 'checi') {
             // 车次颜色套用「车辆信息」列的方向色（沙口蓝/南口橙/管内紫），无方向走默认蓝
-            inner = v ? '<span class="' + checiDirCls(r.direction) + '">' +
+            inner = v ? '<span class="' + Checi.dirCls(r.direction) + '">' +
                        escapeHtml(String(v)) + '</span>' : '';
             if (!c.cls && !c.num) cls += ' center';
           } else {
@@ -1459,7 +1393,7 @@
     // 空线分组显示/隐藏开关
     on('btnToggleVirtual', 'click', function () {
       state.showEmptyGroups = !state.showEmptyGroups;
-      Store.set('showEmptyGroups', state.showEmptyGroups);   // 持久记忆，刷新后保持
+      Store.set(Store.KEYS.showEmptyGroups, state.showEmptyGroups);   // 持久记忆，刷新后保持
       syncVirtualBtn();
       render();
       toast((state.showEmptyGroups ? '已显示' : '已隐藏') + '空线分组', 'ok');
@@ -1477,7 +1411,7 @@
         e.stopPropagation();
         e.preventDefault();
         var collapsed = gridEl.classList.toggle('notes-collapsed');
-        Store.set('notesCollapsed', collapsed);
+        Store.set(Store.KEYS.notesCollapsed, collapsed);
         toast(collapsed ? '已收起注意事项' : '已展开注意事项', 'ok');
       }, true);  // true = 捕获阶段，先于 tbody 行选中触发
     }
@@ -1516,10 +1450,6 @@
         // 打开浮窗
         UI.Modal.open('modalDeparture');
 
-        // 给 iframe 一点时间加载，然后填入单元格
-        var depFrame = document.getElementById('depFrame');
-        var depCheci = document.getElementById('depCheci');
-        if (depCheci) depCheci.value = '';
         // 记录当前股道换长 / 重量，用于「列车超长 / 列车超重」提示
         depWarnCtx.length = Number(row.length) || 0;
         depWarnCtx.load = Number(row.load) || 0;
@@ -1532,13 +1462,10 @@
           // 不再立即向报表发送——由用户点下方任一「发送」按钮触发，便于测试哪种 iframe 定位方式能跑通
           var $b4 = $('depInputB4'), $c4 = $('depInputC4'),
               $d4 = $('depInputD4'), $e4 = $('depInputE4'), $f4 = $('depInputF4');
-          if ($b4) {
-            // 股道写法转换：到发线 X1~X15 在站内存的是 "X6"，发车报表习惯写 "6道"，简单换算一下
-            var mX = /^X(\d+)$/.exec(String(trackName || '').trim());
-            $b4.value = mX ? (mX[1] + '道') : trackName;
-          }
+          // 股道写法：X1~X15 换算为报表习惯的「N道」（规则见 Utils.depTrackLabel）
+          if ($b4) $b4.value = Utils.depTrackLabel(trackName);
           // 车次：从 Store（按股道）预填，未录入则为空。用户仍可随意修改
-          if ($c4) $c4.value = checiOf(trackId);
+          if ($c4) $c4.value = Checi.of(trackId);
           if ($d4) $d4.value = String(count);
           if ($e4) $e4.value = length;
           if ($f4) $f4.value = lastCar;
@@ -1564,7 +1491,7 @@
         var tr = td.closest('tr');
         var trackId = tr ? tr.getAttribute('data-track') : '';
         if (!trackId) return;
-        if (checiOf(trackId)) setCheci(trackId, '');   // 已有车次 → 先清空落库
+        if (Checi.of(trackId)) Checi.set(trackId, '');   // 已有车次 → 先清空落库
         editCheciCell(td, trackId);
       }, true);
     }
@@ -1572,7 +1499,7 @@
     /** 把「编好车次」单元格就地换成输入框：回车 / 失焦保存，Esc 取消 */
     function editCheciCell(td, trackId) {
       if (!td || !document.contains(td) || td.querySelector('.checi-input')) return;
-      var old = checiOf(trackId);        // 调用处已清空过 → 重录时这里是空串
+      var old = Checi.of(trackId);        // 调用处已清空过 → 重录时这里是空串
       td.textContent = '';
       var inp = document.createElement('input');
       inp.type = 'text';
@@ -1587,7 +1514,7 @@
       function finish(save) {
         if (done) return;
         done = true;
-        if (save) setCheci(trackId, inp.value.trim());
+        if (save) Checi.set(trackId, inp.value.trim());
         render();                        // 复原单元格，并让 31814 / 发车流程拿到最新值
       }
       inp.addEventListener('keydown', function (e) {
@@ -1752,7 +1679,7 @@
     });
 
     // ============== 时间显示（每秒刷新）==============
-    function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+    var pad2 = Utils.pad2;   // 复用 Utils 的补零，不再本地重写一份
     function formatDepTime() {
       var d = new Date();
       return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
@@ -2211,7 +2138,7 @@
     });
 
     // 设置：表格字号滑块（主页表格 grid + 明细抽屉表格 detailTable 同步生效）
-    var gridFontSize = $('gridFontSize');
+    var gridFontSize = $(Store.KEYS.gridFontSize);
     var gridFontSizeVal = $('gridFontSizeVal');
     function applyTableFontSize(v) {
       $('grid').style.fontSize = v + 'px';
@@ -2221,7 +2148,7 @@
       }
     }
     if (gridFontSize && gridFontSizeVal) {
-      var savedFs = Store.get('gridFontSize', '');
+      var savedFs = Store.get(Store.KEYS.gridFontSize, '');
       if (savedFs) {
         gridFontSize.value = savedFs;
         gridFontSizeVal.textContent = savedFs + 'px';
@@ -2236,7 +2163,7 @@
       }
       // 拖动滑块会高频触发 input，写存储走防抖，避免每次都落盘 localStorage
       var saveFontSize = Utils.debounce(function (v) {
-        Store.set('gridFontSize', v);
+        Store.set(Store.KEYS.gridFontSize, v);
       }, 300);
 
       gridFontSize.addEventListener('input', function () {
@@ -2257,7 +2184,7 @@
     var btnSettingFolder = $('btnSettingFolder');
     function refreshFolderPath() {
       if (folderPath) {
-        var name = Store.get('folderName', '');
+        var name = Store.get(Store.KEYS.folderName, '');
         folderPath.textContent = name || '未设置';
         folderPath.title = name || '';
       }
@@ -2557,7 +2484,7 @@
       }
 
       function persist(cfg) {
-        if (Store && Store.set) Store.set('carTypeStyle', cfg);
+        if (Store && Store.set) Store.set(Store.KEYS.carTypeStyle, cfg);
         Utils.applyCarTypeStyles();
         if (state.detailIdx != null) openDetail(state.detailIdx); // 实时刷新明细高亮
         // 主表到站列的车型标记同样受该配置控制，否则会「明细变了主表没变」。
@@ -2647,9 +2574,9 @@
           toggleBtn.title = collapsed ? '展开配置表' : '收起配置表';
           toggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
         }
-        Store.set('carTypeCfgCollapsed', !!collapsed);
+        Store.set(Store.KEYS.carTypeCfgCollapsed, !!collapsed);
       }
-      applyCarTypeCollapse(Store.get('carTypeCfgCollapsed', false) === true);
+      applyCarTypeCollapse(Store.get(Store.KEYS.carTypeCfgCollapsed, false) === true);
       if (toggleBtn) {
         toggleBtn.addEventListener('click', function () {
           applyCarTypeCollapse(!box.classList.contains('collapsed'));
@@ -2669,7 +2596,7 @@
       if (resetBtn) {
         resetBtn.addEventListener('click', function () {
           try {
-            if (Store && Store.remove) Store.remove('carTypeStyle');
+            if (Store && Store.remove) Store.remove(Store.KEYS.carTypeStyle);
             toast('已恢复默认车型高亮配置');
           } catch (e) {
             console.error('[btnResetCarType] 清', e);
@@ -2694,7 +2621,7 @@
 
     // 表头列宽拖动（persistKey 用于本地记忆，刷新/重渲染不丢失）
     ColResize.enable($('grid'), {
-      persistKey: 'zhancun.grid.cols.v2',
+      persistKey: Store.KEYS.gridCols,
       onResize: function (th, w) {
         // 首列 / 分组合并列宽变化 → 同步后续冻结列的偏移，避免列间露缝
         if (th.classList.contains('col-a')) $('grid').style.setProperty('--col-a-w', w + 'px');
@@ -2703,7 +2630,8 @@
     });
     /* 列宽按「列序索引」记忆，因此调整 DETAIL_COLS 的顺序或增删列后，
      * 旧记忆会整体错位（宽度套到了别的列上）。键名带版本号即可让旧记忆失效、
-     * 首次打开重新按内容自适应——改动列序时，把 v1 递增即可。 */
+     * 首次打开重新按内容自适应——改动列序时，把 store.js 里 KEYS.detailCols / KEYS.gridCols
+     * 的版本号（.v2）递增即可，两处一起改。 */
     ColResize.enable($('detailTable'), { persistKey: Store.KEYS.detailCols });
     /* 搜索结果表与明细表列数、列序完全一致（同一份 DETAIL_COLS + 停时列），
      * 故共用同一个记忆键：在任一表中拖好的列宽，另一个表打开时自动沿用。 */
@@ -2766,7 +2694,7 @@
 
   /* =================== 浮窗调整大小 =================== */
   // 拖 .dep-resize-handle（右下角）改变浮窗宽高；尺寸记忆到 localStorage，下次打开沿用。
-  var DEP_SIZE_KEY = 'depModalSize';
+  var DEP_SIZE_KEY = Store.KEYS.depModalSize;
   function applyDepSize() {
     // 尺寸完全由 CSS（.dep-modal）控制，不再用内联样式覆盖。
     // 仅确保默认不残留旧的内联 max 限制即可（拖动时的内联尺寸由拖动逻辑管理）。
@@ -2853,11 +2781,11 @@
     bind();
 
     // 恢复「隐藏空线分组」的持久记忆（设置里切换时写入 Store.showEmptyGroups）
-    var savedEmpty = Store.get('showEmptyGroups', null);
+    var savedEmpty = Store.get(Store.KEYS.showEmptyGroups, null);
     if (savedEmpty !== null) state.showEmptyGroups = !!savedEmpty;
 
     // 恢复「注意事项收起」的持久记忆（表头点击切换时写入 Store.notesCollapsed）
-    var savedNotes = Store.get('notesCollapsed', null);
+    var savedNotes = Store.get(Store.KEYS.notesCollapsed, null);
     if (savedNotes === true && $('grid')) $('grid').classList.add('notes-collapsed');
 
     syncVirtualBtn();
@@ -2879,7 +2807,7 @@
         slider.value = v;
         overlay.style.display = v > 0 ? '' : 'none';
         overlay.style.opacity = v / 100;
-        Store.set('eyeProtect', v);
+        Store.set(Store.KEYS.eyeProtect, v);
         if (btn) {
           var on = v > 0;
           btn.classList.toggle('on', on);
@@ -2894,7 +2822,7 @@
         applyEye(parseInt(slider.value, 10) > 0 ? 0 : 100);
       });
 
-      applyEye(Store.get('eyeProtect', 0));   // 打开页面时恢复上次状态
+      applyEye(Store.get(Store.KEYS.eyeProtect, 0));   // 打开页面时恢复上次状态
     })();
 
     // 恢复上次选择的文件夹，自动读取最新 xls

@@ -31,6 +31,8 @@
 (function (global) {
   'use strict';
 
+  // 持久化封装（store.js 先于本文件加载）；列宽记忆键由调用方传入，见 app.js 的 Store.KEYS.gridCols
+  var Store = global.Store;
   var MIN = 30;            // 最小列宽
 
   /** 表格 → 句柄。用 WeakMap 而非往 DOM 上挂 __xxx 属性，避免污染与命名冲突 */
@@ -94,7 +96,7 @@
     /** 读取记忆列宽。返回数组或 null（长度不符视为失效） */
     function loadStored() {
       if (!persistKey) return null;
-      var arr = (global.Store ? Store.get(persistKey, null) : null);
+      var arr = (Store ? Store.get(persistKey, null) : null);
       return (arr && arr.length === headRow.cells.length) ? arr : null;
     }
 
@@ -105,7 +107,7 @@
       for (var i = 0; i < headRow.cells.length; i++) {
         widths.push(Math.round(headRow.cells[i].offsetWidth));
       }
-      if (global.Store) Store.set(persistKey, widths);
+      if (Store) Store.set(persistKey, widths);
     }
 
     /* ---------------- 列宽测量 ---------------- */
@@ -196,7 +198,7 @@
     /** 重置为自适应（清空拖动记忆，恢复到按内容计算的列宽） */
     function reset() {
       invalidateMeasure();        // 数据/列宽被重置，强制下次重测
-      if (persistKey && global.Store) Store.remove(persistKey);
+      if (persistKey && Store) Store.remove(persistKey);
       autoFitAll();
       persistWidths();
     }

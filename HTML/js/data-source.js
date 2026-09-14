@@ -1,5 +1,5 @@
 /**
- * data-source.js —— 数据源区块（从 app.js 抽出，P2-7 拆分第一步）
+ * data-source.js —— 数据源区块：FSA 权限 / 文件夹读取 / xls 解析聚合 / 文件切换
  *
  * 职责：File System Access API 权限、IndexedDB/文件夹读取、xls 解析与聚合、多文件切换。
  * 无 DOM 渲染逻辑；通过全局桥接访问 app.js 的共享资源：
@@ -64,7 +64,7 @@
 
   /** 记住已选定的数据文件夹名（统一两处写入，避免重复直调 Store） */
   function rememberFolder(h) {
-    if (h && h.name) Store.set('folderName', h.name);
+    if (h && h.name) Store.set(Store.KEYS.folderName, h.name);
   }
 
   /** 选择文件夹（File System Access API） */

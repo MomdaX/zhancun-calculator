@@ -67,9 +67,6 @@
     return isFinite(n) ? Math.round(n * 10) / 10 : 0;
   };
 
-  /** 保留 1 位小数（四舍五入）→ 字符串，恒带 1 位（12 → "12.0"） */
-  Utils.fmt1 = function (n) { return Utils.round1(n).toFixed(1); };
-
   /** 补零到 2 位：1 → "01"（各模块补零统一复用） */
   Utils.pad2 = pad2;
 
@@ -182,6 +179,21 @@
     return (ma ? +ma[2] : 0) - (mb ? +mb[2] : 0);
   };
 
+  /* ==================== 发车报表写法换算 ==================== */
+
+  /**
+   * 股道名 → 发车报表里的写法。
+   * 站内把到发线 X1~X15 记作 "X6"，而发车报表（编好填表）习惯写 "6道"，需做一次换算。
+   * 只认「X + 纯数字」这一种形态，其它（1道、B1、Y5、机场线…）原样返回，绝不误伤。
+   * @param {string} name 股道显示名，如 "X6" / "7道"
+   * @returns {string} 报表写法，如 "6道" / "7道"
+   */
+  Utils.depTrackLabel = function (name) {
+    var s = String(name == null ? '' : name).trim();
+    var m = /^X(\d+)$/.exec(s);
+    return m ? (m[1] + '道') : s;
+  };
+
   /* ==================== 车种/车号颜色规则 ==================== */
 
   /**
@@ -249,7 +261,7 @@
   var _ctcCache = null, _ctcRaw = undefined;
 
   Utils.getCarTypeConfig = function () {
-    var s = (global.Store && global.Store.get) ? global.Store.get('carTypeStyle', null) : null;
+    var s = (global.Store && global.Store.get) ? global.Store.get(global.Store.KEYS.carTypeStyle, null) : null;
     if (s === _ctcRaw && _ctcCache) return _ctcCache;
     _ctcRaw = s;
     var result;
@@ -392,27 +404,6 @@
       var ctx = this, args = arguments;
       if (timer) clearTimeout(timer);
       timer = setTimeout(function () { fn.apply(ctx, args); }, wait || 150);
-    };
-  };
-
-  /** 节流：每 wait 毫秒最多执行一次（leading 模式，开头立即执行）。
-   *  适合「持续触发但需限频」的场景（如 resize、scroll 渲染）。 */
-  Utils.throttle = function (fn, wait) {
-    var last = 0, timer = null;
-    return function () {
-      var ctx = this, args = arguments;
-      var now = Date.now();
-      var remain = wait - (now - last);
-      if (remain <= 0) {
-        if (timer) { clearTimeout(timer); timer = null; }
-        last = now;
-        fn.apply(ctx, args);
-      } else if (!timer) {
-        timer = setTimeout(function () {
-          last = Date.now(); timer = null;
-          fn.apply(ctx, args);
-        }, remain);
-      }
     };
   };
 
