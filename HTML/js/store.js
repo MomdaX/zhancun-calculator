@@ -208,7 +208,8 @@
     depModalSize: 'depModalSize',                // 发车作业浮窗尺寸记忆
     carTypeCfgCollapsed: 'carTypeCfgCollapsed',  // 车型高亮配置表收起状态
     eyeProtect: 'eyeProtect',                    // 护眼背景色浓度
-    productivity: 'productivity'                 // 生产指挥台（钩数 / 生产时间表体内容 + 表头 meta）
+    productivity: 'productivity',                // 生产指挥台（钩数 / 生产时间表体内容 + 表头 meta）
+    flowTable: 'flowTable'                       // 车流统计表（钦州港车流计划表：表头字段 + 数据行）
   };
 
   global.Store = {

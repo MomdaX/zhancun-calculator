@@ -1694,13 +1694,15 @@ table.grid td[data-col="effLen"][data-len]:hover::after {
 .prod-meta input.prod-updated {
   font-size: 20px; font-weight: 600;
   color: #5a6573; background: #eef2f7; cursor: default;
+  field-sizing: content;   /* 按文字多少自动宽度，不裁切长时间戳 */
+  width: auto;             /* 兜底：不支持 field-sizing 的旧浏览器退回默认宽度 */
 }
 /* meta 各项宽度按内容长度分配：
-   ①日期 ②安全起始日 ⑥最近更新 → 150px；③安全天数 ④夜班时长 ⑤白班时长 → 100px。
+   ①日期 ②安全起始日 → 150px；③安全天数 ④夜班时长 ⑤白班时长 → 100px。
+   ⑥最近更新不设固定宽——由 .prod-updated 的 field-sizing:content 按文字多少自适应。
    用 label:nth-child 而非 id，调序/换位时改这里即可，一眼对得上界面顺序。 */
 .prod-meta label:nth-child(1) input,
-.prod-meta label:nth-child(2) input,
-.prod-meta label:nth-child(6) input { width: 150px; }
+.prod-meta label:nth-child(2) input { width: 150px; }
 .prod-meta label:nth-child(3) input,
 .prod-meta label:nth-child(4) input,
 .prod-meta label:nth-child(5) input { width: 100px; }
@@ -2454,4 +2456,203 @@ table.grid td[data-col="effLen"][data-len]:hover::after {
 }
 .rpt-right.setting-dz .cfg-tracks-zone > .cfg-section-title { color: var(--accent); font-weight: 700; }
 .rpt-right.setting-dz .cfg-tracks { background: #eef4fb; }
+
+/* ================= 车流统计表（左侧无遮罩抽屉） ================= */
+/* 抽屉固定左侧，宽度由 --flow-w 控制；打开时主表左移同宽以腾出空间（无遮罩，主表其余可点） */
+.flow-drawer {
+  position: fixed;
+  left: 0;
+  width: var(--flow-w, 520px);
+  z-index: 45;
+  display: none;                 /* open() 时切为 flex */
+  flex-direction: column;
+  background: #fff;
+  border-right: 1px solid var(--border);
+  box-shadow: 2px 0 10px rgba(0, 0, 0, .08);
+  overflow: hidden;
+}
+body.flow-drawer-open .table-wrap { margin-left: var(--flow-w, 520px); }
+
+/* 抽屉与主表之间的分中线：可拖动调整宽度 */
+.flow-splitter {
+  position: fixed;
+  width: 6px;
+  margin-left: -3px;
+  z-index: 46;
+  cursor: col-resize;
+  background: transparent;
+  transition: background .12s;
+}
+.flow-splitter:hover, .flow-splitter.dragging { background: #2b5cb0; }
+
+/* 头部套用 modal-head（深蓝渐变，与生产效率表一致） */
+.flow-drawer .modal-head {
+  background: linear-gradient(135deg, #2b5cb0, #1e3f7c);
+  color: #fff;
+  padding: 10px 14px;
+  cursor: default;
+}
+.flow-drawer .modal-head h3 { color: #fff; font-weight: 600; }
+.flow-drawer .modal-head .btn {
+  background: rgba(255, 255, 255, .18);
+  border-color: rgba(255, 255, 255, .4);
+  color: #fff;
+}
+.flow-drawer .modal-head .btn:hover { background: rgba(255, 255, 255, .3); }
+.flow-drawer .modal-head .rpt-fs-val { color: #fff; }
+
+/* 计划表表头卡（单行紧凑） */
+.flow-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 6px 14px;
+  background: #f8fafb;
+  border-bottom: 1px solid var(--border);
+}
+.flow-sheet-head label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-dim); white-space: nowrap; }
+.flow-sheet-head input {
+  padding: 3px 8px; border: 1px solid #cfd8e3; border-radius: 5px; font-size: 13px;
+}
+.flow-sheet-head input#flowDate { width: 138px; }
+.flow-sheet-head input#flowPeriod { width: 150px; }
+.flow-sheet-head input#flowSigner { width: 88px; }
+
+/* 数据表 */
+.flow-table-wrap { flex: 1; overflow: auto; padding: 0; position: relative; }
+.flow-table { width: 100%; border-collapse: collapse; font-size: var(--flow-fs, 15px); border: 2px solid #1e3f7c; }
+.flow-table thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: linear-gradient(135deg, #2b5cb0, #1e3f7c);
+  color: #fff; font-weight: 600; text-align: center; padding: 7px 8px; border: 1px solid #1e3f7c;
+}
+.flow-table tbody td { border: 1px solid #6e7a8a; padding: 0px 6px; vertical-align: middle; }
+.flow-table tbody tr:nth-child(even) td { background: #fafbfc; }
+.flow-table tbody tr:hover td { background: #eef4fb; }
+.flow-idx { width: 48px; }
+.flow-time { width: 120px; }
+.flow-src { width: 88px; min-width: 88px; }   /* 来源列：默认88px，内容多时随输入自动撑开 */
+.flow-idx-cell { text-align: center; color: #5b6675; }
+/* 表尾备注行：第一列「备注」标签，第二列跨 3 列输入 */
+.flow-table tfoot td { border: 1px solid #6e7a8a; padding: 5px 8px; vertical-align: middle; height: 96px; }
+.flow-foot-label { text-align: center; font-weight: 600; color: #1e3f7c; white-space: nowrap; background: #f3f6fa; }
+.flow-note-input { width: 100%; height: 100%; border: none; outline: none; background: transparent; font: inherit;
+  padding: 6px 8px; text-align: left; resize: none; overflow: auto; line-height: 1.45; }
+.flow-note-input:focus { border: none; outline: none; box-shadow: none; background: transparent; }
+/* 所有单元格文字居中 */
+.flow-table tbody td { text-align: center; }
+.flow-time-input, .flow-content-input {
+  width: 100%; border: 1px solid transparent; background: transparent; font: inherit; padding: 2px 4px; border-radius: 4px;
+  text-align: center;
+}
+.flow-time-input:focus, .flow-content-input:focus {
+  outline: none; border-color: transparent; background: transparent; box-shadow: none;
+}
+/* 编组内容：多行文本框，自动换行、按需撑高（无滚动条，内容完整展开）；上下内边距 15px */
+.flow-content-input {
+  display: block; text-align: left; resize: none; overflow: hidden;
+  line-height: 1.5; white-space: pre-wrap; word-break: break-word; min-height: 26px; padding: 10px 8px;
+}
+/* 无内容空行：上下内边距压缩，保持紧凑（有内容的行仍按上面 10px 撑开） */
+.flow-content-input.flow-content-empty { padding: 2px 8px; }
+/* 车流来源：可手写输入 + 悬停「+」展开 3 列多选弹层（点选高亮、再点取消）。
+ * 注意：.flow-src 仅作 th/td 列宽类，触发器用 .flow-src-trigger，避免污染表头布局。 */
+.flow-src-cell { position: relative; }
+.flow-src-trigger { display: flex; align-items: center; justify-content: center; min-height: 26px; cursor: pointer; }
+.flow-src-manual {
+  flex: 0 0 auto; min-width: 0; width: 4ch; border: 1px solid transparent; background: transparent; font: inherit;
+  padding: 2px 4px; border-radius: 4px; text-align: center;
+}
+.flow-src-manual:focus { outline: none; border-color: transparent; background: transparent; box-shadow: none; }
+/* 「+」绝对定位叠在单元格右侧：隐藏时不占位（内容完整可见），悬停才显示 */
+.flow-src-add { position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
+  padding: 0 4px; color: #2b5cb0; font-weight: 700; opacity: 0; pointer-events: none;
+  background: rgba(255, 255, 255, .92); border-radius: 4px; transition: opacity .15s; }
+.flow-src-trigger:hover .flow-src-add { opacity: 1; pointer-events: auto; }
+.flow-src-pop { position: absolute; top: 100%; left: 0; z-index: 30; display: none;
+  width: max-content; min-width: 168px;
+  background: #fff; border: 1px solid #6e7a8a; border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.18);
+  padding: 6px; grid-template-columns: repeat(3, 1fr); gap: 2px; }
+.flow-src-pop.open { display: grid; }
+.flow-src-opt { padding: 3px 8px; font-size: 13px; white-space: nowrap; text-align: center; cursor: pointer;
+  border: 1px solid #000; border-radius: 4px; user-select: none; }
+.flow-src-opt:hover { background: #eef4fb; }
+.flow-src-opt.on { background: #2b5cb0; color: #fff; }
+/* 键盘态：弹层去默认焦点框；光标（kb-on）与已选（on）两种状态要能同时看清 */
+.flow-src-pop:focus { outline: none; }
+.flow-src-opt.kb-on { box-shadow: 0 0 0 2px #1f6feb; }
+.flow-src-opt.on.kb-on { box-shadow: 0 0 0 2px #1f6feb, 0 0 0 3px #fff; }
+
+.flow-src-actions { grid-column: 1 / -1; display: flex; gap: 6px; justify-content: space-between;
+  margin-top: 4px; padding-top: 4px; border-top: 1px solid #eee; }
+.flow-src-actions .btn { padding: 2px 10px; font-size: 12px; }
+
+/* 行拖动排序（HTML5 DnD：真实换序 + FLIP 位移动画） */
+/* 整行可抓；transform 供 FLIP 过渡：先快后缓的减速度曲线，位移自然 */
+.flow-table tbody tr { cursor: move; transition: transform .24s cubic-bezier(.2, .8, .2, 1); }
+/* 被拖行：较深的底色，拖动时一眼看清抓的是哪一行（内容照常显示，不加描边） */
+.flow-table tbody tr.flow-moving td { background: #b9cfff !important; }
+
+/* 行右键菜单 */
+.flow-ctx-menu { position: fixed; z-index: 9999; min-width: 148px; background: #fff;
+  border: 1px solid #cfd8e3; border-radius: 8px; box-shadow: 0 8px 24px rgba(15, 28, 60, .18);
+  padding: 4px; font-size: 13px; }
+.flow-ctx-menu[hidden] { display: none; }
+.flow-ctx-item { padding: 7px 12px; border-radius: 5px; cursor: pointer; color: #2a3340; white-space: nowrap; }
+.flow-ctx-item:hover { background: #eef4fb; }
+.flow-ctx-item.danger { color: #e03131; }
+.flow-ctx-item.danger:hover { background: #fdecec; }
+.flow-ctx-sep { height: 1px; background: #eef1f5; margin: 4px 6px; }
+
+/* 车流表选中行（作为车站列表插入目标）：仅高亮「编组内容」列左边框，提示选中 */
+.flow-table tbody tr.flow-selected td:last-child { box-shadow: inset 3px 0 0 #3370ff; }
+
+/* 车站列表弹窗（无遮罩浮动窗，标题栏可拖动，窗口外可继续操作） */
+.flow-st-picker { position: fixed; z-index: 10000; }
+.flow-st-picker[hidden] { display: none; }
+.flow-st-box { width: 180px; max-height: 74vh; background: #fff; border-radius: 14px; overflow: hidden;
+  box-shadow: 0 18px 50px rgba(15, 28, 60, .25), 0 2px 8px rgba(15, 28, 60, .12);
+  border: 1px solid rgba(31, 111, 235, .18); display: flex; flex-direction: column;
+  animation: flowStPop .14s ease-out; }
+@keyframes flowStPop { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
+.flow-st-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; font-weight: 600;
+  color: #fff; cursor: move; user-select: none; touch-action: none;
+  background: linear-gradient(135deg, #3367d6, #1f6feb); }
+.flow-st-ic { font-size: 16px; opacity: .95; }
+.flow-st-title { font-size: 15px; letter-spacing: .5px; }
+.flow-st-head .spacer { flex: 1; }
+.flow-st-close { cursor: pointer; width: 22px; height: 22px; display: inline-flex; align-items: center;
+  justify-content: center; border-radius: 50%; color: #fff; font-size: 16px; line-height: 1;
+  background: rgba(255, 255, 255, .14); transition: background .15s; }
+.flow-st-close:hover { background: rgba(255, 255, 255, .32); }
+.flow-st-list { padding: 1px 1px; overflow: auto; }
+.flow-st-item { display: flex; align-items: center; gap: 10px; padding: 7px 8px; cursor: pointer;
+  font-size: 14px; border-radius: 8px; transition: background .12s; }
+.flow-st-item:hover { background: #f0f5ff; box-shadow: inset 3px 0 0 #1f6feb; }
+.flow-st-item input { accent-color: #1f6feb; width: 15px; height: 15px; cursor: pointer; flex: none; }
+.flow-st-actions { display: flex; gap: 8px; justify-content: flex-end; padding: 10px 14px;
+  border-top: 1px solid #eef1f5; background: #fafbfd; }
+.flow-st-actions .btn { min-width: 72px; }
+
+.flow-empty {
+  position: absolute; inset: 44px 0 0 0; display: flex; justify-content: center; padding-top: 30px;
+  color: #8a94a2; font-size: 13px; pointer-events: none;
+}
+
+/* 打开抽屉时隐藏主表 6 列：注意事项 / 有效长 / 换长 / 发送 / 到达车次 / 载重 */
+body.flow-drawer-open table.grid th[data-col="note"],
+body.flow-drawer-open table.grid td[data-col="note"],
+body.flow-drawer-open table.grid th[data-col="effLen"],
+body.flow-drawer-open table.grid td[data-col="effLen"],
+body.flow-drawer-open table.grid th[data-col="length"],
+body.flow-drawer-open table.grid td[data-col="length"],
+body.flow-drawer-open table.grid th[data-col="send"],
+body.flow-drawer-open table.grid td[data-col="send"],
+body.flow-drawer-open table.grid th[data-col="train"],
+body.flow-drawer-open table.grid td[data-col="train"],
+body.flow-drawer-open table.grid th[data-col="load"],
+body.flow-drawer-open table.grid td[data-col="load"] {
+  display: none;
+}
 

@@ -25,6 +25,87 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   };
 
+  /* ==================== 表单值同步（截图 / 打印 / 拖拽影像等克隆场景共用） ==================== */
+/** 把源节点里表单控件的「实时输入值」写进克隆节点。
+ *  DOM 序列化与 cloneNode 都只认属性/子文本，不认实时的 .value：
+ *    · input    → value 属性
+ *    · textarea → 子文本
+ *    · select   → 选中项的 selected 属性
+ *  不调用它，克隆出来的一批控件会显示成渲染时的旧值（甚至空白）。 */
+Utils.syncFormValues = function (src, dst) {
+  var s = src.querySelectorAll('input, textarea, select');
+  var d = dst.querySelectorAll('input, textarea, select');
+  for (var i = 0; i < s.length && i < d.length; i++) {
+    var from = s[i], to = d[i], tag = from.tagName;
+    if (tag === 'TEXTAREA') {
+      to.textContent = from.value;
+    } else if (tag === 'SELECT') {
+      var so = from.options, toOpts = to.options;
+      for (var k = 0; k < so.length && k < toOpts.length; k++) {
+        if (so[k].selected) toOpts[k].setAttribute('selected', 'selected');
+        else toOpts[k].removeAttribute('selected');
+      }
+    } else {
+      to.setAttribute('value', from.value);
+    }
+  }
+};
+
+/* ==================== 拖动辅助（明细拖选 / 计重拖动等共用） ==================== */
+  /** 按住拖动时指针贴近滚动容器上下边缘 → 逐帧自动滚动，滚出来的内容由 onScroll 纳入拖动范围。
+   *  cfg = {
+   *    active:   function () → boolean      是否仍在拖动中
+   *    point:    function () → {x,y,sx,sy}  当前指针 / 按下点（用于 4px 拖动阈值）
+   *    scroll:   function () → Element      滚动容器（惰性取，抽屉 DOM 可能重建）
+   *    onScroll: function (rect)            滚动生效后回调（rect = 容器矩形），此时按需重算拖动范围
+   *  }
+   *  用法：mousedown 里 start()，mouseup 里 stop()。 */
+  Utils.dragEdgeScroll = function (cfg) {
+    var raf = 0, EDGE = 28, STEP_MAX = 30;
+    function loop() {
+      raf = 0;
+      if (!cfg.active()) return;
+      var sc = cfg.scroll();
+      if (sc) {
+        var p = cfg.point(), r = sc.getBoundingClientRect();
+        // 位移 < 4px 只是在点击，不滚动（避免单击靠边的行时页面自己滚）
+        if (Math.abs(p.x - p.sx) >= 4 || Math.abs(p.y - p.sy) >= 4) {
+          var dir = 0, over = 0;
+          if (p.y < r.top + EDGE) { dir = -1; over = r.top + EDGE - p.y; }
+          else if (p.y > r.bottom - EDGE) { dir = 1; over = p.y - (r.bottom - EDGE); }
+          if (dir) {
+            var before = sc.scrollTop;
+            sc.scrollTop = before + dir * Math.max(3, Math.min(STEP_MAX, Math.ceil(over / 3)));
+            if (sc.scrollTop !== before && cfg.onScroll) cfg.onScroll(r);
+          }
+        }
+      }
+      raf = requestAnimationFrame(loop);
+    }
+    return {
+      start: function () { if (!raf) raf = requestAnimationFrame(loop); },
+      stop: function () { if (raf) cancelAnimationFrame(raf); raf = 0; }
+    };
+  };
+
+  /** 指针所在的表格行（tr[data-i]，限定在 body 内）。
+   *  指针在容器外、或落在吸顶表头上（elementFromPoint 只拿得到 th）时按方向回退：
+   *  上半区 → 当前最上面一行，下半区 → 当前最下面一行，保证滚动出来的行也能被纳入。 */
+  Utils.rowAtPointer = function (body, rect, x, y) {
+    var el = document.elementFromPoint(x, Math.max(rect.top + 1, Math.min(y, rect.bottom - 1)));
+    var tr = el && el.closest ? el.closest('tr[data-i]') : null;
+    if (tr && tr.parentNode === body) return tr;
+    var rows = body.querySelectorAll('tr[data-i]'), n = rows.length;
+    if (!n) return null;
+    var i;
+    if (y < rect.top + rect.height / 2) {
+      for (i = 0; i < n; i++) if (rows[i].getBoundingClientRect().bottom > rect.top + 1) return rows[i];
+      return rows[n - 1];
+    }
+    for (i = n - 1; i >= 0; i--) if (rows[i].getBoundingClientRect().top < rect.bottom - 1) return rows[i];
+    return rows[0];
+  };
+
   /* ==================== Toast 消息 ==================== */
   Utils.toast = function (msg, type) {
     var t = Utils.$('toast');

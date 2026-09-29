@@ -45,6 +45,7 @@
     <div class="menu-list" id="menuList" style="display:none">
       <div class="menu-item" id="menu31814" data-action="31814">站存计算器</div>
       <div class="menu-item" id="menuProductivity" data-action="productivity">生产效率表</div>
+      <div class="menu-item" id="menuFlowTable" data-action="flowtable">车流统计表</div>
       <div class="menu-item" id="menuSettings" data-action="settings">
         <svg class="menu-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
           <path d="M13.3 5.2l1.1-2.1L13 1.7l-2.1 1.1a5.5 5.5 0 0 0-1.3-.4L9.2 0H6.8l-.4 2.3a5.5 5.5 0 0 0-1.3.4L3 1.7 1.6 3.1l1.1 2.1a5.5 5.5 0 0 0 0 1.6L1.6 8.9 3 10.3l2.1-1.1a5.5 5.5 0 0 0 1.3.4L6.8 12h2.4l.4-2.3a5.5 5.5 0 0 0 1.3-.4l2.1 1.1L14.4 8.9l-1.1-2.1a5.5 5.5 0 0 0 0-1.6zM8 9a2 2 0 1 1 0-4 2 2 0 0 1 0 4z" fill="currentColor"/>
@@ -489,6 +490,91 @@
   </div>
 </div>
 
+<!-- ================= 车流统计表（左侧无遮罩抽屉） ================= -->
+<div class="flow-drawer" id="flowDrawer" style="display:none">
+  <div class="modal-head flow-head">
+    <h3 id="flowTitle">车流统计表</h3>
+    <span class="spacer">
+      <span class="rpt-zoom">
+        <button class="btn icon-btn" id="flowZoomOut" title="缩小表格字体">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+            <circle cx="6.6" cy="6.6" r="4.7" fill="none" stroke="currentColor" stroke-width="1.6"></circle>
+            <line x1="3.8" y1="6.6" x2="9.4" y2="6.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></line>
+            <line x1="10.3" y1="10.3" x2="14.2" y2="14.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></line>
+          </svg>
+        </button>
+        <span class="rpt-fs-val" id="flowFsVal">15px</span>
+        <button class="btn icon-btn" id="flowZoomIn" title="放大表格字体">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+            <circle cx="6.6" cy="6.6" r="4.7" fill="none" stroke="currentColor" stroke-width="1.6"></circle>
+            <line x1="3.8" y1="6.6" x2="9.4" y2="6.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></line>
+            <line x1="6.6" y1="3.8" x2="6.6" y2="9.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></line>
+            <line x1="10.3" y1="10.3" x2="14.2" y2="14.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></line>
+          </svg>
+        </button>
+      </span>
+    </span>
+    <button class="btn" id="flowClear" title="清空表格中的内容（保留表头字段，最少保留 15 行空行）">清空</button>
+    <button class="btn" id="flowPrint" title="打印计划表">打印</button>
+    <button class="btn" id="flowCopyImg" title="将计划表截图复制到剪切板">截图</button>
+    <button class="btn" id="flowClose">关闭</button>
+  </div>
+
+  <!-- 计划表表头卡（单行：预计日期 / 时段 / 站调(签)） -->
+  <div class="flow-sheet-head">
+    <label>预计日期<input type="date" id="flowDate"></label>
+    <label>时段<input type="text" id="flowPeriod" placeholder="14:00-次日04:00"></label>
+    <label>站调(签)<input type="text" id="flowSigner" placeholder="姓名"></label>
+  </div>
+
+  <!-- 数据表格 -->
+  <div class="flow-table-wrap" id="flowTableWrap">
+    <table class="flow-table" id="flowTable">
+      <thead>
+        <tr>
+          <th class="flow-idx">序号</th>
+          <th class="flow-time">预计编好时间</th>
+          <th class="flow-src">车流来源</th>
+          <th class="flow-content">编组内容</th>
+        </tr>
+      </thead>
+      <tbody id="flowBody"></tbody>
+      <tfoot>
+        <tr>
+          <td class="flow-foot-label">备注</td>
+          <td colspan="3"><textarea class="flow-note-input" id="flowNote" data-f="note" rows="3"></textarea></td>
+        </tr>
+      </tfoot>
+    </table>
+    <div class="flow-empty" id="flowEmpty" style="display:none">暂无数据，点「新增行」开始录入</div>
+    <!-- 行右键菜单 -->
+    <div id="flowCtxMenu" class="flow-ctx-menu" hidden>
+      <div class="flow-ctx-item" data-act="above">在上方插入行</div>
+      <div class="flow-ctx-sep"></div>
+      <div class="flow-ctx-item danger" data-act="del">删除本行</div>
+      <div class="flow-ctx-sep"></div>
+      <div class="flow-ctx-item" data-act="below">在下方插入行</div>
+    </div>
+  </div>
+</div>
+<!-- 车站列表弹窗：主表选中行的到站拆项，整组 / 选中插入到车流表编组内容 -->
+<div id="flowStationPicker" class="flow-st-picker" hidden>
+  <div class="flow-st-box">
+    <div class="flow-st-head">
+      <span class="flow-st-ic">⚲</span>
+      <span class="flow-st-title">车站列表</span>
+      <span class="spacer"></span>
+      <span class="flow-st-close" data-act="close" title="关闭">×</span>
+    </div>
+    <div class="flow-st-list" id="flowStationList"></div>
+    <div class="flow-st-actions">
+      <button class="btn" data-act="all">整组</button>
+      <button class="btn" data-act="part">插入</button>
+    </div>
+  </div>
+</div>
+<div class="flow-splitter" id="flowSplitter" style="display:none" title="拖动调整抽屉宽度"></div>
+
 <!-- ================= 地图（iframe 嵌入 Map/chinamap.html） ================= -->
 <div class="map-mask" id="mapMask">
   <div class="map-panel">
@@ -541,6 +627,8 @@
 <script src="js/map-bridge.js" charset="utf-8"></script>
 <script src="js/report31814.js" charset="utf-8"></script>
 <script src="js/productivity.js" charset="utf-8"></script>
+<script src="js/flip.js" charset="utf-8"></script>
+<script src="js/flow-table.js" charset="utf-8"></script>
 <script src="js/data-source.js" charset="utf-8"></script>
 <script src="js/config-io.js" charset="utf-8"></script>
 <script src="js/settings.js" charset="utf-8"></script>

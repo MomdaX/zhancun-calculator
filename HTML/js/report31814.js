@@ -592,6 +592,7 @@
 
       var clone = el.cloneNode(true);
       inlineStyles(el, clone);
+      Utils.syncFormValues(el, clone);   // 表单控件要带上用户当前录入的值，否则截图为空
       // 截图取完整内容：解除滚动裁剪，按内容自然高度展开
       clone.style.setProperty('width', w + 'px');
       clone.style.setProperty('height', 'auto');
@@ -630,7 +631,11 @@
 
       img.onload = function () {
         try {
-          var scale = 2;   // 2 倍图，粘贴后更清晰
+          // 2 倍图，粘贴后更清晰；但超过浏览器 canvas 上限会得到一张空白图，
+          // 故长表按上限自动降倍率（宁可略糊，不能截空）
+          var MAXSIDE = 32000;
+          var scale = Math.min(2, MAXSIDE / W, MAXSIDE / H);
+          if (scale < 0.5) scale = 0.5;                // 极端超长表：宁可缩小，也别超出上限变空白
           var canvas = document.createElement('canvas');
           canvas.width = Math.ceil(W * scale);
           canvas.height = Math.ceil(H * scale);
@@ -667,10 +672,8 @@
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   }
 
-  /** 截图按钮：把结果表格复制为图片（只取表格本体，不含外层留白） */
-  function copyResultAsImage() {
-    var body = Utils.$('rptBody');
-    var target = (body && body.querySelector('table')) || body;
+  /** 截图：把指定元素复制为图片（只取表格本体，不含外层留白） */
+  function copyElementAsImage(target) {
     if (!target) { Utils.toast('没有可截图的内容', 'error'); return; }
 
     captureElement(target).then(function (blob) {
@@ -690,24 +693,18 @@
     });
   }
 
+  /** 截图按钮：把结果表格复制为图片（只取表格本体，不含外层留白） */
+  function copyResultAsImage() {
+    var body = Utils.$('rptBody');
+    copyElementAsImage((body && body.querySelector('table')) || body);
+  }
+
   /* ========================== 结果区打印（隐藏 iframe，用户无感知） ==========================
    * 与「截图」同一个区域：#rptBody 里的 table。
    * 用隐藏的 iframe 代替弹窗：只弹出打印对话框，不会出现新窗口标签页。
    * ============================================================== */
-  function printResultTable() {
-    var body = Utils.$('rptBody');
-    var target = (body && body.querySelector('table')) || body;
-    if (!target) { Utils.toast('没有可打印的内容', 'error'); return; }
-
-    var clone = target.cloneNode(true);
-    inlineStyles(target, clone);
-
-    var fs = '15px';
-    try {
-      var v = getComputedStyle(body).getPropertyValue('--rpt-fs');
-      if (v && v.trim()) fs = v.trim();
-    } catch (e) {}
-
+  /** 建隐藏 iframe 承载打印内容；返回 { doc, fire }，fire() 拉起打印对话框并在结束后移除 iframe */
+  function printFrame(title, css) {
     var iframe = document.createElement('iframe');
     iframe.style.cssText = 'position:fixed;right:100%;bottom:100%;width:0;height:0;border:0;visibility:hidden;';
     document.body.appendChild(iframe);
@@ -716,16 +713,13 @@
     doc.open();
     doc.close();
     doc.documentElement.setAttribute('lang', 'zh-CN');
-    doc.head.innerHTML = '<meta charset="utf-8"><title>站存计算</title>' +
-      '<style>' +
-      'html,body{margin:0;padding:0;background:#fff;color:#000}' +
-      'body{font-size:' + fs + ';zoom:1.3}' +   // 整体放大 130%，列宽保持原样
-      'table{border-collapse:collapse;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
-      '*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
-      '</style>';
-    doc.body.innerHTML = clone.outerHTML;
+    doc.head.innerHTML = '<meta charset="utf-8"><title>' + (title || '站存计算') + '</title>' +
+      '<style>' + css + '</style>';
 
-    setTimeout(function () {
+    var done = false;
+    function fire() {
+      if (done) return;
+      done = true;
       try {
         iframe.contentWindow.onafterprint = function () { document.body.removeChild(iframe); };
         iframe.contentWindow.focus();
@@ -734,7 +728,63 @@
         Utils.toast('调用打印失败：' + (e && e.message ? e.message : e), 'error');
         document.body.removeChild(iframe);
       }
-    }, 300);
+    }
+    return { doc: doc, fire: fire };
+  }
+
+  /** 打印图片：按页宽铺满、保持比例，超长由浏览器自动分页 */
+  function printImage(dataUrl, title) {
+    var f = printFrame(title,
+      'html,body{margin:0;padding:0;background:#fff}' +
+      'img{display:block;width:100%;height:auto}' +
+      '@page{margin:8mm}');
+    var img = f.doc.createElement('img');
+    img.onload = function () { setTimeout(f.fire, 50); };
+    img.onerror = function () { f.fire(); };
+    img.src = dataUrl;
+    f.doc.body.appendChild(img);
+  }
+
+  /** 兜底路径：DOM 克隆打印。注意不要用 zoom 非整数倍（如 1.3）——
+   *  Chrome 在非整数缩放下会把 border-collapse 表格的 1px 边框（尤其竖线）抹掉。 */
+  function printDomClone(target, title) {
+    var clone = target.cloneNode(true);
+    inlineStyles(target, clone);
+    Utils.syncFormValues(target, clone);   // 带上用户当前录入的值
+
+    var fs = '15px';
+    try {
+      var v = getComputedStyle(target).getPropertyValue('--rpt-fs');
+      if (v && v.trim()) fs = v.trim();
+    } catch (e) {}
+
+    var f = printFrame(title,
+      'html,body{margin:0;padding:0;background:#fff;color:#000}' +
+      'body{font-size:' + fs + '}' +
+      'table{border-collapse:collapse;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+      '*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}');
+    f.doc.body.innerHTML = clone.outerHTML;
+    setTimeout(f.fire, 300);
+  }
+
+  /** 打印：与「截图」同一条渲染管线——先把元素渲染成 2 倍 PNG，再放进隐藏 iframe 按页宽打印。
+   *  这样「打印所见」＝「截图所见」，也彻底避开 iframe 里缩放导致边框线丢失的问题。 */
+  function printElement(target, title) {
+    if (!target) { Utils.toast('没有可打印的内容', 'error'); return; }
+
+    captureElement(target).then(function (blob) {
+      var fr = new FileReader();
+      fr.onload = function () { printImage(String(fr.result), title); };
+      fr.onerror = function () { printDomClone(target, title); };   // 读图失败 → 回退 DOM 打印
+      fr.readAsDataURL(blob);
+    }).catch(function () {
+      printDomClone(target, title);                               // 渲染失败 → 回退 DOM 打印
+    });
+  }
+
+  function printResultTable() {
+    var body = Utils.$('rptBody');
+    printElement((body && body.querySelector('table')) || body, '站存计算');
   }
 
   /* ========================== 右侧条件面板 ========================== */
@@ -1202,6 +1252,10 @@
   global.Report31814 = {
     open: open,
     _setCarProperties: setCarProperties,
-    _calculateStats: calculateStats
+    _calculateStats: calculateStats,
+    // 通用截图 / 打印：供车流统计表等其它模块复用（元素级，不依赖 #rptBody）
+    captureElement: captureElement,
+    copyElementAsImage: copyElementAsImage,
+    printElement: printElement
   };
 })(window);

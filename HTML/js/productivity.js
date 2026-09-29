@@ -31,7 +31,7 @@
   function nowStamp() {
     var d = new Date();
     return d.getFullYear() + '-' + Utils.pad2(d.getMonth() + 1) + '-' + Utils.pad2(d.getDate()) +
-           ' ' + Utils.pad2(d.getHours()) + ':' + Utils.pad2(d.getMinutes());
+           ' ' + Utils.pad2(d.getHours()) + ':' + Utils.pad2(d.getMinutes()) + ':' + Utils.pad2(d.getSeconds());
   }
 
   function markUpdated() {

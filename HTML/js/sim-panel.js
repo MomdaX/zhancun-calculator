@@ -55,7 +55,8 @@
   var resume = false;            // 「主页」隐藏过 → 下次打开明细时把面板一起带回来
   var editMode = false;          // 「计重」编辑态（与明细同一套交互）
   var editExcluded = new Set();  // 编辑态中被删除推算载重的行
-  var drag = { active: false, moved: false, anchor: -1, snap: null, mode: 'add' };
+  var drag = { active: false, moved: false, anchor: -1, snap: null, mode: 'add',
+               x: 0, y: 0, sx: 0, sy: 0 };   // x/y：当前指针；sx/sy：按下点（边缘自动滚动用）
   /* 计重编辑「按住拖动批量删除推算载重」：与明细表共用 EstDrag 工厂（js/est-drag.js）。
    * cfg 引用本模块私有的 rows / editExcluded / editMode，交互行为与明细表完全一致。 */
   var estDrag = EstDrag.create({
@@ -346,6 +347,21 @@
     updateTitle();   // 拖动中实时刷新「选中合计」
   }
 
+  /** 拖到面板上下边缘自动滚动，滚出来的行继续纳入范围（与明细拖选共用 utils.js 的通用能力） */
+  var edgeScroll = Utils.dragEdgeScroll({
+    active: function () { return drag.active; },
+    point: function () { return drag; },
+    scroll: function () { var d = $('simDrawer'); return d ? d.querySelector('.drawer-body') : null; },
+    onScroll: function (r) {
+      var tr = Utils.rowAtPointer($('simBody'), r, drag.x, drag.y);
+      if (tr) { drag.moved = true; applyDrag(+tr.getAttribute('data-i')); }
+    }
+  });
+  /** 拖动已构成（位移 ≥ 4px）时置 moved，抑制松手后的单击切换 */
+  function dragMoved() {
+    return Math.abs(drag.x - drag.sx) >= 4 || Math.abs(drag.y - drag.sy) >= 4;
+  }
+
   function bindTableSelection() {
     on('simBody', 'mousedown', function (e) {
       if (!isOpen) return;
@@ -360,6 +376,9 @@
       drag.snap = new Set(sel);
       // 起点已选中 → 取消模式；否则 → 加入模式
       drag.mode = sel.has(drag.anchor) ? 'del' : 'add';
+      drag.x = drag.sx = e.clientX;     // sx/sy：按下点（拖动阈值）
+      drag.y = drag.sy = e.clientY;
+      edgeScroll.start();
     });
     on('simBody', 'mouseover', function (e) {
       if (!drag.active) return;
@@ -368,10 +387,18 @@
       drag.moved = true;
       applyDrag(+tr.getAttribute('data-i'));
     });
+    // 指针位置跟踪：拖动中不移动鼠标也要能持续滚动，故逐帧读这里记录的位置
+    document.addEventListener('mousemove', function (e) {
+      if (!drag.active) return;
+      if (!e.buttons) { drag.active = false; drag.snap = null; edgeScroll.stop(); return; }   // 窗口外松手补收尾
+      drag.x = e.clientX; drag.y = e.clientY;
+      if (dragMoved()) drag.moved = true;
+    });
     document.addEventListener('mouseup', function () {
       if (!drag.active) return;
       drag.active = false;
       drag.snap = null;
+      edgeScroll.stop();
     });
     on('simBody', 'click', function (e) {
       if (!isOpen) return;

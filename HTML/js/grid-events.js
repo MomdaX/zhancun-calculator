@@ -99,7 +99,9 @@
 
   /* ==================== 事件绑定 ==================== */
 
-  /** 单击选中（作业区横幅行不参与选中，否则会被高亮且 selectedIdx 变为 NaN） */
+  /** 单击选中（作业区横幅行不参与选中，否则会被高亮且 selectedIdx 变为 NaN）。
+   *  车站列表弹窗延迟到双击判定之后：双击是「打开明细抽屉」，不该同时弹出车站列表。 */
+  var stTimer = null, lastRowClickAt = 0, DBL_GAP = 400, dblBound = false;
   function bindRowSelect() {
     on('tbody', 'click', function (e) {
       var tr = e.target.closest('tr');
@@ -111,7 +113,35 @@
       // 选中这一行即刷新「编好」标记（无需点击第 9 列）
       syncBianhao(tr);
       syncGroupHighlight(tr);
+      // 车流抽屉打开时：把该行「到站」按空格拆成车站列表，弹出供插入车流表编组内容
+      if (!document.body.classList.contains('flow-drawer-open')) return;
+      var now = Date.now();
+      var isSecond = (now - lastRowClickAt) < DBL_GAP;     // 双击的第二击
+      lastRowClickAt = now;
+      if (stTimer) { clearTimeout(stTimer); stTimer = null; }
+      if (isSecond) return;                                // 第二击：交给 dblclick 开明细，不弹车站列表
+      var destTd = tr.querySelector('td.dest');
+      var text = destTd ? destTd.textContent.trim() : '';
+      var items = text ? text.split(/\s+/).filter(Boolean) : [];
+      var origin = { x: e.clientX, y: e.clientY };
+      stTimer = setTimeout(function () {
+        stTimer = null;
+        if (!document.body.classList.contains('flow-drawer-open')) return;   // 期间车流抽屉已关闭
+        if (window.FlowTable && window.FlowTable.openStationList) window.FlowTable.openStationList(items, origin);
+      }, 250);                                             // 延迟 250ms，避开双击窗口
     });
+    // 双击行：取消待弹出的车站列表，并关掉已弹出的（双击只打开明细抽屉）。
+    // 必须绑在 document 捕获阶段：抢在「编好车次」列那个会 stopPropagation 的捕获监听之前，
+    // 否则双击该列就地录入车次时，车站列表仍会在 250ms 后弹出。
+    if (!dblBound) {
+      dblBound = true;
+      document.addEventListener('dblclick', function (e) {
+        var tr = e.target.closest ? e.target.closest('#tbody tr') : null;
+        if (!tr || tr.classList.contains('area-banner')) return;
+        if (stTimer) { clearTimeout(stTimer); stTimer = null; }
+        if (window.FlowTable && window.FlowTable.closeStationList) window.FlowTable.closeStationList();
+      }, true);
+    }
   }
 
   /** 空线分组显示 / 隐藏开关（状态本地持久化，按钮文案由 syncVirtualBtn 同步） */

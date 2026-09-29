@@ -287,14 +287,14 @@
       //  · track 列表头用横跨 group+track 两列的标签居中显示「股道」
       // 两个 <th> 仍独立存在，列宽/拖拽/记忆逻辑不受影响。
       if (c.key === 'group') {
-        return '<th class="' + cls.trim() + ' no-resize"' + style + '></th>';
+        return '<th class="' + cls.trim() + ' no-resize" data-col="group"' + style + '></th>';
       }
       if (c.key === 'track') {
         cls += ' grp-merged';
-        return '<th class="' + cls.trim() + '"' + style +
+        return '<th class="' + cls.trim() + '" data-col="track"' + style +
                '><span class="grp-head-merge">股道</span></th>';
       }
-      return '<th class="' + cls.trim() + '"' + style + '>' + escapeHtml(c.title) + '</th>';
+      return '<th class="' + cls.trim() + '" data-col="' + c.key + '"' + style + '>' + escapeHtml(c.title) + '</th>';
     }).join('');
 
     // 表头被 innerHTML 重建，需重新挂载列宽拖拽手柄并恢复记忆列宽
@@ -1089,7 +1089,8 @@
     bindCarRowEvents('searchBody');
 
     // 明细中：按下行 → 拖动多选（拖动中实时调整范围，松开确定）；单击 → 切换选中
-    var dragSel = { active: false, moved: false, anchor: -1, snap: null, mode: 'add' };
+    var dragSel = { active: false, moved: false, anchor: -1, snap: null, mode: 'add',
+                    x: 0, y: 0, sx: 0, sy: 0 };   // x/y：当前指针；sx/sy：按下点（自动滚动用）
     function selectRow(i, on) {
       if (!state.detailSel) state.detailSel = new Set();
       var tr = $('detailBody').querySelector('tr[data-i="' + i + '"]');
@@ -1122,6 +1123,21 @@
       }
       updateDetailTitle();
     }
+    // 拖到容器上下边缘自动滚动，滚出来的行继续纳入选择（自动滚动与行命中都是通用能力，见 utils.js）
+    var edgeScroll = Utils.dragEdgeScroll({
+      active: function () { return dragSel.active; },
+      point: function () { return dragSel; },        // dragSel 自带 x/y（当前指针）与 sx/sy（按下点）
+      scroll: function () { var d = $('drawer'); return d ? d.querySelector('.drawer-body') : null; },
+      onScroll: function (r) {
+        var tr = Utils.rowAtPointer($('detailBody'), r, dragSel.x, dragSel.y);
+        if (tr) { dragSel.moved = true; renderDrag(+tr.getAttribute('data-i')); }
+      }
+    });
+    /** 已构成拖动（位移 ≥ 4px）时置 moved，抑制松手后的单击切换 */
+    function dragMoved() {
+      return Math.abs(dragSel.x - dragSel.sx) >= 4 || Math.abs(dragSel.y - dragSel.sy) >= 4;
+    }
+
     estDrag.bind();   // 计重编辑：推算格上的拖动批量删除（明细表侧，与推演面板共用工厂）
     on('detailBody', 'mousedown', function (e) {
       // 计重编辑模式下不启动拖选行（推算格上的拖动批量删除由 EstDrag 处理）
@@ -1136,6 +1152,16 @@
       dragSel.snap = new Set(state.detailSel);   // 记录拖动前选中快照
       // 起点已选中 → 取消模式；否则 → 加入模式（仅用于拖动，单击在 click 中处理）
       dragSel.mode = state.detailSel.has(dragSel.anchor) ? 'del' : 'add';
+      dragSel.x = dragSel.sx = e.clientX;        // sx/sy：按下点（拖动阈值）
+      dragSel.y = dragSel.sy = e.clientY;
+      edgeScroll.start();
+    });
+    // 指针位置跟踪：拖动中不移动鼠标也要能持续滚动，故逐帧读这里记录的位置
+    document.addEventListener('mousemove', function (e) {
+      if (!dragSel.active) return;
+      if (!e.buttons) { endDrag(); return; }     // 在窗口外松的手（收不到 mouseup）→ 回窗口时补收尾
+      dragSel.x = e.clientX; dragSel.y = e.clientY;
+      if (dragMoved()) dragSel.moved = true;
     });
     on('detailBody', 'mouseover', function (e) {
       if (!dragSel.active) return;
@@ -1151,6 +1177,7 @@
         dragSel.anchor = -1;
         dragSel.snap = null;
       }
+      edgeScroll.stop();                          // 停止自动滚动
     }
     document.addEventListener('mouseup', endDrag);
     // 单击（未发生拖动）时切换该行选中状态；拖动已在 mouseover 中实时应用
@@ -1284,6 +1311,8 @@
           UI.Modal.open('modalSettings');
         } else if (action === 'productivity' && typeof window.Productivity !== 'undefined') {
           window.Productivity.open();
+        } else if (action === 'flowtable' && typeof window.FlowTable !== 'undefined') {
+          window.FlowTable.open();
         }
       }
     });

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>626 拖拽排序 · FLIP</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { height: 100vh; display: flex; justify-content: center; align-items: center; }
+  .list { width: 500px; }
+  .list-item {
+    margin: 5px 0;
+    padding: 0 20px;
+    line-height: 40px;
+    height: 40px;
+    background: linear-gradient(to right, #267871, #136a8a);
+    color: #fff;
+    cursor: move;
+    user-select: none;
+    border-radius: 5px;
+    /* FLIP 动画需要 transform 过渡 */
+    transition: transform 0.3s ease;
+  }
+  .list-item.moving {
+    background: transparent;
+    color: transparent;
+    border: 1px dashed #ccc;
+  }
+</style>
+</head>
+<body>
+  <div class="list">
+    <div draggable="true" class="list-item">1</div>
+    <div draggable="true" class="list-item">2</div>
+    <div draggable="true" class="list-item">3</div>
+    <div draggable="true" class="list-item">4</div>
+    <div draggable="true" class="list-item">5</div>
+  </div>
+
+<script>
+/* ================= Flip.js（FLIP 动画核心） ================= */
+const Flip = (function () {
+  class FlipDom {
+    constructor(dom, duration = 0.5) {
+      this.dom = dom;
+      this.transition = typeof duration === 'number' ? `${duration}s` : duration;
+      this.firstPosition = { x: null, y: null };
+      this.isPlaying = false;
+      this.transitionEndHandler = () => {
+        this.isPlaying = false;
+        this.recordFirst();
+      };
+    }
+    getDomPosition() {
+      const rect = this.dom.getBoundingClientRect();
+      return { x: rect.left, y: rect.top };
+    }
+    recordFirst(firstPosition) {
+      if (!firstPosition) firstPosition = this.getDomPosition();
+      this.firstPosition.x = firstPosition.x;
+      this.firstPosition.y = firstPosition.y;
+    }
+    /* 生成器：第一段"反转到起点"（无过渡），第二段"过渡回原位" */
+    *play() {
+      if (!this.isPlaying) {
+        this.dom.style.transition = 'none';               // 关闭过渡
+        const lastPosition = this.getDomPosition();        // Last
+        const dis = {
+          x: lastPosition.x - this.firstPosition.x,        // 位移差
+          y: lastPosition.y - this.firstPosition.y,
+        };
+        if (!dis.x && !dis.y) return;                       // 没动过，跳过
+        this.dom.style.transform = `translate(${-dis.x}px, ${-dis.y}px)`; // Invert
+        yield 'moveToFirst';                               // 让外部强制重排/绘制
+        this.isPlaying = true;
+      }
+      this.dom.style.transition = this.transition;          // 打开过渡
+      this.dom.style.transform = `none`;                    // Play：过渡回真实位置
+      this.dom.removeEventListener('transitionend', this.transitionEndHandler);
+      this.dom.addEventListener('transitionend', this.transitionEndHandler);
+    }
+  }
+  class Flip {
+    constructor(doms, duration = 0.5) {
+      this.flipDoms = new Set([...doms].map((it) => new FlipDom(it, duration)));
+      this.duration = duration;
+      this.flipDoms.forEach((it) => it.recordFirst());
+    }
+    addDom(dom, firstPosition) {
+      const flipDom = new FlipDom(dom, this.duration);
+      this.flipDoms.add(flipDom);
+      flipDom.recordFirst(firstPosition);
+    }
+    /* 把所有元素的生成器推进到完成，中间强制重排一次让 Invert 生效 */
+    play() {
+      let gs = [...this.flipDoms]
+        .map((it) => {
+          const generator = it.play();
+          return { generator, iteratorResult: generator.next() };
+        })
+        .filter((g) => !g.iteratorResult.done);
+      while (gs.length > 0) {
+        document.body.clientWidth; // 强制 reflow，确保"反转"位置已被绘制
+        gs = gs
+          .map((g) => { g.iteratorResult = g.generator.next(); return g; })
+          .filter((g) => !g.iteratorResult.done);
+      }
+    }
+  }
+  return Flip;
+})();
+
+/* ================= index.js（拖拽 + 调用 FLIP） ================= */
+const list = document.querySelector('.list');
+let sourceNode; // 正在拖动的元素
+let flip;
+
+list.ondragstart = (e) => {
+  setTimeout(() => e.target.classList.add('moving'), 0); // 延迟加类，让浏览器先拍下行原貌作为拖拽快照
+  sourceNode = e.target;
+  e.dataTransfer.effectAllowed = 'move';
+  flip = new Flip(list.children, 0.3); // 记录所有行当前(FIRST)位置
+};
+
+list.ondragover = (e) => { e.preventDefault(); }; // 关键：否则 drop 系列不触发
+
+list.ondragenter = (e) => {
+  e.preventDefault();
+  if (e.target === list || e.target === sourceNode) return;
+
+  const children = Array.from(list.children);
+  const sourceIndex = children.indexOf(sourceNode);
+  const targetIndex = children.indexOf(e.target);
+
+  // 先真实换序（此时位置瞬变）
+  if (sourceIndex < targetIndex) {
+    list.insertBefore(sourceNode, e.target.nextElementSibling); // 拖向下 → 插到目标后面
+  } else {
+    list.insertBefore(sourceNode, e.target);                   // 拖向上 → 插到目标前面
+  }
+  flip.play(); // FLIP：从旧位置平滑过渡到新位置
+};
+
+list.ondragend = (e) => { e.target.classList.remove('moving'); };
+</script>
+</body>
+</html>
+<!-- （注：内容由AI生成） -->

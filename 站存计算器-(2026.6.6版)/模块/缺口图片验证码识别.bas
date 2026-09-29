@@ -1,4 +1,4 @@
-Attribute VB_Name = "缺口图片验证码识别"
+Attribute VB_Name = "Module1"
 Option Explicit
 
 '==================== 结构体 ====================
@@ -66,7 +66,7 @@ Function PNG模式(ByVal base64Str As String) As Long
     Dim xml As Object: Set xml = CreateObject("MSXML2.DOMDocument")
     Dim elem As Object: Set elem = xml.createElement("b64")
     elem.DataType = "bin.base64"
-    elem.text = base64Str
+    elem.Text = base64Str
     Dim byt() As Byte: byt = elem.nodeTypedValue
 
     '=== 2. GDI+ 初始化 ===

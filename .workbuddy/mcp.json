@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "jr-vbe-server": {
+      "command": "c:\\Users\\Administrator\\.vscode\\extensions\\jerry-office.jr-vbe-helper-1.1.2\\dist\\server.exe",
+      "args": [],
+      "env": {
+        "VBE_FILE_PATH": "e:/桌面/站存计算器HTML/站存计算器-(2026.6.6版).xlsm",
+        "JR_VBE_EXTENSION_PATH": "c:/Users/Administrator/.vscode/extensions/jerry-office.jr-vbe-helper-1.1.2",
+        "VBE_LOCAL_DIR": "e:/桌面/站存计算器HTML",
+        "VBE_AUTO_EXECUTE": "true"
+      }
+    }
+  }
+}

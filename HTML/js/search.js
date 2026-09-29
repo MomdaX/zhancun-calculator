@@ -91,13 +91,16 @@
    * @param {number} focusCarIdx 需要滚动定位的车辆下标（-1 为不定位）
    */
   function render(list, hits, focusCarIdx) {
+    // 仅在「唯一车号命中」时高亮：此时已经展开该车所在整条股道并定位到该行
+    // （focusCarIdx >= 0）。非唯一匹配只列出结果、不高亮任何行。
     global.YardApp.renderRows(list.map(function (c) { return c.row; }), {
       head: $('searchHead'), body: $('searchBody'), table: $('searchTable')
     }, {
       destProcessed: false,     // 搜索抽屉显示与明细抽屉一致（原始到站/发站）
       rowAttr: function (row, i) {
         var c = list[i];
-        return ' data-track-idx="' + c.trackIdx + '" data-car-i="' + c.carIdx + '"';
+        var cls = (focusCarIdx >= 0 && c.carIdx === focusCarIdx) ? ' class="hit"' : '';
+        return cls + ' data-track-idx="' + c.trackIdx + '" data-car-i="' + c.carIdx + '"';
       }
     });
 
