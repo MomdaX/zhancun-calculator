@@ -1,3 +1,9 @@
 ﻿# 内部工具 / IDE 数据，不入库
 .codebuddy/
 .serena/
+
+# 依赖与本地构建产物（本地保留，不入库）
+node_modules/
+.trae/
+.workbuddy/
+workbook-path.json
